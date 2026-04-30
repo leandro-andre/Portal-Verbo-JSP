@@ -91,12 +91,12 @@ class GovernancaPermissionsTests(TestCase):
         )
         self.sobre = SobrePage.load()
         self.evento = Evento.objects.create(
-            titulo="Culto de Domingo",
+            titulo="Conferencia de Familias",
             descricao="Descricao inicial",
             data_inicio="2026-05-10",
             horario="19:00",
             local="Templo sede",
-            tipo=Evento.TipoEvento.ESPECIAL,
+            tipo=Evento.TipoEvento.CONFERENCIA,
             publicado=True,
             destaque_home=False,
         )
@@ -210,12 +210,12 @@ class GovernancaAdminTests(GovernancaPermissionsTests):
         response = self.client.post(
             reverse("admin:eventos_evento_change", args=[self.evento.pk]),
             {
-                "titulo": "Culto de Domingo Atualizado",
+                "titulo": "Conferencia de Familias Atualizada",
                 "descricao": "Descricao revisada",
                 "data_inicio": "2026-05-10",
                 "horario": "19:00",
                 "local": "Templo sede",
-                "tipo": Evento.TipoEvento.ESPECIAL,
+                "tipo": Evento.TipoEvento.CONFERENCIA,
                 "destaque_home": "on",
                 "_save": "Salvar",
             },
@@ -225,7 +225,7 @@ class GovernancaAdminTests(GovernancaPermissionsTests):
         self.assertEqual(response.status_code, 200)
 
         self.evento.refresh_from_db()
-        self.assertEqual(self.evento.titulo, "Culto de Domingo Atualizado")
+        self.assertEqual(self.evento.titulo, "Conferencia de Familias Atualizada")
         self.assertFalse(self.evento.publicado)
         self.assertTrue(self.evento.destaque_home)
 
