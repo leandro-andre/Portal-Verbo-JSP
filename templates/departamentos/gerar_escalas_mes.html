@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Voltar para escalas</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Gerar base do mes</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.departamento.id_for_label }}">Departamento</label>
+                                {{ form.departamento }}
+                                {% for error in form.departamento.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.mes.id_for_label }}">Mes</label>
+                                    {{ form.mes }}
+                                    {% for error in form.mes.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.ano.id_for_label }}">Ano</label>
+                                    {{ form.ano }}
+                                    {% for error in form.ano.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Cultos padrao ativos</label>
+                                <div class="management-grid">
+                                    {% for checkbox in form.cultos_padrao %}
+                                        <label class="module-checkbox-row">
+                                            {{ checkbox.tag }}
+                                            <span>{{ checkbox.choice_label }}</span>
+                                        </label>
+                                    {% empty %}
+                                        <p class="user-empty">Nenhum culto padrao ativo disponivel.</p>
+                                    {% endfor %}
+                                </div>
+                                {% for error in form.cultos_padrao.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Resultado esperado</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            O sistema cria apenas as escalas-base do mes. Os membros continuam sendo adicionados manualmente depois.
+                        </p>
+                        <p class="user-note">
+                            Se uma escala com o mesmo departamento, data e horario ja existir, ela sera ignorada para evitar duplicidade.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

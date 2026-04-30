@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Sobre - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+  <div class="about">
+    {% include "components/hero.html" with titulo=sobre.banner_titulo|default:"Sobre nos" descricao=sobre.banner_subtitulo|default:"Conheca nossa historia, nossa missao e o proposito que nos move." imagem_fundo=site.hero_sobre %}
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">{{ sobre.historia_titulo|default:"Nossa historia" }}</h2>
+            <p class="section__subtitle">Uma comunidade de fe construida com simplicidade, cuidado e constancia.</p>
+          </div>
+        </div>
+
+        <div class="content content--narrow">
+          {% for paragrafo in sobre.historia_paragrafos %}
+            <p>{{ paragrafo }}</p>
+          {% empty %}
+            <p>
+              A {{ site.nome_igreja|default:"nossa igreja" }} nasceu do desejo de ver pessoas se aproximando de Deus e
+              vivendo uma fe pratica: que transforma o coracao, fortalece familias e gera proposito para o dia a dia.
+            </p>
+            <p>
+              Somos uma comunidade acolhedora, com espaco para todas as idades, caminhando juntos em comunhao, servico e
+              crescimento espiritual. Aqui voce encontra um ambiente de cuidado pastoral, ensino biblico e relacionamentos
+              saudaveis.
+            </p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Missao, Visao e Valores</h2>
+            <p class="section__subtitle">O que fazemos, para onde vamos e como caminhamos.</p>
+          </div>
+        </div>
+
+        <div class="grid grid--3">
+          <article class="info-card">
+            <h3 class="info-card__title">Missao</h3>
+            <p class="info-card__text">
+              {{ sobre.missao|default:"Anunciar o evangelho e formar discipulos, conectando pessoas a Deus e a comunidade, com amor e clareza." }}
+            </p>
+          </article>
+          <article class="info-card">
+            <h3 class="info-card__title">Visao</h3>
+            <p class="info-card__text">
+              {{ sobre.visao|default:"Ser uma igreja relevante e acolhedora, que inspira fe, comunhao e servico, impactando nossa cidade." }}
+            </p>
+          </article>
+          <article class="info-card">
+            <h3 class="info-card__title">Valores</h3>
+            <p class="info-card__text">
+              {{ sobre.valores|default:"Biblia como fundamento, comunhao, excelencia com simplicidade, generosidade e cuidado com pessoas." }}
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Nossa lideranca</h2>
+            <p class="section__subtitle">Pessoas que servem com responsabilidade e amor.</p>
+          </div>
+        </div>
+
+        <div class="grid grid--3">
+          {% for lider in sobre.lideres.all %}
+            <article class="leader-card">
+              {% if lider.foto %}
+                <img class="leader-card__avatar" src="{{ lider.foto.url }}" alt="Foto de {{ lider.nome }}">
+              {% else %}
+                <div class="leader-card__avatar" aria-hidden="true"></div>
+              {% endif %}
+              <div class="leader-card__body">
+                <div class="leader-card__name">{{ lider.nome }}</div>
+                <div class="leader-card__role">{{ lider.cargo }}</div>
+                {% if lider.descricao %}
+                  <p class="leader-card__text">{{ lider.descricao }}</p>
+                {% endif %}
+              </div>
+            </article>
+          {% empty %}
+            <article class="leader-card">
+              <div class="leader-card__avatar" aria-hidden="true"></div>
+              <div class="leader-card__body">
+                <div class="leader-card__name">Pr. Nome Sobrenome</div>
+                <div class="leader-card__role">Pastor titular</div>
+                <p class="leader-card__text">
+                  Breve descricao institucional: visao pastoral, cuidado com a comunidade e ensino biblico.
+                </p>
+              </div>
+            </article>
+            <article class="leader-card leader-card--placeholder">
+              <div class="leader-card__placeholder">
+                <div class="leader-card__placeholder-title">Adicionar lideres</div>
+                <p class="leader-card__text">
+                  Cadastre os lideres pelo painel administrativo em <strong>/admin</strong> -> <strong>Pagina Sobre</strong>.
+                </p>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Horarios e localizacao</h2>
+            <p class="section__subtitle">Informacoes praticas para sua visita.</p>
+          </div>
+        </div>
+
+        <div class="highlight">
+          <div class="highlight__grid">
+            <div class="highlight__col">
+              <div class="highlight__title">Cultos</div>
+              <ul class="highlight__list">
+                {% for horario in site.horarios_cultos_lista %}
+                  <li>{{ horario }}</li>
+                {% empty %}
+                  <li><strong>Domingo</strong> - 09:00 (Culto da manha)</li>
+                  <li><strong>Domingo</strong> - 19:00 (Culto da noite)</li>
+                  <li><strong>Quarta</strong> - 20:00 (Culto de ensino)</li>
+                {% endfor %}
+              </ul>
+            </div>
+            <div class="highlight__col">
+              <div class="highlight__title">Contato</div>
+              <ul class="highlight__list">
+                <li><strong>Endereco:</strong> {{ site.endereco|default:"R. Dr. Gustavo Pinto, 72 - Estancia, Recife - PE" }}</li>
+                <li><strong>WhatsApp:</strong> {{ site.whatsapp|default:"(00) 00000-0000" }}</li>
+                <li><strong>E-mail:</strong> {{ site.email|default:"contato@suaigreja.com" }}</li>
+              </ul>
+              <div class="highlight__actions">
+                <a class="btn btn--primary" href="{% url 'core:contato' %}">Entre em contato</a>
+                <a class="btn btn--soft" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--cta">
+      <div class="container">
+        <div class="cta">
+          <div class="cta__content">
+            <h2 class="cta__title">Sera um prazer receber voce</h2>
+            <p class="cta__text">Se voce esta buscando um lugar para recomecar, crescer e caminhar com Deus, venha nos visitar.</p>
+          </div>
+          <div class="cta__actions">
+            <a class="btn btn--primary" href="{% url 'core:contato' %}">Entre em contato</a>
+            <a class="btn btn--soft" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}

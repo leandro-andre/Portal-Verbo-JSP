@@ -1,0 +1,24 @@
+<section class="page-hero{% if hero_class %} {{ hero_class }}{% endif %}"{% if imagem_fundo %} style="--page-hero-image: url('{{ imagem_fundo.url }}');"{% endif %}>
+  <div class="page-hero__bg" aria-hidden="true"></div>
+  <div class="container page-hero__inner">
+    <div class="page-hero__content">
+      {% if kicker %}
+        <p class="page-hero__kicker">{{ kicker }}</p>
+      {% endif %}
+      <h1 class="page-hero__title">{{ titulo }}</h1>
+      {% if descricao %}
+        <p class="page-hero__subtitle">{{ descricao }}</p>
+      {% endif %}
+      {% if primary_label or secondary_label %}
+        <div class="page-hero__actions">
+          {% if primary_label and primary_url %}
+            <a class="btn btn--primary" href="{{ primary_url }}">{{ primary_label }}</a>
+          {% endif %}
+          {% if secondary_label and secondary_url %}
+            <a class="btn btn--ghost" href="{{ secondary_url }}">{{ secondary_label }}</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_aulas' sala.pk %}">Voltar para aulas</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Planejamento da aula</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" enctype="multipart/form-data" class="user-form">
+                            {% csrf_token %}
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data.id_for_label }}">Data</label>
+                                    {{ form.data }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.tema.id_for_label }}">Tema</label>
+                                    {{ form.tema }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.texto_base.id_for_label }}">Texto base</label>
+                                {{ form.texto_base }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.conteudo_licao.id_for_label }}">Conteudo da licao</label>
+                                {{ form.conteudo_licao }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.anexo_licao.id_for_label }}">Anexo da licao</label>
+                                {{ form.anexo_licao }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observacoes</label>
+                                {{ form.observacoes }}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_aulas' sala.pk %}">Cancelar</a>
+                            </div>
+
+                            {% for field in form %}
+                                {% for error in field.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            {% endfor %}
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Dica de uso</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            Você pode escrever o conteudo diretamente na plataforma ou anexar um arquivo da licao para consulta da equipe.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

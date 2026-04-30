@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Noticias - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">Noticias e publicacoes</h1>
+                    <p class="user-hero__text">Mantenha o site atualizado com noticias, informes e conteudos institucionais.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'usuarios:conteudo:secretaria_noticia_nova' %}">Nova noticia</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ noticias_total }}</span>
+                    <span class="user-stat__label">Noticias cadastradas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ noticias_publicadas }}</span>
+                    <span class="user-stat__label">Publicadas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if status_filter == "publicadas" %}Publicadas{% elif status_filter == "rascunhos" %}Rascunhos{% else %}Todas{% endif %}</span>
+                    <span class="user-stat__label">Filtro atual</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar por titulo</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: Escola biblica, Conferencia, Aviso">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todas</option>
+                            <option value="publicadas" {% if status_filter == "publicadas" %}selected{% endif %}>Publicadas</option>
+                            <option value="rascunhos" {% if status_filter == "rascunhos" %}selected{% endif %}>Rascunhos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_noticias' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de noticias</h2>
+                </div>
+                {% if noticias %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Titulo</th>
+                                    <th>Data</th>
+                                    <th>Status</th>
+                                    <th>Destaque</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for noticia in noticias %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ noticia.titulo }}</strong>
+                                            {% if noticia.resumo %}
+                                                <div class="module-table__meta">{{ noticia.resumo|truncatechars:90 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ noticia.data_publicacao|date:"d/m/Y" }}</td>
+                                        <td>
+                                            <span class="module-badge {% if noticia.publicado %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if noticia.publicado %}Publicada{% else %}Rascunho{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if noticia.destaque_home %}module-badge--role{% else %}module-badge--muted{% endif %}">
+                                                {% if noticia.destaque_home %}Em destaque{% else %}Normal{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:conteudo:secretaria_noticia_editar' noticia.pk %}">Editar</a>
+                                            <form method="post" action="{% url 'usuarios:conteudo:secretaria_noticia_status' noticia.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status de publicacao desta noticia?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--outline btn--sm">
+                                                    {% if noticia.publicado %}Despublicar{% else %}Publicar{% endif %}
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma noticia encontrada</h3>
+                        <p class="module-empty__text">Crie a primeira noticia para manter o portal atualizado.</p>
+                        <div class="module-empty__actions">
+                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:conteudo:secretaria_noticia_nova' %}">Nova noticia</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

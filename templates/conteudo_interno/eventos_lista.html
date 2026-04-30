@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Eventos - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">Eventos e agenda publica</h1>
+                    <p class="user-hero__text">Crie, edite e publique eventos do portal com controle rapido de status e destaque.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'usuarios:conteudo:secretaria_evento_novo' %}">Novo evento</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ eventos_total }}</span>
+                    <span class="user-stat__label">Eventos cadastrados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ eventos_publicados }}</span>
+                    <span class="user-stat__label">Publicados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if status_filter == "publicados" %}Publicados{% elif status_filter == "rascunhos" %}Rascunhos{% else %}Todos{% endif %}</span>
+                    <span class="user-stat__label">Filtro atual</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar por titulo</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: Culto, Conferencia, Reuniao">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="publicados" {% if status_filter == "publicados" %}selected{% endif %}>Publicados</option>
+                            <option value="rascunhos" {% if status_filter == "rascunhos" %}selected{% endif %}>Rascunhos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_eventos' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de eventos</h2>
+                </div>
+                {% if eventos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Titulo</th>
+                                    <th>Data</th>
+                                    <th>Horario</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Destaque</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for evento in eventos %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ evento.titulo }}</strong>
+                                            {% if evento.descricao %}
+                                                <div class="module-table__meta">{{ evento.descricao|truncatechars:90 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ evento.data|date:"d/m/Y" }}</td>
+                                        <td>{{ evento.horario|time:"H:i" }}</td>
+                                        <td>{{ evento.get_tipo_display|default:"-" }}</td>
+                                        <td>
+                                            <span class="module-badge {% if evento.publicado %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if evento.publicado %}Publicado{% else %}Rascunho{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if evento.destaque_home %}module-badge--role{% else %}module-badge--muted{% endif %}">
+                                                {% if evento.destaque_home %}Em destaque{% else %}Normal{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:conteudo:secretaria_evento_editar' evento.pk %}">Editar</a>
+                                            <form method="post" action="{% url 'usuarios:conteudo:secretaria_evento_status' evento.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status de publicacao deste evento?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--outline btn--sm">
+                                                    {% if evento.publicado %}Despublicar{% else %}Publicar{% endif %}
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum evento encontrado</h3>
+                        <p class="module-empty__text">Cadastre o primeiro evento publico para iniciar a agenda do site.</p>
+                        <div class="module-empty__actions">
+                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:conteudo:secretaria_evento_novo' %}">Novo evento</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastros do Infantil - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Departamento Infantil</p>
+                    <h1 class="user-hero__title">Cadastros recebidos</h1>
+                    <p class="user-hero__text">
+                        Revise os cadastros enviados pelas familias, aprove ou recuse o acesso e vincule cada crianca a sala correta.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ pendentes_count }}</span>
+                    <span class="user-stat__label">Pendentes</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ aprovados_count }}</span>
+                    <span class="user-stat__label">Aprovados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ recusados_count }}</span>
+                    <span class="user-stat__label">Recusados</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in criancas.model.Status.choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Filtrar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:infantil:cadastros_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Fila de revisao</h2>
+                </div>
+                {% if criancas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Crianca</th>
+                                    <th>Responsavel</th>
+                                    <th>Status</th>
+                                    <th>Sala</th>
+                                    <th>Alertas</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for crianca in criancas %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ crianca.nome }}</strong>
+                                            <div class="module-table__meta">Enviado em {{ crianca.criado_em|date:"d/m/Y H:i" }}</div>
+                                        </td>
+                                        <td>
+                                            {{ crianca.responsavel_nome }}
+                                            <div class="module-table__meta">{{ crianca.responsavel_telefone }}</div>
+                                            {% if crianca.responsavel_email %}
+                                                <div class="module-table__meta">{{ crianca.responsavel_email }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="module-badge module-badge--{{ crianca.status_badge_modifier }}">
+                                                {{ crianca.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ crianca.sala.nome|default:"Nao definida" }}</td>
+                                        <td>
+                                            <div class="alert-chip-stack">
+                                                {% if crianca.alergias %}<span class="alert-chip alert-chip--danger">Alergias</span>{% endif %}
+                                                {% if crianca.restricoes_alimentares %}<span class="alert-chip alert-chip--warning">Restricao alimentar</span>{% endif %}
+                                                {% if crianca.necessidades_especiais %}<span class="alert-chip alert-chip--info">Necessidades especiais</span>{% endif %}
+                                                {% if crianca.medicacao_ou_cuidado_especial %}<span class="alert-chip alert-chip--warning">Medicacao</span>{% endif %}
+                                                {% if crianca.observacao_para_professor %}<span class="alert-chip alert-chip--info">Observacao</span>{% endif %}
+                                                {% if not crianca.possui_alertas %}<span class="module-table__meta">Sem alertas</span>{% endif %}
+                                            </div>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:cadastro_review' crianca.pk %}">Revisar cadastro</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum cadastro encontrado</h3>
+                        <p class="module-empty__text">Nao ha criancas na fila com o filtro selecionado.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

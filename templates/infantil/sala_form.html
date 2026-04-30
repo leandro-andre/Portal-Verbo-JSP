@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Dados da sala</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.nome.id_for_label }}">Nome</label>
+                                {{ form.nome }}
+                                {% for error in form.nome.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.descricao.id_for_label }}">Descricao</label>
+                                {{ form.descricao }}
+                                {% for error in form.descricao.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.idade_minima.id_for_label }}">Idade minima</label>
+                                    {{ form.idade_minima }}
+                                    {% for error in form.idade_minima.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.idade_maxima.id_for_label }}">Idade maxima</label>
+                                    {{ form.idade_maxima }}
+                                    {% for error in form.idade_maxima.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <label class="module-checkbox-row" for="{{ form.ativa.id_for_label }}">
+                                {{ form.ativa }}
+                                <span>Sala ativa</span>
+                            </label>
+                            {% for error in form.ativa.errors %}
+                                <div class="form-error">{{ error }}</div>
+                            {% endfor %}
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Orientacao</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            Mantenha as faixas etarias bem definidas para facilitar a organizacao das equipes, criancas e licoes.
+                        </p>
+                        <ul class="user-list">
+                            <li>Evite criar duas salas com a mesma faixa etaria.</li>
+                            <li>Use a descricao para orientar a equipe sobre o perfil da turma.</li>
+                            <li>Se a sala sair de operacao, marque como inativa.</li>
+                        </ul>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

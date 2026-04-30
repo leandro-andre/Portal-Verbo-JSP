@@ -1,0 +1,86 @@
+<aside class="user-shell__sidebar">
+    <div class="user-sidecard">
+        <div class="user-sidecard__avatar">
+            {% if user.foto %}
+                <img src="{{ user.foto.url }}" alt="Foto de {{ user.get_full_name|default:user.username }}">
+            {% else %}
+                <span>{{ user.first_name|default:user.username|slice:":1"|upper }}</span>
+            {% endif %}
+        </div>
+        <div class="user-sidecard__name">{{ user.get_full_name|default:user.username }}</div>
+        <div class="user-sidecard__meta">
+            {% if user.is_membro %}Membro{% else %}Visitante{% endif %}
+        </div>
+    </div>
+
+    <nav class="user-nav" aria-label="Area do usuario">
+        <div class="user-nav__group user-nav__group--top">
+            <a class="user-nav__link {% if active_section == 'dashboard' %}is-active{% endif %}" href="{% url 'usuarios:dashboard' %}">
+                Painel
+            </a>
+        </div>
+
+        <div class="user-nav__group">
+            <p class="user-nav__heading">Usuario</p>
+            <div class="user-nav__items">
+                <a class="user-nav__link {% if active_section == 'perfil' %}is-active{% endif %}" href="{% url 'usuarios:perfil' %}">
+                    Meu perfil
+                </a>
+                {% if user.is_authenticated %}
+                    <a class="user-nav__link {% if active_section == 'minhas_criancas' %}is-active{% endif %}" href="{% url 'usuarios:infantil:minhas_criancas' %}">
+                        Minhas criancas
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="user-nav__group">
+            <p class="user-nav__heading">Escalas</p>
+            <div class="user-nav__items">
+                {% if can_manage_escalas %}
+                    <a class="user-nav__link {% if active_section == 'escalas' %}is-active{% endif %}" href="{% url 'usuarios:departamentos:escala_lista' %}">
+                        Escalas
+                    </a>
+                {% endif %}
+                {% if user.is_authenticated %}
+                    <a class="user-nav__link {% if active_section == 'indisponibilidades' %}is-active{% endif %}" href="{% url 'usuarios:departamentos:minhas_indisponibilidades' %}">
+                        Minhas indisponibilidades
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if can_view_departamentos or can_view_infantil or can_view_secretaria or can_view_midia %}
+            <div class="user-nav__group">
+                <p class="user-nav__heading">Departamentos</p>
+                <div class="user-nav__items">
+                    {% if can_view_departamentos %}
+                        <a class="user-nav__link {% if active_section == 'departamentos' %}is-active{% endif %}" href="{% url 'usuarios:departamentos:lista' %}">
+                            Departamentos
+                        </a>
+                    {% endif %}
+                    {% if can_view_infantil %}
+                        <a class="user-nav__link {% if active_section == 'infantil' %}is-active{% endif %}" href="{% url 'usuarios:infantil:sala_lista' %}">
+                            Infantil
+                        </a>
+                    {% endif %}
+                    {% if can_view_secretaria %}
+                        <a class="user-nav__link {% if active_section == 'secretaria' %}is-active{% endif %}" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">
+                            Secretaria
+                        </a>
+                    {% endif %}
+                    {% if can_view_midia %}
+                        <a class="user-nav__link {% if active_section == 'midia' %}is-active{% endif %}" href="{% url 'usuarios:conteudo:midia_ao_vivo' %}">
+                            Midia
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </nav>
+
+    <form action="{% url 'usuarios:logout' %}" method="post" class="user-logout">
+        {% csrf_token %}
+        <button type="submit" class="user-logout__button">Sair</button>
+    </form>
+</aside>

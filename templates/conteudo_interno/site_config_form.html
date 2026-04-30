@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Voltar para o painel</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__body">
+                    <form method="post" enctype="multipart/form-data" class="user-form">
+                        {% csrf_token %}
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.nome_igreja.id_for_label }}">Nome da igreja</label>
+                                {{ form.nome_igreja }}
+                                {% for error in form.nome_igreja.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.Logo_img.id_for_label }}">Logo</label>
+                                {{ form.Logo_img }}
+                                {% for error in form.Logo_img.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="module-empty module-empty--compact">
+                                <h2 class="module-empty__title">Heroes das paginas publicas</h2>
+                                <p class="module-empty__text">Envie uma imagem para cada pagina e mantenha o topo do site com o mesmo padrao visual. Quando nenhuma imagem for definida, o sistema usa o fundo padrao do portal.</p>
+                            </div>
+                        </div>
+
+                        <div class="media-field-grid">
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Home</h3>
+                                        <p class="media-field-card__text">Hero principal da pagina inicial.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_home %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_home.url }}" alt="Preview do hero da Home" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_home.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_home }}
+                                {% for error in form.hero_home.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Sobre</h3>
+                                        <p class="media-field-card__text">Topo da pagina institucional.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_sobre %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_sobre.url }}" alt="Preview do hero da pagina Sobre" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_sobre.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_sobre }}
+                                {% for error in form.hero_sobre.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Agenda</h3>
+                                        <p class="media-field-card__text">Hero da agenda publica.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_agenda %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_agenda.url }}" alt="Preview do hero da Agenda" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_agenda.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_agenda }}
+                                {% for error in form.hero_agenda.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Noticias</h3>
+                                        <p class="media-field-card__text">Hero da lista publica de noticias.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_noticias %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_noticias.url }}" alt="Preview do hero da pagina de noticias" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_noticias.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_noticias }}
+                                {% for error in form.hero_noticias.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Ao Vivo</h3>
+                                        <p class="media-field-card__text">Hero da pagina de transmissao.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_ao_vivo %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_ao_vivo.url }}" alt="Preview do hero da pagina Ao Vivo" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_ao_vivo.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_ao_vivo }}
+                                {% for error in form.hero_ao_vivo.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="media-field-card">
+                                <div class="media-field-card__head">
+                                    <div>
+                                        <h3 class="media-field-card__title">Contato</h3>
+                                        <p class="media-field-card__text">Hero da pagina de contato.</p>
+                                    </div>
+                                </div>
+                                {% if form.instance.hero_contato %}
+                                    <div class="media-preview">
+                                        <img src="{{ form.instance.hero_contato.url }}" alt="Preview do hero da pagina Contato" class="media-preview__image">
+                                    </div>
+                                {% endif %}
+                                <label class="form-label" for="{{ form.hero_contato.id_for_label }}">Imagem de fundo</label>
+                                {{ form.hero_contato }}
+                                {% for error in form.hero_contato.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.telefone.id_for_label }}">Telefone</label>
+                                {{ form.telefone }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.whatsapp.id_for_label }}">WhatsApp</label>
+                                {{ form.whatsapp }}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.email.id_for_label }}">E-mail</label>
+                                {{ form.email }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.endereco.id_for_label }}">Endereco</label>
+                                {{ form.endereco }}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.instagram.id_for_label }}">Instagram</label>
+                                {{ form.instagram }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.facebook.id_for_label }}">Facebook</label>
+                                {{ form.facebook }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.texto_institucional.id_for_label }}">Texto institucional</label>
+                            {{ form.texto_institucional }}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.horarios_cultos.id_for_label }}">Horarios principais</label>
+                            {{ form.horarios_cultos }}
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.youtube_embed_url.id_for_label }}">Link ao vivo</label>
+                                {{ form.youtube_embed_url }}
+                                {% for error in form.youtube_embed_url.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.mapa_embed_url.id_for_label }}">Mapa incorporado</label>
+                                {{ form.mapa_embed_url }}
+                                {% for error in form.mapa_embed_url.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                        <div class="user-form__actions">
+                            <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                            <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

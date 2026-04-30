@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:minhas_indisponibilidades' %}">Voltar para minhas indisponibilidades</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Periodo indisponivel</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                {% for error in form.non_field_errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data_inicio.id_for_label }}">Data inicial</label>
+                                    {{ form.data_inicio }}
+                                    {% for error in form.data_inicio.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data_fim.id_for_label }}">Data final</label>
+                                    {{ form.data_fim }}
+                                    {% for error in form.data_fim.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.horario_inicio.id_for_label }}">Horario inicial</label>
+                                    {{ form.horario_inicio }}
+                                    {% for error in form.horario_inicio.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.horario_fim.id_for_label }}">Horario final</label>
+                                    {{ form.horario_fim }}
+                                    {% for error in form.horario_fim.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.motivo.id_for_label }}">Motivo</label>
+                                {{ form.motivo }}
+                                {% for error in form.motivo.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:departamentos:minhas_indisponibilidades' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Como usar</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            Se o bloqueio for do dia inteiro, deixe os horarios em branco. Se for um periodo especifico, preencha horario inicial e final.
+                        </p>
+                        <p class="user-note">
+                            Essas informacoes ficam visiveis para a lideranca na montagem das escalas do seu departamento.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

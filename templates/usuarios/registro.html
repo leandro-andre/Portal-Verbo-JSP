@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="container" style="max-width: 550px; margin: 40px auto;">
+        <div style="background: white; padding: 40px; border-radius: var(--radius); border: 1px solid var(--border); shadow: var(--shadow);">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="font-family: 'Poppins', sans-serif; font-weight: 700; margin-bottom: 10px;">Criar Conta</h1>
+                <p style="color: var(--muted);">Junte-se à nossa comunidade e acesse a área interna.</p>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                
+                {% if form.errors and not form.non_field_errors %}
+                <div style="background: #fee2e2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+                    Por favor, corrija os erros abaixo.
+                </div>
+                {% endif %}
+
+                {% if form.non_field_errors %}
+                <div style="background: #fee2e2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div style="margin-bottom: 15px;">
+                        <label for="{{ form.first_name.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">Nome</label>
+                        {{ form.first_name }}
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="{{ form.last_name.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">Sobrenome</label>
+                        {{ form.last_name }}
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="{{ form.email.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">E-mail</label>
+                    {{ form.email }}
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="{{ form.telefone.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">Telefone</label>
+                    {{ form.telefone }}
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="{{ form.username.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">Nome de Usuário</label>
+                    {{ form.username }}
+                    <small style="color: var(--muted);">Será usado para o seu login.</small>
+                </div>
+
+                {% for field in form %}
+                    {% if field.name == 'password1' or field.name == 'password2' %}
+                    <div style="margin-bottom: 15px;">
+                        <label for="{{ field.id_for_label }}" style="display: block; font-weight: 600; margin-bottom: 8px;">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}
+                            <small style="color: #ef4444;">{{ field.errors|striptags }}</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+
+                <button type="submit" class="btn btn--primary" style="width: 100%; height: 48px; margin-top: 10px;">
+                    Finalizar Cadastro
+                </button>
+            </form>
+
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);">
+                <p style="color: var(--muted); font-size: 14px;">
+                    Já tem uma conta? 
+                    <a href="{% url 'usuarios:login' %}" style="color: var(--accent); font-weight: 600;">Faça login aqui</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+    .form-control {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        font-family: inherit;
+        font-size: 15px;
+        transition: border-color 0.2s;
+    }
+    .form-control:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+    ul.errorlist {
+        display: none; /* Escondendo listas de erro padrão do Django pois já tratamos acima */
+    }
+</style>
+{% endblock %}

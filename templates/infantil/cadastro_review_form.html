@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:cadastros_lista' %}">Voltar para cadastros</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Revisao do cadastro</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.nome.id_for_label }}">Nome completo</label>
+                                {{ form.nome }}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data_nascimento.id_for_label }}">Data de nascimento</label>
+                                    {{ form.data_nascimento }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.sexo.id_for_label }}">Sexo</label>
+                                    {{ form.sexo }}
+                                </div>
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                                    {{ form.status }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.sala.id_for_label }}">Sala</label>
+                                    {{ form.sala }}
+                                </div>
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.responsavel_nome.id_for_label }}">Responsavel</label>
+                                    {{ form.responsavel_nome }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.responsavel_telefone.id_for_label }}">Telefone</label>
+                                    {{ form.responsavel_telefone }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.responsavel_email.id_for_label }}">E-mail do responsavel</label>
+                                {{ form.responsavel_email }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacoes_gerais.id_for_label }}">Observacoes gerais</label>
+                                {{ form.observacoes_gerais }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.alergias.id_for_label }}">Alergias</label>
+                                {{ form.alergias }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.restricoes_alimentares.id_for_label }}">Restricoes alimentares</label>
+                                {{ form.restricoes_alimentares }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.necessidades_especiais.id_for_label }}">Necessidades especiais</label>
+                                {{ form.necessidades_especiais }}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.pode_comer_lanche_igreja.id_for_label }}">Pode comer lanche da igreja?</label>
+                                    {{ form.pode_comer_lanche_igreja }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.ativo.id_for_label }}">Cadastro ativo</label>
+                                    <label class="module-checkbox-row" for="{{ form.ativo.id_for_label }}">
+                                        {{ form.ativo }}
+                                        <span>Manter cadastro ativo</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.medicacao_ou_cuidado_especial.id_for_label }}">Medicacao ou cuidado especial</label>
+                                {{ form.medicacao_ou_cuidado_especial }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacao_para_professor.id_for_label }}">Observacao para o professor</label>
+                                {{ form.observacao_para_professor }}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:infantil:cadastros_lista' %}">Cancelar</a>
+                            </div>
+
+                            {% if form.non_field_errors %}
+                                {% for error in form.non_field_errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            {% endif %}
+                            {% for field in form %}
+                                {% for error in field.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            {% endfor %}
+                        </form>
+                    </div>
+                </article>
+
+                <article class="infantil-alerts">
+                    <div class="infantil-alerts__card infantil-alerts__card--danger">
+                        <div class="infantil-alerts__title">Alergias</div>
+                        <p>{{ object.alergias|default:"Nenhuma alergia informada." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--warning">
+                        <div class="infantil-alerts__title">Restricoes alimentares</div>
+                        <p>{{ object.restricoes_alimentares|default:"Nenhuma restricao alimentar informada." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--info">
+                        <div class="infantil-alerts__title">Cuidados especiais</div>
+                        <p>{{ object.necessidades_especiais|default:object.medicacao_ou_cuidado_especial|default:"Nenhum cuidado especial informado." }}</p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

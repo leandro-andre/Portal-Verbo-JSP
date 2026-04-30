@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_noticias' %}">Voltar para noticias</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__body">
+                    <form method="post" enctype="multipart/form-data" class="user-form">
+                        {% csrf_token %}
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.titulo.id_for_label }}">Titulo</label>
+                            {{ form.titulo }}
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.slug.id_for_label }}">Slug</label>
+                                {{ form.slug }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.data_publicacao.id_for_label }}">Data de publicacao</label>
+                                {{ form.data_publicacao }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.resumo.id_for_label }}">Resumo</label>
+                            {{ form.resumo }}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.conteudo.id_for_label }}">Conteudo</label>
+                            {{ form.conteudo }}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.imagem.id_for_label }}">Imagem</label>
+                            {{ form.imagem }}
+                        </div>
+
+                        <div class="user-form__grid">
+                            <label class="module-checkbox-row" for="{{ form.publicado.id_for_label }}">
+                                {{ form.publicado }}
+                                <span>Publicado no site</span>
+                            </label>
+                            <label class="module-checkbox-row" for="{{ form.destaque_home.id_for_label }}">
+                                {{ form.destaque_home }}
+                                <span>Destacar na home</span>
+                            </label>
+                        </div>
+
+                        {% for field in form %}
+                            {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                        {% endfor %}
+                        {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                        <div class="user-form__actions">
+                            <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                            <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_noticias' %}">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

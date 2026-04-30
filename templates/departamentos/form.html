@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:lista' %}">Voltar para lista</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Informacoes do departamento</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.nome.id_for_label }}">Nome</label>
+                                {{ form.nome }}
+                                {% for error in form.nome.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.descricao.id_for_label }}">Descricao</label>
+                                {{ form.descricao }}
+                                {% for error in form.descricao.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.codigo.id_for_label }}">Codigo interno</label>
+                                {{ form.codigo }}
+                                {% if form.codigo.help_text %}
+                                    <div class="form-help">{{ form.codigo.help_text }}</div>
+                                {% endif %}
+                                {% for error in form.codigo.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <label class="module-checkbox-row" for="{{ form.ativo.id_for_label }}">
+                                {{ form.ativo }}
+                                <span>Departamento ativo</span>
+                            </label>
+                            {% for error in form.ativo.errors %}
+                                <div class="form-error">{{ error }}</div>
+                            {% endfor %}
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a href="{% url 'usuarios:departamentos:lista' %}" class="btn btn--outline">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Boas praticas</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            Use nomes claros e consistentes para facilitar a busca e a montagem de futuras escalas.
+                        </p>
+                        <ul class="user-list">
+                            <li>Evite duplicar departamentos com nomes parecidos.</li>
+                            <li>Mantenha a descricao objetiva para ajudar a equipe interna.</li>
+                            <li>Se um departamento deixar de operar, marque-o como inativo.</li>
+                        </ul>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

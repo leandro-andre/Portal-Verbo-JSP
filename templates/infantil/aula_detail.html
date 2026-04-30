@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ aula.tema }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Detalhe da aula</p>
+                    <h1 class="user-hero__title">{{ aula.tema }}</h1>
+                    <p class="user-hero__text">{{ aula.sala.nome }} | {{ aula.data|date:"d/m/Y" }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_manage_aulas %}
+                        <a class="btn btn--soft" href="{% url 'usuarios:infantil:aula_editar' aula.pk %}">Editar</a>
+                    {% endif %}
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_aulas' aula.sala.pk %}">Voltar para aulas</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Conteudo da licao</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <div class="user-field">
+                            <span class="user-field__label">Texto base</span>
+                            <span class="user-field__value">{{ aula.texto_base|default:"-" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Conteudo</span>
+                            <span class="user-field__value">{{ aula.conteudo_licao|linebreaksbr|default:"-" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Observacoes</span>
+                            <span class="user-field__value">{{ aula.observacoes|default:"-" }}</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Arquivo de apoio</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        {% if aula.anexo_licao %}
+                            <p class="user-note">Existe um anexo disponivel para a equipe.</p>
+                            <a class="btn btn--primary" href="{{ aula.anexo_licao.url }}" target="_blank" rel="noopener">Abrir anexo</a>
+                        {% else %}
+                            <p class="user-note">Nenhum anexo enviado para esta aula.</p>
+                        {% endif %}
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

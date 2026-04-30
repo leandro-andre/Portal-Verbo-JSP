@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Ao vivo - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+  <div class="live-page">
+    {% include "components/hero.html" with titulo="Ao Vivo" descricao="Acompanhe nossa transmissao e participe conosco de onde voce estiver." imagem_fundo=site.hero_ao_vivo %}
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Transmissao ao vivo</h2>
+            <p class="section__subtitle">Participe da nossa transmissao e esteja conectado conosco em adoracao, ensino e comunhao.</p>
+          </div>
+          <a class="link-pill" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+        </div>
+
+        {% if site.youtube_embed_url_normalized %}
+          <div class="video-frame">
+            <iframe
+              src="{{ site.youtube_embed_url_normalized }}"
+              title="YouTube video player"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen>
+            </iframe>
+          </div>
+          <div class="live__actions">
+            <a class="btn btn--primary" href="{{ site.youtube_watch_url }}" target="_blank" rel="noopener noreferrer">Abrir no YouTube</a>
+          </div>
+        {% else %}
+          <div class="module-empty">
+            <h2 class="module-empty__title">Transmissao ainda nao configurada</h2>
+            <p class="module-empty__text">Assim que a equipe configurar a live, ela aparecera aqui automaticamente.</p>
+            <div class="module-empty__actions">
+              <a class="btn btn--primary" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+              <a class="btn btn--outline" href="{% url 'noticias:lista' %}">Ver noticias</a>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+{% endblock %}

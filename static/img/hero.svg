@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="Fundo hero">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#1E293B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="30%" cy="20%" r="60%">
+      <stop offset="0" stop-color="#C8A96B" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#C8A96B" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="78%" cy="10%" r="55%">
+      <stop offset="0" stop-color="#60A5FA" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#60A5FA" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" />
+      <feColorMatrix type="matrix" values="
+        0 0 0 0 0
+        0 0 0 0 0
+        0 0 0 0 0
+        0 0 0 .06 0"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#g1)"/>
+  <rect width="1600" height="900" fill="url(#glow)"/>
+  <rect width="1600" height="900" fill="url(#glow2)"/>
+  <g opacity="0.12">
+    <path d="M-40 660 C 180 520, 420 520, 640 660 S 1100 820, 1320 660 S 1740 520, 1980 660" fill="none" stroke="#C8A96B" stroke-width="2"/>
+    <path d="M-60 720 C 160 580, 420 580, 640 720 S 1100 880, 1320 720 S 1740 580, 1980 720" fill="none" stroke="#FFFFFF" stroke-width="1.4"/>
+  </g>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.7"/>
+</svg>
+

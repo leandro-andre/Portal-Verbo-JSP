@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Minhas criancas - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Area da familia</p>
+                    <h1 class="user-hero__title">Minhas criancas</h1>
+                    <p class="user-hero__text">
+                        Cadastre seus filhos para o Departamento Infantil e acompanhe o status de aprovacao de cada cadastro.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'usuarios:infantil:minha_crianca_nova' %}">Cadastrar nova crianca</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_cadastros }}</span>
+                    <span class="user-stat__label">Cadastros enviados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_pendentes }}</span>
+                    <span class="user-stat__label">Pendentes</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_aprovados }}</span>
+                    <span class="user-stat__label">Aprovados</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Cadastros enviados por voce</h2>
+                </div>
+                {% if criancas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Crianca</th>
+                                    <th>Idade</th>
+                                    <th>Status</th>
+                                    <th>Sala</th>
+                                    <th>Responsavel</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for crianca in criancas %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ crianca.nome }}</strong>
+                                            {% if crianca.observacao_para_professor %}
+                                                <div class="module-table__meta">{{ crianca.observacao_para_professor|truncatechars:90 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ crianca.idade_atual }} anos</td>
+                                        <td>
+                                            <span class="module-badge module-badge--{{ crianca.status_badge_modifier }}">
+                                                {{ crianca.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ crianca.sala.nome|default:"Aguardando definicao" }}</td>
+                                        <td>
+                                            {{ crianca.responsavel_nome }}
+                                            <div class="module-table__meta">{{ crianca.responsavel_telefone }}</div>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            {% if crianca.pode_ser_editada_pelo_responsavel %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:minha_crianca_editar' crianca.pk %}">Editar informacoes</a>
+                                            {% else %}
+                                                <span class="module-table__meta">Edicao bloqueada apos aprovacao</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma crianca cadastrada</h3>
+                        <p class="module-empty__text">
+                            Envie o primeiro cadastro para que a equipe do Infantil revise, aprove e direcione para a sala correta.
+                        </p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

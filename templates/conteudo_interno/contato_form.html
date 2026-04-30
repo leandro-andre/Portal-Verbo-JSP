@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Voltar para o painel</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="module-card">
+                    <div class="module-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.telefone.id_for_label }}">Telefone</label>
+                                    {{ form.telefone }}
+                                    {% for error in form.telefone.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.whatsapp.id_for_label }}">WhatsApp</label>
+                                    {{ form.whatsapp }}
+                                    {% for error in form.whatsapp.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.email.id_for_label }}">E-mail</label>
+                                    {{ form.email }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.endereco.id_for_label }}">Endereco</label>
+                                    {{ form.endereco }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.horarios_cultos.id_for_label }}">Horarios</label>
+                                {{ form.horarios_cultos }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.mapa_embed_url.id_for_label }}">Mapa incorporado</label>
+                                {{ form.mapa_embed_url }}
+                            </div>
+
+                            {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Dica de operacao</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            Esses dados alimentam a pagina de contato, partes do rodape e a experiencia geral de descoberta do site.
+                        </p>
+                        <p class="user-note">
+                            O endereco completo melhora o link de mapa e ajuda a equipe a manter tudo consistente em um unico lugar.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

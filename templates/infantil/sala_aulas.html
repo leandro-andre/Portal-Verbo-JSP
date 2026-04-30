@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Aulas da sala {{ sala.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Licoes da sala</p>
+                    <h1 class="user-hero__title">{{ sala.nome }}</h1>
+                    <p class="user-hero__text">Planeje e consulte rapidamente o material de cada encontro.</p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_manage_aulas %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:infantil:aula_nova' sala.pk %}">Nova aula</a>
+                    {% endif %}
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_aulas }}</span>
+                    <span class="user-stat__label">Aulas cadastradas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ aulas_com_anexo }}</span>
+                    <span class="user-stat__label">Com anexo</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ sala.faixa_etaria_label }}</span>
+                    <span class="user-stat__label">Faixa etaria</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Aulas e licoes</h2>
+                </div>
+                {% if aulas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Tema</th>
+                                    <th>Texto base</th>
+                                    <th>Anexo</th>
+                                    <th>Observacoes</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for aula in aulas %}
+                                    <tr>
+                                        <td>{{ aula.data|date:"d/m/Y" }}</td>
+                                        <td><strong>{{ aula.tema }}</strong></td>
+                                        <td>{{ aula.texto_base|default:"-" }}</td>
+                                        <td>
+                                            {% if aula.anexo_licao %}
+                                                <span class="module-badge module-badge--success">Com anexo</span>
+                                            {% else %}
+                                                <span class="module-badge module-badge--muted">Sem anexo</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ aula.observacoes|default:"-"|truncatechars:80 }}</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:infantil:aula_detail' aula.pk %}">Detalhes</a>
+                                            {% if can_manage_aulas %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:aula_editar' aula.pk %}">Editar</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma aula cadastrada</h3>
+                        <p class="module-empty__text">Cadastre a primeira licao da sala para organizar o ensino da equipe.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

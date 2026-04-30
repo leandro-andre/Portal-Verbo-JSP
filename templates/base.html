@@ -1,0 +1,114 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}{{ site.nome_igreja|default:"Portal" }}{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}" />
+    {% block head %}{% endblock %}
+  </head>
+  <body class="page">
+    <header class="header">
+      <div class="container header__inner">
+        <a class="logo" href="{% url 'core:home' %}">
+          {% if site.Logo_img %}
+            <img src="{{ site.Logo_img.url }}" alt="Logo" class="logo__img" />
+          {% else %}
+            <span class="logo__mark"></span>
+          {% endif %}
+          <span class="logo__text">{{ site.nome_igreja|default:"Portal" }}</span>
+        </a>
+
+        <nav class="nav" aria-label="Navegação principal">
+          <a class="nav__link" href="{% url 'core:home' %}">Home</a>
+          <a class="nav__link" href="{% url 'core:sobre' %}">Sobre</a>
+          <a class="nav__link" href="{% url 'eventos:agenda' %}">Agenda</a>
+          <a class="nav__link" href="{% url 'noticias:lista' %}">Notícias</a>
+          <a class="nav__link" href="{% url 'core:ao_vivo' %}">Ao vivo</a>
+          <a class="nav__link" href="{% url 'core:contato' %}">Contato</a>
+          
+          {% if user.is_authenticated %}
+            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:dashboard' %}">Painel</a>
+          {% else %}
+            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:login' %}">Entrar</a>
+            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:registro' %}">Cadastrar</a>
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      {% if messages %}
+        <div class="container flash-stack" aria-live="polite">
+          {% for message in messages %}
+            <div class="flash flash--{{ message.tags|default:'info' }}" data-flash>
+              <div class="flash__content">{{ message }}</div>
+              <button type="button" class="flash__dismiss" aria-label="Fechar mensagem">&times;</button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <div class="container footer__grid">
+        <div class="footer__col">
+          <div class="footer__brand">{{ site.nome_igreja|default:"Portal" }}</div>
+          <p class="footer__text">
+            {{ site.texto_institucional|default:"Um lugar para crescer em fé, comunhão e propósito." }}
+          </p>
+          {% if site.instagram or site.facebook %}
+            <div style="margin-top: 1rem; display: flex; gap: 0.75rem;">
+              {% if site.instagram %}<a href="{{ site.instagram }}" target="_blank" class="footer__link" style="font-weight: 500;">Instagram</a>{% endif %}
+              {% if site.facebook %}<a href="{{ site.facebook }}" target="_blank" class="footer__link" style="font-weight: 500;">Facebook</a>{% endif %}
+            </div>
+          {% endif %}
+        </div>
+        <div class="footer__col">
+          <div class="footer__title">Horários</div>
+          <div class="footer__text" style="color: var(--text-muted);">
+            {{ site.horarios_cultos|default:"Domingo — 09:00\nDomingo — 19:00\nQuarta — 20:00"|linebreaksbr }}
+          </div>
+        </div>
+        <div class="footer__col">
+          <div class="footer__title">Contato</div>
+          <ul class="footer__list">
+            {% if site.whatsapp %}<li>WhatsApp: {{ site.whatsapp }}</li>{% endif %}
+            {% if site.telefone %}<li>Telefone: {{ site.telefone }}</li>{% endif %}
+            {% if site.email %}<li>E-mail: {{ site.email }}</li>{% endif %}
+            {% if site.endereco %}<li>{{ site.endereco }}</li>{% endif %}
+            {% if not site.whatsapp and not site.telefone and not site.email and not site.endereco %}
+              <li>Telefone: (00) 0000-0000</li>
+              <li>E-mail: contato@suaigreja.com</li>
+              <li>Endereço: R. Dr. Gustavo Pinto, 72 — Estância, Recife — PE</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="footer__col">
+          <div class="footer__title">Links rápidos</div>
+          <ul class="footer__list">
+            <li><a class="footer__link" href="{% url 'eventos:agenda' %}">Agenda</a></li>
+            <li><a class="footer__link" href="{% url 'noticias:lista' %}">Notícias</a></li>
+            <li><a class="footer__link" href="{% url 'core:ao_vivo' %}">Ao vivo</a></li>
+            <li><a class="footer__link" href="{% url 'core:contato' %}">Contato</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="container footer__bottom">
+        <small>© {% now "Y" %} {{ site.nome_igreja|default:"Portal" }}. Todos os direitos reservados.</small>
+      </div>
+    </footer>
+
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>
+

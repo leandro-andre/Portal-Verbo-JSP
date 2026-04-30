@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Meu Perfil - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Meu perfil</p>
+                    <h1 class="user-hero__title">Atualize seus dados</h1>
+                    <p class="user-hero__text">
+                        Mantenha suas informacoes em dia para facilitar a comunicacao e o cuidado pastoral.
+                    </p>
+                </div>
+                <div class="user-progress">
+                    <span class="user-progress__value">{{ profile_status.completion }}%</span>
+                    <span class="user-progress__label">Perfil preenchido</span>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Editar perfil</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" enctype="multipart/form-data" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.first_name.id_for_label }}">Nome</label>
+                                    {{ form.first_name }}
+                                    {% for error in form.first_name.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.last_name.id_for_label }}">Sobrenome</label>
+                                    {{ form.last_name }}
+                                    {% for error in form.last_name.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.email.id_for_label }}">E-mail</label>
+                                {{ form.email }}
+                                {% for error in form.email.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.telefone.id_for_label }}">Telefone</label>
+                                    {{ form.telefone }}
+                                    {% for error in form.telefone.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data_nascimento.id_for_label }}">Data de nascimento</label>
+                                    {{ form.data_nascimento }}
+                                    {% for error in form.data_nascimento.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.foto.id_for_label }}">Foto de perfil</label>
+                                {% if user.foto %}
+                                    <div class="user-photo-preview">
+                                        <img src="{{ user.foto.url }}" alt="Foto atual de {{ user.get_full_name|default:user.username }}">
+                                    </div>
+                                {% endif %}
+                                {{ form.foto }}
+                                {% for error in form.foto.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">Salvar alteracoes</button>
+                                <a href="{% url 'usuarios:dashboard' %}" class="btn btn--outline">Voltar ao painel</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">O que ainda falta</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        {% if profile_status.missing_fields %}
+                            <p class="user-note">Preencher estes campos ajuda a equipe a se comunicar melhor com voce.</p>
+                            <ul class="user-list">
+                                {% for field in profile_status.missing_fields %}
+                                    <li>{{ field|capfirst }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-note">Seu perfil esta completo. Obrigado por manter seus dados atualizados.</p>
+                        {% endif %}
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

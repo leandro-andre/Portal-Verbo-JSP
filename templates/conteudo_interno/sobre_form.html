@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Voltar para o painel</a>
+                </div>
+            </section>
+
+            <section class="module-layout">
+                <article class="module-card">
+                    <div class="module-card__body">
+                        <form method="post" enctype="multipart/form-data" class="user-form">
+                            {% csrf_token %}
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.banner_titulo.id_for_label }}">Titulo do banner</label>
+                                    {{ form.banner_titulo }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.historia_titulo.id_for_label }}">Titulo da historia</label>
+                                    {{ form.historia_titulo }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.banner_subtitulo.id_for_label }}">Subtitulo do banner</label>
+                                {{ form.banner_subtitulo }}
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.historia_texto.id_for_label }}">Historia</label>
+                                {{ form.historia_texto }}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.missao.id_for_label }}">Missao</label>
+                                    {{ form.missao }}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.visao.id_for_label }}">Visao</label>
+                                    {{ form.visao }}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.valores.id_for_label }}">Valores</label>
+                                {{ form.valores }}
+                            </div>
+
+                            <div class="module-inline-note">
+                                Horarios, endereco, telefone, WhatsApp e e-mail agora ficam centralizados em
+                                <a href="{% url 'usuarios:conteudo:secretaria_contato' %}">Contato e localizacao</a>
+                                para evitar informacoes duplicadas no site.
+                            </div>
+
+                            <div class="module-card module-card--nested">
+                                <div class="module-card__header">
+                                    <h2 class="module-card__title">Lideranca</h2>
+                                </div>
+                                <div class="module-card__body">
+                                    {{ lider_formset.management_form }}
+                                    <div class="inline-formset">
+                                        {% for lider_form in lider_formset %}
+                                            <article class="inline-formset__item">
+                                                {% for hidden in lider_form.hidden_fields %}{{ hidden }}{% endfor %}
+                                                <div class="user-form__grid">
+                                                    <div class="form-group">
+                                                        <label class="form-label" for="{{ lider_form.ordem.id_for_label }}">Ordem</label>
+                                                        {{ lider_form.ordem }}
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label class="form-label" for="{{ lider_form.nome.id_for_label }}">Nome</label>
+                                                        {{ lider_form.nome }}
+                                                    </div>
+                                                </div>
+                                                <div class="user-form__grid">
+                                                    <div class="form-group">
+                                                        <label class="form-label" for="{{ lider_form.cargo.id_for_label }}">Cargo</label>
+                                                        {{ lider_form.cargo }}
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label class="form-label" for="{{ lider_form.foto.id_for_label }}">Foto</label>
+                                                        {{ lider_form.foto }}
+                                                    </div>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label class="form-label" for="{{ lider_form.descricao.id_for_label }}">Descricao</label>
+                                                    {{ lider_form.descricao }}
+                                                </div>
+                                                {% if lider_form.instance.pk %}
+                                                    <label class="module-checkbox-row" for="{{ lider_form.DELETE.id_for_label }}">
+                                                        {{ lider_form.DELETE }}
+                                                        <span>Remover este lider</span>
+                                                    </label>
+                                                {% endif %}
+                                                {% for error in lider_form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                            </article>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Orientacao editorial</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            A pagina Sobre ajuda visitantes a entender rapidamente quem voces sao, como a igreja pensa e quem lidera a comunidade.
+                        </p>
+                        <p class="user-note">
+                            Use paragrafos curtos, linguagem clara e atualize a lideranca sempre que houver mudanca para manter a comunicacao coerente.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

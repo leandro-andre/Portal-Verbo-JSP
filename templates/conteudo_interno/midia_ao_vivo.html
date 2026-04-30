@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Midia</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+            </section>
+
+            <section class="module-layout">
+                <article class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Atualizar transmissao</h2>
+                    </div>
+                    <div class="module-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.youtube_embed_url.id_for_label }}">URL do YouTube ou embed</label>
+                                {{ form.youtube_embed_url }}
+                                {% for error in form.youtube_embed_url.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="module-info">
+                                <strong>Formatos aceitos:</strong> links `youtube.com/watch`, `youtu.be` e `youtube.com/embed`.
+                            </div>
+
+                            {% if not link_configurado %}
+                                <div class="module-warning">
+                                    Informe uma URL valida do YouTube para visualizar o preview.
+                                </div>
+                            {% endif %}
+
+                            {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">Salvar transmissao</button>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Preview</h2>
+                    </div>
+                    <div class="module-card__body user-card__body--stack">
+                        {% if youtube_src %}
+                            <div class="video-wrapper live-player__frame">
+                                <iframe
+                                    src="{{ youtube_src }}"
+                                    title="YouTube video player"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    referrerpolicy="strict-origin-when-cross-origin"
+                                    allowfullscreen
+                                ></iframe>
+                            </div>
+                            <div class="user-form__actions">
+                                <a class="btn btn--outline" href="{{ video_watch_url }}" target="_blank" rel="noopener">Abrir no YouTube</a>
+                            </div>
+                        {% else %}
+                            <div class="module-empty">
+                                <h3 class="module-empty__title">Preview indisponivel</h3>
+                                <p class="module-empty__text">
+                                    Informe uma URL valida do YouTube para visualizar o preview.
+                                </p>
+                            </div>
+                        {% endif %}
+                        <div class="module-info">
+                            Se o preview nao carregar, confirme no YouTube Studio se o video permite incorporacao.
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <section class="module-card midia-callboard" data-chamadas-endpoint="{{ chamadas_endpoint }}">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Chamadas do Infantil</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="module-info">
+                        Esta tela atualiza automaticamente a cada 5 segundos para ajudar durante o culto.
+                    </div>
+
+                    {% if chamadas_pendentes %}
+                        <div class="midia-callboard__grid">
+                            {% for chamada in chamadas_pendentes %}
+                                <article class="midia-call midia-call--pending">
+                                    <div class="midia-call__top">
+                                        <span class="module-badge module-badge--warning">{{ chamada.get_status_display }}</span>
+                                        <span class="midia-call__time">{{ chamada.criado_em|date:"d/m H:i" }}</span>
+                                    </div>
+                                    <div class="midia-call__room">{{ chamada.sala.nome }}</div>
+                                    <div class="midia-call__ticket">Ficha {{ chamada.numero_ficha }}</div>
+                                    {% if chamada.observacao %}
+                                        <p class="midia-call__text">{{ chamada.observacao }}</p>
+                                    {% endif %}
+                                    <div class="midia-call__actions">
+                                        <form method="post" action="{% url 'usuarios:conteudo:midia_chamada_exibido' chamada.pk %}" class="module-inline-form" data-confirm="Confirmar que esta chamada foi exibida no telao?">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn--soft btn--sm">Marcar como exibido</button>
+                                        </form>
+                                    </div>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Nenhuma chamada pendente</h3>
+                            <p class="module-empty__text">
+                                Quando a equipe do Infantil enviar uma ficha, ela vai aparecer aqui automaticamente.
+                            </p>
+                            <div class="module-empty__actions">
+                                <button type="button" class="btn btn--outline btn--sm" onclick="location.reload()">Atualizar agora</button>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    {% if chamadas_exibidas %}
+                        <div class="midia-callboard__subhead">
+                            <h3 class="midia-callboard__subtitle">Ja exibidas</h3>
+                        </div>
+                        <div class="midia-callboard__grid midia-callboard__grid--compact">
+                            {% for chamada in chamadas_exibidas %}
+                                <article class="midia-call midia-call--shown">
+                                    <div class="midia-call__top">
+                                        <span class="module-badge module-badge--info">{{ chamada.get_status_display }}</span>
+                                        <span class="midia-call__time">
+                                            {% if chamada.exibido_em %}{{ chamada.exibido_em|date:"d/m H:i" }}{% else %}{{ chamada.criado_em|date:"d/m H:i" }}{% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="midia-call__room">{{ chamada.sala.nome }}</div>
+                                    <div class="midia-call__ticket">Ficha {{ chamada.numero_ficha }}</div>
+                                    {% if chamada.observacao %}
+                                        <p class="midia-call__text">{{ chamada.observacao }}</p>
+                                    {% endif %}
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+(function() {
+    const callboard = document.querySelector(".midia-callboard");
+    if (!callboard) {
+        return;
+    }
+
+    const chamadasEndpoint = callboard.dataset.chamadasEndpoint || "";
+
+    window.midiaChamadas = {
+        endpoint: chamadasEndpoint,
+        async fetchPendentes() {
+            if (!chamadasEndpoint) {
+                return [];
+            }
+            const response = await fetch(chamadasEndpoint, {
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            const data = await response.json();
+            return data.chamadas || [];
+        }
+    };
+
+    setInterval(function() {
+        location.reload();
+    }, 5000);
+})();
+</script>
+{% endblock %}

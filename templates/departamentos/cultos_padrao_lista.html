@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Cultos padrao - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Escalas</p>
+                    <h1 class="user-hero__title">Cultos padrao</h1>
+                    <p class="user-hero__text">
+                        Cadastre os horarios fixos da igreja para acelerar a criacao de escalas mensais e manter o padrao dos cultos recorrentes.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Voltar para escalas</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:departamentos:culto_padrao_novo' %}">Novo culto padrao</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar por nome</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: Domingo manha, Quinta-feira">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="ativos" {% if status_filter == "ativos" %}selected{% endif %}>Ativos</option>
+                            <option value="inativos" {% if status_filter == "inativos" %}selected{% endif %}>Inativos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:departamentos:cultos_padrao_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de cultos padrao</h2>
+                </div>
+                {% if cultos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Dia da semana</th>
+                                    <th>Horario</th>
+                                    <th>Status</th>
+                                    <th>Observacoes</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for culto in cultos %}
+                                    <tr>
+                                        <td><strong>{{ culto.nome }}</strong></td>
+                                        <td>{{ culto.get_dia_semana_display }}</td>
+                                        <td>{{ culto.horario|time:"H:i" }}</td>
+                                        <td>
+                                            <span class="module-badge {% if culto.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if culto.ativo %}Ativo{% else %}Inativo{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>{{ culto.observacoes|default:"-"|truncatechars:80 }}</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:culto_padrao_editar' culto.pk %}">Editar</a>
+                                            <form method="post" action="{% url 'usuarios:departamentos:culto_padrao_status' culto.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status deste culto padrao?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--outline btn--sm">
+                                                    {% if culto.ativo %}Inativar{% else %}Reativar{% endif %}
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum culto padrao cadastrado</h3>
+                        <p class="module-empty__text">
+                            Cadastre os cultos recorrentes da igreja para gerar as escalas do mes com muito mais rapidez.
+                        </p>
+                        <div class="module-empty__actions">
+                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:departamentos:culto_padrao_novo' %}">Cadastrar primeiro culto</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

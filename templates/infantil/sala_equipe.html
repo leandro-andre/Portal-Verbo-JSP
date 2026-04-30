@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Equipe da sala {{ sala.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Equipe da sala</p>
+                    <h1 class="user-hero__title">{{ sala.nome }}</h1>
+                    <p class="user-hero__text">{{ sala.faixa_etaria_label }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_ativos }}</span>
+                    <span class="user-stat__label">Equipe ativa</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ lideres_sala }}</span>
+                    <span class="user-stat__label">Lideres de sala</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ equipe|length }}</span>
+                    <span class="user-stat__label">Vinculos totais</span>
+                </article>
+            </section>
+
+            <section class="module-layout">
+                <article class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Equipe alocada</h2>
+                    </div>
+                    {% if equipe %}
+                        <div class="module-table-wrap">
+                            <table class="module-table">
+                                <thead>
+                                    <tr>
+                                        <th>Membro</th>
+                                        <th>Papel</th>
+                                        <th>Status</th>
+                                        <th>Observacoes</th>
+                                        {% if can_manage_equipe %}
+                                            <th class="module-table__actions">Acoes</th>
+                                        {% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for participacao in equipe %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ participacao.membro }}</strong>
+                                                {% if participacao.membro.email %}
+                                                    <div class="module-table__meta">{{ participacao.membro.email }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <span class="module-badge module-badge--role">{{ participacao.get_papel_display }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="module-badge {% if participacao.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                    {% if participacao.ativo %}Ativo{% else %}Inativo{% endif %}
+                                                </span>
+                                            </td>
+                                            <td>{{ participacao.observacoes|default:"-"|truncatechars:80 }}</td>
+                                            {% if can_manage_equipe %}
+                                                <td class="module-table__actions">
+                                                    <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:sala_equipe' sala.pk %}?editar={{ participacao.pk }}#form-equipe">Editar</a>
+                                                    <form method="post" action="{% url 'usuarios:infantil:sala_equipe_status' sala.pk participacao.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status deste vinculo da equipe?">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn--outline btn--sm">
+                                                            {% if participacao.ativo %}Desativar{% else %}Reativar{% endif %}
+                                                        </button>
+                                                    </form>
+                                                </td>
+                                            {% endif %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Nenhum membro alocado</h3>
+                            <p class="module-empty__text">Adicione a primeira pessoa da equipe para esta sala.</p>
+                            {% if can_manage_equipe %}
+                                <div class="module-empty__actions">
+                                    <a class="btn btn--primary btn--sm" href="#form-equipe">Adicionar membro</a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </article>
+
+                {% if can_manage_equipe %}
+                    <article class="module-card" id="form-equipe">
+                        <div class="module-card__header">
+                            <h2 class="module-card__title">
+                                {% if editing_participacao %}Editar membro{% else %}Adicionar membro{% endif %}
+                            </h2>
+                        </div>
+                        <div class="module-card__body">
+                            <form method="post" class="user-form">
+                                {% csrf_token %}
+                                {% if editing_participacao %}
+                                    <input type="hidden" name="participacao_id" value="{{ editing_participacao.pk }}">
+                                {% endif %}
+
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.membro.id_for_label }}">Membro</label>
+                                    {{ form.membro }}
+                                    {% for error in form.membro.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.papel.id_for_label }}">Papel</label>
+                                    {{ form.papel }}
+                                    {% for error in form.papel.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <label class="module-checkbox-row" for="{{ form.ativo.id_for_label }}">
+                                    {{ form.ativo }}
+                                    <span>Vinculo ativo</span>
+                                </label>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observacoes</label>
+                                    {{ form.observacoes }}
+                                    {% for error in form.observacoes.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="user-form__actions">
+                                    <button type="submit" class="btn btn--primary">
+                                        {% if editing_participacao %}Salvar membro{% else %}Adicionar a equipe{% endif %}
+                                    </button>
+                                    {% if editing_participacao %}
+                                        <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_equipe' sala.pk %}">Cancelar edicao</a>
+                                    {% endif %}
+                                </div>
+                            </form>
+                        </div>
+                    </article>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

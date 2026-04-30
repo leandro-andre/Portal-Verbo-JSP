@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ crianca.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Detalhe da crianca</p>
+                    <h1 class="user-hero__title">{{ crianca.nome }}</h1>
+                    <p class="user-hero__text">{{ crianca.sala.nome }} | {{ crianca.idade_atual }} anos</p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_manage_criancas %}
+                        <a class="btn btn--soft" href="{% url 'usuarios:infantil:crianca_editar' crianca.pk %}">Editar</a>
+                    {% endif %}
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_criancas' crianca.sala.pk %}">Voltar para sala</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Dados completos</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <div class="user-field">
+                            <span class="user-field__label">Data de nascimento</span>
+                            <span class="user-field__value">{{ crianca.data_nascimento|date:"d/m/Y" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Responsavel</span>
+                            <span class="user-field__value">{{ crianca.responsavel_nome }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Telefone</span>
+                            <span class="user-field__value">{{ crianca.responsavel_telefone }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">E-mail</span>
+                            <span class="user-field__value">{{ crianca.responsavel_email|default:"-" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Sala</span>
+                            <span class="user-field__value">{{ crianca.sala.nome }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Status</span>
+                            <span class="user-field__value">{{ crianca.get_status_display }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Lanche da igreja</span>
+                            <span class="user-field__value">{% if crianca.pode_comer_lanche_igreja %}Sim{% else %}Nao{% endif %}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Observacoes gerais</span>
+                            <span class="user-field__value">{{ crianca.observacoes_gerais|default:"-" }}</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="infantil-alerts">
+                    <div class="infantil-alerts__card infantil-alerts__card--danger">
+                        <div class="infantil-alerts__title">Alergias</div>
+                        <p>{{ crianca.alergias|default:"Nenhuma alergia informada." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--warning">
+                        <div class="infantil-alerts__title">Restricoes alimentares</div>
+                        <p>{{ crianca.restricoes_alimentares|default:"Nenhuma restricao alimentar informada." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--info">
+                        <div class="infantil-alerts__title">Necessidades especiais</div>
+                        <p>{{ crianca.necessidades_especiais|default:"Nenhuma necessidade especial informada." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--warning">
+                        <div class="infantil-alerts__title">Medicacao ou cuidado especial</div>
+                        <p>{{ crianca.medicacao_ou_cuidado_especial|default:"Nenhum cuidado especial informado." }}</p>
+                    </div>
+                    <div class="infantil-alerts__card infantil-alerts__card--info">
+                        <div class="infantil-alerts__title">Observacao para o professor</div>
+                        <p>{{ crianca.observacao_para_professor|default:"Nenhuma observacao informada." }}</p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,175 @@
+from django.conf import settings
+from django.db import models
+from django.db.models import Q
+from django.utils.text import slugify
+
+
+class Departamento(models.Model):
+    class CodigoSistema:
+        SECRETARIA = "secretaria"
+        MIDIA = "midia"
+        INFANTIL = "infantil"
+
+        RESERVADOS = {
+            SECRETARIA,
+            MIDIA,
+            INFANTIL,
+        }
+
+    CODIGO_PADRAO_MAP = {
+        "secretaria": CodigoSistema.SECRETARIA,
+        "departamento-de-secretaria": CodigoSistema.SECRETARIA,
+        "midia": CodigoSistema.MIDIA,
+        "departamento-de-midia": CodigoSistema.MIDIA,
+        "infantil": CodigoSistema.INFANTIL,
+        "departamento-infantil": CodigoSistema.INFANTIL,
+    }
+
+    nome = models.CharField("Nome", max_length=120, unique=True)
+    codigo = models.SlugField(
+        "Codigo interno",
+        max_length=60,
+        unique=True,
+        blank=True,
+        help_text=(
+            "Identificador interno estavel usado por permissoes e integracoes. "
+            "Se ficar vazio, o sistema gera automaticamente."
+        ),
+    )
+    descricao = models.TextField("Descricao", blank=True)
+    membros = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="DepartamentoMembro",
+        related_name="departamentos",
+        blank=True,
+    )
+    ativo = models.BooleanField("Ativo", default=True)
+    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+
+    class Meta:
+        ordering = ["nome"]
+        verbose_name = "Departamento"
+        verbose_name_plural = "Departamentos"
+
+    def __str__(self):
+        return self.nome
+
+    @classmethod
+    def normalizar_codigo(cls, value):
+        return slugify((value or "").strip())
+
+    @classmethod
+    def sugerir_codigo(cls, nome):
+        slug_nome = cls.normalizar_codigo(nome)
+        return cls.CODIGO_PADRAO_MAP.get(slug_nome, slug_nome)
+
+    def gerar_codigo_unico(self):
+        base_codigo = self.normalizar_codigo(self.codigo) or self.sugerir_codigo(self.nome)
+        if not base_codigo:
+            base_codigo = "departamento"
+
+        codigo = base_codigo
+        contador = 2
+        queryset = Departamento.objects.exclude(pk=self.pk)
+        while queryset.filter(codigo=codigo).exists():
+            codigo = f"{base_codigo}-{contador}"
+            contador += 1
+        return codigo
+
+    @property
+    def lider_principal(self):
+        participacoes = getattr(self, "_prefetched_objects_cache", {}).get("participacoes")
+        if participacoes is None:
+            participacoes = self.participacoes.select_related("membro")
+
+        for participacao in participacoes:
+            if participacao.ativo and participacao.papel == DepartamentoMembro.Papel.LIDER:
+                return participacao.membro
+        return None
+
+    @property
+    def total_membros_ativos(self):
+        participacoes = getattr(self, "_prefetched_objects_cache", {}).get("participacoes")
+        if participacoes is None:
+            return self.participacoes.filter(ativo=True).count()
+        return sum(1 for participacao in participacoes if participacao.ativo)
+
+    def pode_gerenciar_escalas(self, user, allowed_roles=None):
+        if not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+
+        roles = allowed_roles or DepartamentoMembro.PAPEIS_GESTAO_ESCALA
+        return self.participacoes.filter(
+            membro=user,
+            ativo=True,
+            papel__in=roles,
+        ).exists()
+
+    def save(self, *args, **kwargs):
+        self.codigo = self.gerar_codigo_unico()
+        return super().save(*args, **kwargs)
+
+
+class DepartamentoMembro(models.Model):
+    class Papel(models.TextChoices):
+        LIDER = "lider", "Lider"
+        VICE_LIDER = "vice_lider", "Vice-lider"
+        MEMBRO = "membro", "Membro"
+        VOLUNTARIO = "voluntario", "Voluntario"
+
+    PAPEIS_GESTAO_ESCALA = (Papel.LIDER,)
+
+    membro = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Membro",
+        on_delete=models.PROTECT,
+        related_name="participacoes_departamentais",
+    )
+    departamento = models.ForeignKey(
+        Departamento,
+        verbose_name="Departamento",
+        on_delete=models.CASCADE,
+        related_name="participacoes",
+    )
+    papel = models.CharField(
+        "Papel no departamento",
+        max_length=20,
+        choices=Papel.choices,
+        default=Papel.MEMBRO,
+    )
+    ativo = models.BooleanField("Ativo", default=True)
+    data_entrada = models.DateField("Data de entrada", blank=True, null=True)
+    observacoes = models.TextField("Observacoes", blank=True)
+    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+
+    class Meta:
+        ordering = ["departamento__nome", "membro__first_name", "membro__username"]
+        verbose_name = "Membro do departamento"
+        verbose_name_plural = "Membros do departamento"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["membro", "departamento"],
+                condition=Q(ativo=True),
+                name="uniq_participacao_ativa_por_departamento",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.membro} - {self.departamento} ({self.get_papel_display()})"
+
+
+# Compatibilidade de import para o restante do projeto enquanto o dominio de escalas
+# termina de migrar para o app dedicado.
+from escalas.models import CultoPadrao, Escala, EscalaItem, IndisponibilidadeMembro  # noqa: E402
+
+
+__all__ = [
+    "CultoPadrao",
+    "Departamento",
+    "DepartamentoMembro",
+    "Escala",
+    "EscalaItem",
+    "IndisponibilidadeMembro",
+]

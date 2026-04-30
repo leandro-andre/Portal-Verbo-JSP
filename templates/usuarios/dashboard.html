@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Painel - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero">
+                <div>
+                    <p class="user-hero__eyebrow">Area do usuario</p>
+                    <h1 class="user-hero__title">Ola, {{ user.first_name|default:user.username }}.</h1>
+                    <p class="user-hero__text">
+                        Este painel mostra informacoes reais da sua conta e do portal, sem links ou modulos ficticios.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'usuarios:perfil' %}">Atualizar perfil</a>
+                    <a class="btn btn--soft" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--stats">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ profile_status.completion }}%</span>
+                    <span class="user-stat__label">Perfil preenchido</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if user.is_membro %}Membro{% else %}Visitante{% endif %}</span>
+                    <span class="user-stat__label">Status da conta</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ minhas_participacoes|length }}</span>
+                    <span class="user-stat__label">Departamentos ativos</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ minhas_escalas|length }}</span>
+                    <span class="user-stat__label">Proximas escalas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ minhas_mensagens|length }}</span>
+                    <span class="user-stat__label">Mensagens recentes</span>
+                </article>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Sua conta</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <div class="user-field">
+                            <span class="user-field__label">Nome completo</span>
+                            <span class="user-field__value">{{ user.get_full_name|default:"Nao informado" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">E-mail</span>
+                            <span class="user-field__value">{{ user.email|default:"Nao informado" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Telefone</span>
+                            <span class="user-field__value">{{ user.telefone|default:"Nao informado" }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Data de nascimento</span>
+                            <span class="user-field__value">{{ user.data_nascimento|date:"d/m/Y"|default:"Nao informada" }}</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Proximo passo</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        {% if profile_status.missing_fields %}
+                            <p class="user-note">
+                                Complete seu cadastro para facilitar a comunicacao da igreja com voce.
+                            </p>
+                            <ul class="user-list">
+                                {% for field in profile_status.missing_fields %}
+                                    <li>{{ field|capfirst }}</li>
+                                {% endfor %}
+                            </ul>
+                            <a class="btn btn--primary" href="{% url 'usuarios:perfil' %}">Completar perfil</a>
+                        {% else %}
+                            <p class="user-note">
+                                Seu perfil ja esta completo. Voce pode acompanhar a agenda, ler noticias e manter seus dados atualizados.
+                            </p>
+                            <a class="btn btn--soft" href="{% url 'usuarios:perfil' %}">Revisar dados</a>
+                        {% endif %}
+                    </div>
+                </article>
+            </section>
+
+            <section class="user-grid user-grid--panels">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Meus departamentos</h2>
+                    </div>
+                    <div class="user-card__body">
+                        {% if minhas_participacoes %}
+                            <ul class="user-list user-list--divided">
+                                {% for participacao in minhas_participacoes %}
+                                    <li>
+                                        <strong>{{ participacao.departamento.nome }}</strong><br>
+                                        <span>{{ participacao.get_papel_display }}{% if participacao.data_entrada %} | Desde {{ participacao.data_entrada|date:"d/m/Y" }}{% endif %}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-empty">Voce ainda nao esta vinculado a nenhum departamento ativo.</p>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Minhas escalas</h2>
+                    </div>
+                    <div class="user-card__body">
+                        {% if minhas_escalas %}
+                            <ul class="user-list user-list--divided">
+                                {% for item in minhas_escalas %}
+                                    <li>
+                                        <strong>{{ item.escala.titulo }}</strong><br>
+                                        <span>
+                                            {{ item.escala.departamento.nome }} | {{ item.funcao }} | {{ item.escala.data|date:"d/m/Y" }} as {{ item.escala.horario|time:"H:i" }}
+                                            {% if item.confirmado %} | Confirmado{% else %} | Pendente{% endif %}
+                                        </span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-empty">Voce ainda nao possui escalas futuras vinculadas ao seu usuario.</p>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Proximos eventos</h2>
+                        <a class="user-card__link" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+                    </div>
+                    <div class="user-card__body">
+                        {% if proximos_eventos %}
+                            <ul class="user-list user-list--divided">
+                                {% for evento in proximos_eventos %}
+                                    <li>
+                                        <strong>{{ evento.titulo }}</strong><br>
+                                        <span>{{ evento.data|date:"d/m/Y" }} as {{ evento.horario|time:"H:i" }}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-empty">Nenhum evento publicado no momento.</p>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Noticias recentes</h2>
+                        <a class="user-card__link" href="{% url 'noticias:lista' %}">Ver noticias</a>
+                    </div>
+                    <div class="user-card__body">
+                        {% if ultimas_noticias %}
+                            <ul class="user-list user-list--divided">
+                                {% for noticia in ultimas_noticias %}
+                                    <li>
+                                        <strong>{{ noticia.titulo }}</strong><br>
+                                        <span>{{ noticia.data_publicacao|date:"d/m/Y" }}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-empty">Nenhuma noticia publicada ainda.</p>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Suas mensagens</h2>
+                        <a class="user-card__link" href="{% url 'core:contato' %}">Falar com a igreja</a>
+                    </div>
+                    <div class="user-card__body">
+                        {% if minhas_mensagens %}
+                            <ul class="user-list user-list--divided">
+                                {% for mensagem in minhas_mensagens %}
+                                    <li>
+                                        <strong>{{ mensagem.assunto|default:"Sem assunto" }}</strong><br>
+                                        <span>{{ mensagem.criado_em|date:"d/m/Y H:i" }}{% if mensagem.respondida %} | Respondida{% else %} | Pendente{% endif %}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="user-empty">Voce ainda nao enviou mensagens pela pagina de contato.</p>
+                        {% endif %}
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

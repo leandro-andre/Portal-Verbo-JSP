@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Home - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+  <div class="home">
+    {% url 'core:ao_vivo' as home_live_url %}
+    {% url 'eventos:agenda' as home_agenda_url %}
+    {% include "components/hero.html" with titulo="Um lugar para crescer em fe, comunhao e proposito" descricao="Conecte-se com nossa igreja, participe dos cultos e viva algo novo com Deus." imagem_fundo=site.hero_home kicker="Bem-vindo ao portal" primary_label="Assistir ao vivo" primary_url=home_live_url secondary_label="Ver agenda" secondary_url=home_agenda_url %}
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Proximos cultos</h2>
+            <p class="section__subtitle">Organize sua semana e participe com a gente.</p>
+          </div>
+          <a class="link-pill" href="{% url 'eventos:agenda' %}">Ver agenda completa</a>
+        </div>
+
+        <div class="grid grid--3">
+          {% for evento in destaques %}
+            <article class="service-card">
+              <div class="service-card__top">
+                <div class="service-card__day">{{ evento.data|date:"l" }}</div>
+                {% if evento.tipo %}<span class="badge">{{ evento.get_tipo_display }}</span>{% endif %}
+              </div>
+              <div class="service-card__time">{{ evento.horario|time:"H:i" }}</div>
+              <div class="service-card__name">{{ evento.titulo }}</div>
+            </article>
+          {% empty %}
+            <article class="service-card">
+              <div class="service-card__top">
+                <div class="service-card__day">Sem eventos</div>
+              </div>
+              <div class="service-card__time">-</div>
+              <div class="service-card__name">Nenhum evento em destaque no momento</div>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--dark">
+      <div class="container">
+        <div class="live">
+          <div class="section__head section__head--dark">
+            <div>
+              <h2 class="section__title section__title--light">Estamos ao vivo</h2>
+              <p class="section__subtitle section__subtitle--light">Acompanhe a transmissao diretamente aqui no site.</p>
+            </div>
+            <a class="link-pill link-pill--dark" href="{% url 'core:ao_vivo' %}">Abrir pagina Ao vivo</a>
+          </div>
+
+          {% if site.youtube_embed_url_normalized %}
+            <div class="video-frame">
+              <iframe
+                src="{{ site.youtube_embed_url_normalized }}"
+                title="YouTube video player"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allowfullscreen>
+              </iframe>
+            </div>
+            <div class="live__actions">
+              <a class="btn btn--primary" href="{{ site.youtube_watch_url }}" target="_blank" rel="noopener noreferrer">Assistir no YouTube</a>
+            </div>
+          {% else %}
+            <div class="card card--dark">
+              <p class="muted muted--light">
+                Configure o link em <strong>/admin</strong> -> <strong>Configuracoes do site</strong> -> <strong>youtube_embed_url</strong>.
+              </p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Ultimas noticias</h2>
+            <p class="section__subtitle">Conteudos para edificar sua semana.</p>
+          </div>
+          <a class="link-pill" href="{% url 'noticias:lista' %}">Ver todas</a>
+        </div>
+
+        <div class="grid grid--3">
+          {% for noticia in ultimas_noticias %}
+            <article class="post-card">
+              {% if noticia.imagem %}
+                <div class="post-card__img" style="background: url('{{ noticia.imagem.url }}') center/cover no-repeat;"></div>
+              {% else %}
+                <div class="post-card__img" aria-hidden="true"></div>
+              {% endif %}
+              <div class="post-card__body">
+                <div class="post-card__meta">{{ noticia.data_publicacao|date:"d/m/Y" }}</div>
+                <h3 class="post-card__title">{{ noticia.titulo }}</h3>
+                <p class="post-card__excerpt">
+                  {{ noticia.resumo|default:noticia.conteudo|striptags|truncatewords:15 }}
+                </p>
+                <a class="btn btn--sm btn--outline" href="{% url 'noticias:detalhe' noticia.slug %}">Ler mais</a>
+              </div>
+            </article>
+          {% empty %}
+            <article class="post-card">
+              <div class="post-card__img" aria-hidden="true"></div>
+              <div class="post-card__body">
+                <div class="post-card__meta">Em breve</div>
+                <h3 class="post-card__title">Nenhuma noticia em destaque</h3>
+                <p class="post-card__excerpt">Continue acompanhando nosso site para ficar por dentro das novidades da nossa igreja.</p>
+                <a class="btn btn--sm btn--outline" href="{% url 'noticias:lista' %}">Ver todas</a>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+
+        <div class="section__foot">
+          <a class="btn btn--primary" href="{% url 'noticias:lista' %}">Ver todas as noticias</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--cta">
+      <div class="container">
+        <div class="cta">
+          <div class="cta__content">
+            <h2 class="cta__title">Venha fazer parte</h2>
+            <p class="cta__text">Nossa igreja e um lugar de acolhimento, crescimento e proposito. Voce e bem-vindo(a).</p>
+          </div>
+          <div class="cta__actions">
+            <a class="btn btn--primary" href="{% url 'core:contato' %}">Falar com a igreja</a>
+            <a class="btn btn--soft" href="{% url 'core:sobre' %}">Conhecer nossa historia</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+{% endblock %}

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Membros de {{ departamento.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Gestao de membros</p>
+                    <h1 class="user-hero__title">{{ departamento.nome }}</h1>
+                    <p class="user-hero__text">
+                        Gerencie os vinculos deste departamento respeitando a regra de que um mesmo membro pode atuar em varios departamentos com papeis diferentes.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:lista' %}">Voltar para departamentos</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:departamentos:editar' departamento.pk %}">Editar departamento</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ membros_ativos_count }}</span>
+                    <span class="user-stat__label">Vinculos ativos</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ membros_inativos_count }}</span>
+                    <span class="user-stat__label">Vinculos inativos</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ lider_principal|default:"-" }}</span>
+                    <span class="user-stat__label">Lider principal</span>
+                </article>
+            </section>
+
+            <section class="module-layout">
+                <article class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Membros do departamento</h2>
+                    </div>
+                    {% if participacoes %}
+                        <div class="module-table-wrap">
+                            <table class="module-table">
+                                <thead>
+                                    <tr>
+                                        <th>Membro</th>
+                                        <th>Papel</th>
+                                        <th>Status</th>
+                                        <th>Data de entrada</th>
+                                        <th>Observacoes</th>
+                                        <th class="module-table__actions">Acoes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for participacao in participacoes %}
+                                        <tr>
+                                            <td>
+                                                <strong>{{ participacao.membro }}</strong>
+                                                {% if participacao.membro.email %}
+                                                    <div class="module-table__meta">{{ participacao.membro.email }}</div>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ participacao.get_papel_display }}</td>
+                                            <td>
+                                                <span class="module-badge {% if participacao.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                    {% if participacao.ativo %}Ativo{% else %}Inativo{% endif %}
+                                                </span>
+                                            </td>
+                                            <td>{{ participacao.data_entrada|date:"d/m/Y"|default:"-" }}</td>
+                                            <td>{{ participacao.observacoes|default:"-"|truncatechars:80 }}</td>
+                                            <td class="module-table__actions">
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:membros' departamento.pk %}?editar={{ participacao.pk }}#form-vinculo">Editar</a>
+                                                <form method="post" action="{% url 'usuarios:departamentos:membro_status' departamento.pk participacao.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status deste vinculo?">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn--outline btn--sm">
+                                                        {% if participacao.ativo %}Desativar{% else %}Reativar{% endif %}
+                                                    </button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Nenhum membro vinculado</h3>
+                            <p class="module-empty__text">
+                                Adicione o primeiro membro a este departamento para iniciar a operacao interna.
+                            </p>
+                            <div class="module-empty__actions">
+                                <a class="btn btn--primary btn--sm" href="#form-vinculo">Adicionar membro</a>
+                            </div>
+                        </div>
+                    {% endif %}
+                </article>
+
+                <article class="module-card" id="form-vinculo">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">
+                            {% if editing_participacao %}Editar vinculo{% else %}Adicionar membro{% endif %}
+                        </h2>
+                    </div>
+                    <div class="module-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+                            {% if editing_participacao %}
+                                <input type="hidden" name="participacao_id" value="{{ editing_participacao.pk }}">
+                            {% endif %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.membro.id_for_label }}">Membro</label>
+                                {{ form.membro }}
+                                {% for error in form.membro.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.papel.id_for_label }}">Papel</label>
+                                    {{ form.papel }}
+                                    {% for error in form.papel.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.data_entrada.id_for_label }}">Data de entrada</label>
+                                    {{ form.data_entrada }}
+                                    {% for error in form.data_entrada.errors %}
+                                        <div class="form-error">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <label class="module-checkbox-row" for="{{ form.ativo.id_for_label }}">
+                                {{ form.ativo }}
+                                <span>Vinculo ativo</span>
+                            </label>
+                            {% for error in form.ativo.errors %}
+                                <div class="form-error">{{ error }}</div>
+                            {% endfor %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observacoes</label>
+                                {{ form.observacoes }}
+                                {% for error in form.observacoes.errors %}
+                                    <div class="form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">
+                                    {% if editing_participacao %}Salvar vinculo{% else %}Adicionar membro{% endif %}
+                                </button>
+                                {% if editing_participacao %}
+                                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:membros' departamento.pk %}">Cancelar edicao</a>
+                                {% endif %}
+                            </div>
+                        </form>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

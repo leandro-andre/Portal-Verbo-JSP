@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Criancas da sala {{ sala.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Criancas da sala</p>
+                    <h1 class="user-hero__title">{{ sala.nome }}</h1>
+                    <p class="user-hero__text">Faixa etaria: {{ sala.faixa_etaria_label }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_manage_criancas %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:infantil:crianca_nova' sala.pk %}">Nova crianca</a>
+                    {% endif %}
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_criancas }}</span>
+                    <span class="user-stat__label">Criancas cadastradas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ criancas_com_alerta }}</span>
+                    <span class="user-stat__label">Com alertas</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ criancas_ativas }}</span>
+                    <span class="user-stat__label">Criancas ativas</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Cadastro das criancas</h2>
+                </div>
+                {% if criancas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Crianca</th>
+                                    <th>Idade</th>
+                                    <th>Responsavel</th>
+                                    <th>Alertas</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for crianca in criancas %}
+                                    <tr>
+                                        <td><strong>{{ crianca.nome }}</strong></td>
+                                        <td>{{ crianca.idade_atual }} anos</td>
+                                        <td>
+                                            {{ crianca.responsavel_nome }}
+                                            <div class="module-table__meta">{{ crianca.responsavel_telefone }}</div>
+                                        </td>
+                                        <td>
+                                            <div class="alert-chip-stack">
+                                                {% if crianca.alergias %}<span class="alert-chip alert-chip--danger">Alergias</span>{% endif %}
+                                                {% if crianca.restricoes_alimentares %}<span class="alert-chip alert-chip--warning">Restricao alimentar</span>{% endif %}
+                                                {% if crianca.necessidades_especiais %}<span class="alert-chip alert-chip--info">Necessidades especiais</span>{% endif %}
+                                                {% if crianca.medicacao_ou_cuidado_especial %}<span class="alert-chip alert-chip--warning">Medicacao</span>{% endif %}
+                                                {% if crianca.observacao_para_professor %}<span class="alert-chip alert-chip--info">Observacao</span>{% endif %}
+                                                {% if not crianca.possui_alertas %}<span class="module-table__meta">Sem alertas</span>{% endif %}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if crianca.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if crianca.ativo %}Ativa{% else %}Inativa{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:infantil:crianca_detail' crianca.pk %}">Detalhes</a>
+                                            {% if can_manage_criancas %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:crianca_editar' crianca.pk %}">Editar</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma crianca cadastrada</h3>
+                        <p class="module-empty__text">Comece cadastrando as criancas desta sala para facilitar o cuidado da equipe.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

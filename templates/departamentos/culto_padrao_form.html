@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ page_eyebrow }}</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:cultos_padrao_lista' %}">Voltar para cultos padrao</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--primary">
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Dados do culto padrao</h2>
+                    </div>
+                    <div class="user-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+
+                            {% if form.non_field_errors %}
+                                <div class="form-feedback form-feedback--error">
+                                    {% for error in form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.nome.id_for_label }}">Nome do culto</label>
+                                {{ form.nome }}
+                                {% for error in form.nome.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <div class="user-form__grid">
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.dia_semana.id_for_label }}">Dia da semana</label>
+                                    {{ form.dia_semana }}
+                                    {% for error in form.dia_semana.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="{{ form.horario.id_for_label }}">Horario</label>
+                                    {{ form.horario }}
+                                    {% for error in form.horario.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observacoes</label>
+                                {{ form.observacoes }}
+                                {% for error in form.observacoes.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+
+                            <label class="module-checkbox-row" for="{{ form.ativo.id_for_label }}">
+                                {{ form.ativo }}
+                                <span>Culto padrao ativo</span>
+                            </label>
+
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                                <a class="btn btn--outline" href="{% url 'usuarios:departamentos:cultos_padrao_lista' %}">Cancelar</a>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="user-card">
+                    <div class="user-card__header">
+                        <h2 class="user-card__title">Como esse cadastro sera usado</h2>
+                    </div>
+                    <div class="user-card__body user-card__body--stack">
+                        <p class="user-note">
+                            O culto padrao serve como modelo para sugerir titulo e horario na nova escala.
+                        </p>
+                        <p class="user-note">
+                            Depois, na geracao do mes, o sistema cria automaticamente as escalas-base nas datas compativeis e evita duplicidade.
+                        </p>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

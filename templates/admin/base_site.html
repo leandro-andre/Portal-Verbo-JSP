@@ -1,0 +1,103 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ title }} | Portal Verbo JSP{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}" style="display: flex; align-items: center; gap: 10px;">
+        <span
+            style="background: #C8A96B; color: #0F172A; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 14px;">PV</span>
+        Portal Verbo JSP
+    </a>
+</h1>
+{% endblock %}
+
+{% block extrastyle %}
+<style>
+    /* CSS Customizado para o Admin - Cores Institucionais */
+    :root {
+        --primary: #0F172A;
+        /* Azul Escuro */
+        --secondary: #1E293B;
+        /* Azul Secundário */
+        --accent: #C8A96B;
+        /* Dourado */
+        --accent-hover: #b89a5c;
+        --header-color: #0c1222;
+        --link-fg: var(--primary);
+        --link-hover-color: var(--accent);
+        --button-bg: var(--accent);
+        --button-hover-bg: var(--accent-hover);
+    }
+
+    #header {
+        background: var(--header-color);
+        color: #fff;
+    }
+
+    div.breadcrumbs {
+        background: var(--secondary);
+        color: #C8A96B;
+    }
+
+    div.breadcrumbs a {
+        color: #fff;
+    }
+
+    .module h2,
+    .module caption,
+    .inline-group h2 {
+        background: var(--primary);
+    }
+
+    .button,
+    input[type=submit],
+    input[type=button],
+    .submit-row input,
+    a.button {
+        background: var(--button-bg);
+        color: var(--primary);
+        border: none;
+        font-weight: 600;
+    }
+
+    .button:hover,
+    input[type=submit]:hover,
+    input[type=button]:hover {
+        background: var(--button-hover-bg);
+        color: var(--primary);
+    }
+
+    a:link,
+    a:visited {
+        color: var(--link-fg);
+    }
+
+    a:hover {
+        color: var(--link-hover-color);
+    }
+
+    /* Ajustes específicos do campo de Login (Centralização) */
+    .login #header {
+        justify-content: center;
+        background: var(--primary);
+    }
+
+    .login #site-name {
+        text-align: center;
+    }
+
+    .login .submit-row input {
+        width: 100%;
+        background: var(--accent);
+        color: var(--primary);
+    }
+</style>
+{% endblock %}
+
+{% block nav-global %}
+<!-- Pode incluir links globais do painel, como voltar ao site -->
+<a href="/" target="_blank"
+    style="margin-left: 10px; color: #fff; background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">VER
+    SITE AO VIVO &rarr;</a>
+{% endblock %}

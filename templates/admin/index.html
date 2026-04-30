@@ -1,0 +1,556 @@
+{% extends "admin/base_site.html" %}
+{% load core_admin_tags %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    #content-main {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.dashboard #content {
+        background: #f1f5f9;
+    }
+
+    .dashboard-shell {
+        display: grid;
+        gap: 28px;
+        padding: 12px 0 24px;
+    }
+
+    .dashboard-hero {
+        display: grid;
+        gap: 16px;
+        padding: 28px;
+        border-radius: 20px;
+        background:
+            radial-gradient(circle at top left, rgba(200, 169, 107, 0.22), transparent 32%),
+            linear-gradient(135deg, #0f172a, #1e293b 70%);
+        color: #fff;
+        box-shadow: 0 18px 38px rgba(15, 23, 42, 0.18);
+    }
+
+    .dashboard-hero__eyebrow {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .dashboard-hero__title {
+        margin: 0;
+        font-size: 2rem;
+        line-height: 1.1;
+    }
+
+    .dashboard-hero__text {
+        margin: 0;
+        max-width: 64ch;
+        color: rgba(255, 255, 255, 0.78);
+    }
+
+    .dashboard-section {
+        display: grid;
+        gap: 16px;
+    }
+
+    .dashboard-section__title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 1.2rem;
+        font-weight: 700;
+    }
+
+    .dashboard-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+    }
+
+    .dashboard-card {
+        display: grid;
+        gap: 14px;
+        padding: 22px;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 18px;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .dashboard-card__top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .dashboard-card__icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(200, 169, 107, 0.18);
+        color: #0f172a;
+        font-size: 0.9rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .dashboard-card__title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .dashboard-card__text {
+        margin: 0;
+        color: #64748b;
+        line-height: 1.6;
+    }
+
+    .dashboard-card__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: auto;
+    }
+
+    .dashboard-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        background: #f1f5f9;
+        color: #0f172a;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .dashboard-btn:hover {
+        background: #e2e8f0;
+    }
+
+    .dashboard-btn--primary {
+        background: #0f172a;
+        color: #fff;
+    }
+
+    .dashboard-btn--primary:hover {
+        background: #1e293b;
+    }
+
+    .dashboard-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 18px;
+    }
+
+    .dashboard-stat {
+        padding: 22px;
+        border-radius: 18px;
+        background: #fff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .dashboard-stat__value {
+        display: block;
+        margin-bottom: 6px;
+        color: #0f172a;
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .dashboard-stat__label {
+        color: #64748b;
+        font-size: 0.86rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .dashboard-panels {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 18px;
+    }
+
+    .dashboard-panel {
+        overflow: hidden;
+        border-radius: 18px;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .dashboard-panel__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .dashboard-panel__title {
+        margin: 0;
+        color: #0f172a;
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .dashboard-panel__link {
+        color: #0f172a;
+        font-size: 0.88rem;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .dashboard-panel__body {
+        display: grid;
+    }
+
+    .dashboard-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .dashboard-list__item {
+        display: grid;
+        gap: 4px;
+        padding: 16px 22px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .dashboard-list__item:last-child {
+        border-bottom: 0;
+    }
+
+    .dashboard-list__title {
+        color: #0f172a;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .dashboard-list__meta {
+        color: #64748b;
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
+
+    .dashboard-empty {
+        padding: 22px;
+        color: #64748b;
+    }
+
+    .dashboard-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    .dashboard-badge--neutral {
+        background: #e2e8f0;
+        color: #334155;
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-hero,
+        .dashboard-card,
+        .dashboard-stat,
+        .dashboard-panel__header,
+        .dashboard-list__item {
+            padding-left: 18px;
+            padding-right: 18px;
+        }
+
+        .dashboard-panel__header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+{% get_dashboard_stats as stats %}
+<div class="dashboard-shell">
+    <section class="dashboard-hero">
+        <div class="dashboard-hero__eyebrow">Painel Editorial</div>
+        <h1 class="dashboard-hero__title">Gerencie o portal em um so lugar</h1>
+        <p class="dashboard-hero__text">
+            Use este painel para atualizar o site, publicar noticias, organizar eventos
+            acompanhar as mensagens enviadas pelo formulario de contato e operar os modulos
+            internos de departamentos e escalas.
+        </p>
+    </section>
+
+    <section class="dashboard-section">
+        <h2 class="dashboard-section__title">Acesso Rapido</h2>
+        <div class="dashboard-actions">
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">SC</span>
+                    <h3 class="dashboard-card__title">Site e Integracoes</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Ajuste contatos, redes sociais, YouTube e mapa do Google diretamente no CMS.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:core_siteconfig_changelist' %}">Editar Site</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">SB</span>
+                    <h3 class="dashboard-card__title">Pagina Sobre</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Atualize historia, missao, horarios e lideranca sem precisar tocar no codigo.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:core_sobrepage_changelist' %}">Abrir Pagina</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">EV</span>
+                    <h3 class="dashboard-card__title">Agenda</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Cadastre cultos e programacoes e escolha quais eventos entram em destaque na home.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:eventos_evento_changelist' %}">Ver Lista</a>
+                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:eventos_evento_add' %}">Novo Evento</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">NT</span>
+                    <h3 class="dashboard-card__title">Noticias</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Publique conteudo editorial e acompanhe rapidamente o que ja esta ou nao no ar.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:noticias_noticia_changelist' %}">Ver Lista</a>
+                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:noticias_noticia_add' %}">Nova Noticia</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">DP</span>
+                    <h3 class="dashboard-card__title">Departamentos</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Cadastre ministerios, equipes e os vinculos dos membros com papeis especificos.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:departamentos_departamento_changelist' %}">Ver Lista</a>
+                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:departamentos_departamento_add' %}">Novo Departamento</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">ES</span>
+                    <h3 class="dashboard-card__title">Escalas</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Monte escalas por departamento e acompanhe quem ja foi confirmado para cada funcao.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:escalas_escala_changelist' %}">Ver Escalas</a>
+                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:escalas_escala_add' %}">Nova Escala</a>
+                </div>
+            </article>
+
+            <article class="dashboard-card">
+                <div class="dashboard-card__top">
+                    <span class="dashboard-card__icon">CT</span>
+                    <h3 class="dashboard-card__title">Mensagens de Contato</h3>
+                </div>
+                <p class="dashboard-card__text">
+                    Veja rapidamente novas mensagens e marque o que ja foi respondido.
+                </p>
+                <div class="dashboard-card__actions">
+                    <a class="dashboard-btn" href="{% url 'admin:core_contatomensagem_changelist' %}">Abrir Caixa</a>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <h2 class="dashboard-section__title">Resumo do Sistema</h2>
+        <div class="dashboard-stats">
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.total_eventos }}</span>
+                <span class="dashboard-stat__label">Eventos Totais</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.eventos_publicados }}</span>
+                <span class="dashboard-stat__label">Eventos Publicados</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.total_noticias }}</span>
+                <span class="dashboard-stat__label">Noticias Criadas</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.noticias_publicadas }}</span>
+                <span class="dashboard-stat__label">Noticias Publicadas</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.total_departamentos }}</span>
+                <span class="dashboard-stat__label">Departamentos</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.membros_em_departamentos }}</span>
+                <span class="dashboard-stat__label">Vinculos Ativos</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.escalas_ativas }}</span>
+                <span class="dashboard-stat__label">Escalas Ativas</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.total_mensagens }}</span>
+                <span class="dashboard-stat__label">Mensagens Recebidas</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.mensagens_pendentes }}</span>
+                <span class="dashboard-stat__label">Pendentes de Resposta</span>
+            </article>
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <h2 class="dashboard-section__title">Acompanhe Agora</h2>
+        <div class="dashboard-panels">
+            <section class="dashboard-panel">
+                <header class="dashboard-panel__header">
+                    <h3 class="dashboard-panel__title">Proximos Eventos</h3>
+                    <a class="dashboard-panel__link" href="{% url 'admin:eventos_evento_changelist' %}">Ver todos</a>
+                </header>
+                <div class="dashboard-panel__body">
+                    {% if stats.proximos_eventos %}
+                        <ul class="dashboard-list">
+                            {% for ev in stats.proximos_eventos %}
+                                <li class="dashboard-list__item">
+                                    <a class="dashboard-list__title" href="{% url 'admin:eventos_evento_change' ev.id %}">{{ ev.titulo }}</a>
+                                    <div class="dashboard-list__meta">
+                                        {{ ev.data|date:"d/m/Y" }} as {{ ev.horario|time:"H:i" }}
+                                        {% if ev.local %} | {{ ev.local }}{% endif %}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="dashboard-empty">Nenhum evento programado.</div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <header class="dashboard-panel__header">
+                    <h3 class="dashboard-panel__title">Publicacoes Recentes</h3>
+                    <a class="dashboard-panel__link" href="{% url 'admin:noticias_noticia_changelist' %}">Ver todas</a>
+                </header>
+                <div class="dashboard-panel__body">
+                    {% if stats.ultimas_noticias %}
+                        <ul class="dashboard-list">
+                            {% for noticia in stats.ultimas_noticias %}
+                                <li class="dashboard-list__item">
+                                    <a class="dashboard-list__title" href="{% url 'admin:noticias_noticia_change' noticia.id %}">{{ noticia.titulo }}</a>
+                                    <div class="dashboard-list__meta">
+                                        {{ noticia.data_publicacao|date:"d/m/Y" }}
+                                        {% if not noticia.publicado %}
+                                            <span class="dashboard-badge dashboard-badge--neutral">Rascunho</span>
+                                        {% endif %}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="dashboard-empty">Nenhuma noticia cadastrada ainda.</div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <header class="dashboard-panel__header">
+                    <h3 class="dashboard-panel__title">Proximas Escalas</h3>
+                    <a class="dashboard-panel__link" href="{% url 'admin:escalas_escala_changelist' %}">Ver todas</a>
+                </header>
+                <div class="dashboard-panel__body">
+                    {% if stats.proximas_escalas %}
+                        <ul class="dashboard-list">
+                            {% for escala in stats.proximas_escalas %}
+                                <li class="dashboard-list__item">
+                                    <a class="dashboard-list__title" href="{% url 'admin:escalas_escala_change' escala.id %}">{{ escala.titulo }}</a>
+                                    <div class="dashboard-list__meta">
+                                        {{ escala.departamento.nome }} | {{ escala.data|date:"d/m/Y" }} as {{ escala.horario|time:"H:i" }}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="dashboard-empty">Nenhuma escala ativa programada.</div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <header class="dashboard-panel__header">
+                    <h3 class="dashboard-panel__title">Mensagens Recentes</h3>
+                    <a class="dashboard-panel__link" href="{% url 'admin:core_contatomensagem_changelist' %}">Abrir caixa</a>
+                </header>
+                <div class="dashboard-panel__body">
+                    {% if stats.ultimas_mensagens %}
+                        <ul class="dashboard-list">
+                            {% for mensagem in stats.ultimas_mensagens %}
+                                <li class="dashboard-list__item">
+                                    <a class="dashboard-list__title" href="{% url 'admin:core_contatomensagem_change' mensagem.id %}">
+                                        {{ mensagem.nome }}
+                                    </a>
+                                    <div class="dashboard-list__meta">
+                                        {{ mensagem.email }} | {{ mensagem.criado_em|date:"d/m/Y H:i" }}
+                                        {% if not mensagem.respondida %}
+                                            <span class="dashboard-badge">Pendente</span>
+                                        {% endif %}
+                                    </div>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="dashboard-empty">Nenhuma mensagem recebida ate agora.</div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </section>
+</div>
+{% endblock %}

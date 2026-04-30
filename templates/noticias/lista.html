@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Noticias - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+  <div class="news">
+    {% include "components/hero.html" with titulo="Noticias" descricao="Acompanhe novidades, mensagens, devocionais e tudo o que acontece em nossa igreja." imagem_fundo=site.hero_noticias %}
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">Ultimas publicacoes</h2>
+            <p class="section__subtitle">Conteudos para informar e edificar.</p>
+          </div>
+          <a class="link-pill" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+        </div>
+
+        {% if noticias %}
+          <div class="grid grid--blog">
+            {% for noticia in noticias %}
+              <article class="post-card">
+                {% if noticia.imagem %}
+                  <div class="post-card__img" style="background: url('{{ noticia.imagem.url }}') center/cover no-repeat;"></div>
+                {% else %}
+                  <div class="post-card__img" aria-hidden="true"></div>
+                {% endif %}
+                <div class="post-card__body">
+                  <div class="post-card__meta">{{ noticia.data_publicacao|date:"d/m/Y" }}</div>
+                  <h2 class="post-card__title">{{ noticia.titulo }}</h2>
+                  <p class="post-card__excerpt">{{ noticia.resumo|default:noticia.conteudo|striptags|truncatewords:20 }}</p>
+                  <a class="btn btn--sm btn--outline" href="{% url 'noticias:detalhe' noticia.slug %}">Ler mais</a>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="module-empty">
+            <h2 class="module-empty__title">Nenhuma noticia publicada</h2>
+            <p class="module-empty__text">Assim que novos conteudos forem publicados, eles aparecerao aqui.</p>
+            <div class="module-empty__actions">
+              <a class="btn btn--primary" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+{% endblock %}

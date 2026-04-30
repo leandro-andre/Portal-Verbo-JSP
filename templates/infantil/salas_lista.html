@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Departamento Infantil - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Departamento Infantil</p>
+                    <h1 class="user-hero__title">Salas infantis</h1>
+                    <p class="user-hero__text">
+                        Consulte rapidamente as salas, a equipe, as criancas e o material de aula de cada faixa etaria.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_review_registrations %}
+                        <a class="btn btn--soft" href="{% url 'usuarios:infantil:cadastros_lista' %}">Cadastros pendentes</a>
+                    {% endif %}
+                    {% if can_create_salas %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:infantil:sala_nova' %}">Nova sala</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar por nome</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: 8 a 10 anos">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="ativas" {% if status_filter == "ativas" %}selected{% endif %}>Ativas</option>
+                            <option value="inativas" {% if status_filter == "inativas" %}selected{% endif %}>Inativas</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de salas</h2>
+                </div>
+                {% if salas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Sala</th>
+                                    <th>Faixa etaria</th>
+                                    <th>Status</th>
+                                    <th>Equipe</th>
+                                    <th>Criancas</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sala in salas %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ sala.nome }}</strong>
+                                            {% if sala.descricao %}
+                                                <div class="module-table__meta">{{ sala.descricao|truncatechars:90 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ sala.faixa_etaria_label }}</td>
+                                        <td>
+                                            <span class="module-badge {% if sala.ativa %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if sala.ativa %}Ativa{% else %}Inativa{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>{{ sala.total_equipe_ativa_count }}</td>
+                                        <td>{{ sala.total_criancas_ativas_count }}</td>
+                                        <td class="module-table__actions">
+                                            {% if sala.pk in salas_editaveis_ids %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:sala_editar' sala.pk %}">Editar</a>
+                                            {% endif %}
+                                            {% if sala.pk in salas_equipe_visivel_ids %}
+                                                <a class="btn btn--outline btn--sm" href="{% url 'usuarios:infantil:sala_equipe' sala.pk %}">Equipe</a>
+                                            {% endif %}
+                                            {% if sala.pk in salas_chamadas_ids %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:infantil:sala_chamadas' sala.pk %}">Chamar Responsavel</a>
+                                            {% endif %}
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:infantil:sala_criancas' sala.pk %}">Criancas</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:infantil:sala_aulas' sala.pk %}">Aulas</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma sala encontrada</h3>
+                        <p class="module-empty__text">
+                            Ajuste os filtros ou cadastre a primeira sala do Departamento Infantil.
+                        </p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

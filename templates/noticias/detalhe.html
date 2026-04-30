@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}{{ noticia.titulo }} - Notícias{% endblock %}
+
+{% block content %}
+  <div class="news-detail">
+    <section class="article-hero">
+      <div class="article-hero__bg" aria-hidden="true"></div>
+      <div class="container article-hero__inner">
+        <div class="article-hero__meta">{{ noticia.data_publicacao|date:"d/m/Y" }}</div>
+        <h1 class="article-hero__title">{{ noticia.titulo }}</h1>
+      </div>
+    </section>
+
+    <section class="section section--light">
+      <div class="container">
+        <div class="article">
+          {% if noticia.imagem %}
+            <div class="article__cover" style="background: url('{{ noticia.imagem.url }}') center/cover no-repeat;"></div>
+          {% else %}
+            <div class="article__cover" aria-hidden="true"></div>
+          {% endif %}
+          <div class="article__content content content--narrow prose">
+            {{ noticia.conteudo|safe|linebreaks }}
+          </div>
+
+          <div class="article__actions">
+            <a class="btn btn--soft" href="{% url 'noticias:lista' %}">Voltar para notícias</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {% if outras_noticias %}
+      <section class="section">
+        <div class="container">
+          <div class="section__head">
+            <div>
+              <h2 class="section__title">Outras notícias</h2>
+              <p class="section__subtitle">Veja também outras publicações recentes.</p>
+            </div>
+            <a class="link-pill" href="{% url 'noticias:lista' %}">Ver todas</a>
+          </div>
+
+          <div class="grid grid--blog">
+            {% for n in outras_noticias %}
+              <article class="news-card">
+                {% if n.imagem %}
+                  <div class="news-card__img" style="background: url('{{ n.imagem.url }}') center/cover no-repeat;"></div>
+                {% else %}
+                  <div class="news-card__img" aria-hidden="true"></div>
+                {% endif %}
+                <div class="news-card__body">
+                  <div class="news-card__meta">{{ n.data_publicacao|date:"d/m/Y" }}</div>
+                  <h3 class="news-card__title">{{ n.titulo }}</h3>
+                  <p class="news-card__excerpt">
+                    {{ n.resumo|default:n.conteudo|striptags|truncatewords:18 }}
+                  </p>
+                  <a class="btn btn--sm btn--outline" href="{% url 'noticias:detalhe' n.slug %}">Ler mais</a>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
+

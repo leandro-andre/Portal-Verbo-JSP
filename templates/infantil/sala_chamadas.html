@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Chamar Responsavel - {{ sala.nome }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Departamento Infantil</p>
+                    <h1 class="user-hero__title">Chamar Responsavel</h1>
+                    <p class="user-hero__text">
+                        Envie rapidamente o numero da ficha para a Midia projetar no culto. Esta tela mostra apenas a sala {{ sala.nome }}.
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:infantil:sala_lista' %}">Voltar para salas</a>
+                </div>
+            </section>
+
+            <section class="user-grid user-grid--stats">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ sala.nome }}</span>
+                    <span class="user-stat__label">Sala</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_pendentes }}</span>
+                    <span class="user-stat__label">Pendentes</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_exibidas }}</span>
+                    <span class="user-stat__label">Exibidas</span>
+                </article>
+            </section>
+
+            <section class="module-layout">
+                <article class="module-card" id="form-chamada">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Enviar para a Midia</h2>
+                    </div>
+                    <div class="module-card__body">
+                        <form method="post" class="user-form">
+                            {% csrf_token %}
+                            <div class="form-group">
+                                <label class="form-label">Sala</label>
+                                <input type="text" class="form-control" value="{{ sala.nome }}" disabled>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.numero_ficha.id_for_label }}">Numero da ficha</label>
+                                {{ form.numero_ficha }}
+                                {% for error in form.numero_ficha.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.observacao.id_for_label }}">Observacao opcional</label>
+                                {{ form.observacao }}
+                                {% for error in form.observacao.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            <div class="module-info">
+                                Apenas o numero da ficha sera exibido na tela da Midia. Nenhum dado sensivel da crianca aparece aqui.
+                            </div>
+                            <div class="user-form__actions">
+                                <button type="submit" class="btn btn--primary">Enviar para Midia</button>
+                            </div>
+                        </form>
+                    </div>
+                </article>
+
+                <article class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Chamadas ativas</h2>
+                    </div>
+                    <div class="module-card__body user-card__body--stack">
+                        {% if chamadas_ativas %}
+                            {% for chamada in chamadas_ativas %}
+                                <article class="call-item">
+                                    <div class="call-item__top">
+                                        <span class="module-badge module-badge--{{ chamada.status_badge_modifier }}">{{ chamada.get_status_display }}</span>
+                                        <span class="call-item__time">{{ chamada.solicitada_em|date:"d/m H:i" }}</span>
+                                    </div>
+                                    <div class="call-item__title">Ficha {{ chamada.numero_ficha }}</div>
+                                    {% if chamada.observacao %}
+                                        <p class="call-item__text">{{ chamada.observacao }}</p>
+                                    {% endif %}
+                                    {% if chamada.status == "pendente" %}
+                                        <div class="user-form__actions">
+                                            <form method="post" action="{% url 'usuarios:infantil:chamada_cancelar' sala.pk chamada.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja cancelar esta chamada?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--soft btn--sm">Cancelar</button>
+                                            </form>
+                                        </div>
+                                    {% elif chamada.status == "exibido" %}
+                                        <div class="user-form__actions">
+                                            <form method="post" action="{% url 'usuarios:infantil:chamada_resolver' sala.pk chamada.pk %}" class="module-inline-form" data-confirm="Confirmar que esta chamada foi resolvida?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--primary btn--sm">Resolvido</button>
+                                            </form>
+                                            <form method="post" action="{% url 'usuarios:infantil:chamada_reenviar' sala.pk chamada.pk %}" class="module-inline-form" data-confirm="Deseja reenviar esta chamada para a Midia?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--outline btn--sm">Exibir novamente</button>
+                                            </form>
+                                        </div>
+                                    {% endif %}
+                                </article>
+                            {% endfor %}
+                        {% else %}
+                            <div class="module-empty">
+                                <h3 class="module-empty__title">Nenhuma chamada ativa</h3>
+                                <p class="module-empty__text">
+                                    Assim que voce enviar uma ficha, ela aparecera aqui e tambem no painel da Midia.
+                                </p>
+                                <div class="module-empty__actions">
+                                    <a class="btn btn--primary btn--sm" href="#form-chamada">Enviar nova ficha</a>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Historico recente</h2>
+                </div>
+                <div class="module-card__body">
+                    {% if historico_chamadas %}
+                        <div class="module-table-wrap">
+                            <table class="module-table">
+                                <thead>
+                                    <tr>
+                                        <th>Ficha</th>
+                                        <th>Status</th>
+                                        <th>Datas</th>
+                                        <th>Observacao</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for chamada in historico_chamadas %}
+                                        <tr>
+                                            <td><strong>{{ chamada.numero_ficha }}</strong></td>
+                                            <td>
+                                                <span class="module-badge module-badge--{{ chamada.status_badge_modifier }}">{{ chamada.get_status_display }}</span>
+                                            </td>
+                                            <td>
+                                                <div class="module-table__meta">Criada: {{ chamada.criado_em|date:"d/m/Y H:i" }}</div>
+                                                {% if chamada.exibido_em %}<div class="module-table__meta">Exibida: {{ chamada.exibido_em|date:"d/m/Y H:i" }}</div>{% endif %}
+                                                {% if chamada.reenviado_em %}<div class="module-table__meta">Reenviada: {{ chamada.reenviado_em|date:"d/m/Y H:i" }}</div>{% endif %}
+                                                {% if chamada.resolvido_em %}<div class="module-table__meta">Resolvida: {{ chamada.resolvido_em|date:"d/m/Y H:i" }}</div>{% endif %}
+                                                {% if chamada.cancelado_em %}<div class="module-table__meta">Cancelada: {{ chamada.cancelado_em|date:"d/m/Y H:i" }}</div>{% endif %}
+                                            </td>
+                                            <td>{{ chamada.observacao|default:"-" }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Sem historico por enquanto</h3>
+                            <p class="module-empty__text">
+                                As chamadas resolvidas e canceladas da sala aparecerao aqui.
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

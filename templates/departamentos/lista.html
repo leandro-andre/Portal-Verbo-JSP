@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Departamentos - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Gestao interna</p>
+                    <h1 class="user-hero__title">Departamentos</h1>
+                    <p class="user-hero__text">
+                        Organize ministerios, acompanhe liderancas e mantenha a base pronta para o modulo de escalas.
+                    </p>
+                </div>
+                {% if can_create_departamentos %}
+                    <div class="user-hero__actions">
+                        <a class="btn btn--primary" href="{% url 'usuarios:departamentos:novo' %}">Novo departamento</a>
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div class="module-search">
+                        <label class="form-label" for="id_q">Buscar por nome</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: Louvor, Infantil, Midia">
+                    </div>
+                    <div class="module-filter">
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="ativos" {% if status_filter == "ativos" %}selected{% endif %}>Ativos</option>
+                            <option value="inativos" {% if status_filter == "inativos" %}selected{% endif %}>Inativos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a href="{% url 'usuarios:departamentos:lista' %}" class="btn btn--outline">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-summary">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_departamentos }}</span>
+                    <span class="user-stat__label">Departamentos listados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">
+                        {% if status_filter == "inativos" %}Inativos{% elif status_filter == "ativos" %}Ativos{% else %}Todos{% endif %}
+                    </span>
+                    <span class="user-stat__label">Filtro atual</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de departamentos</h2>
+                </div>
+                {% if departamentos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Departamento</th>
+                                    <th>Status</th>
+                                    <th>Membros</th>
+                                    <th>Lider principal</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for departamento in departamentos %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ departamento.nome }}</strong>
+                                            {% if departamento.descricao %}
+                                                <div class="module-table__meta">{{ departamento.descricao|truncatechars:90 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if departamento.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if departamento.ativo %}Ativo{% else %}Inativo{% endif %}
+                                            </span>
+                                        </td>
+                                        <td>{{ departamento.total_membros_ativos_count }}</td>
+                                        <td>{{ departamento.lider_principal|default:"Nao definido" }}</td>
+                                        <td class="module-table__actions">
+                                            {% if departamento.pk in departamentos_gerenciaveis_ids %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:editar' departamento.pk %}">Editar</a>
+                                                <a class="btn btn--outline btn--sm" href="{% url 'usuarios:departamentos:membros' departamento.pk %}">Gerenciar membros</a>
+                                            {% else %}
+                                                <span class="module-table__meta">Somente leitura</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum departamento encontrado</h3>
+                        <p class="module-empty__text">
+                            Ajuste os filtros ou crie o primeiro departamento para iniciar a gestao interna.
+                        </p>
+                        {% if can_create_departamentos %}
+                            <a class="btn btn--primary" href="{% url 'usuarios:departamentos:novo' %}">Criar departamento</a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
