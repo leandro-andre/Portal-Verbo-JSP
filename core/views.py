@@ -12,8 +12,8 @@ def home(request):
     hoje = timezone.localdate()
     destaques = (
         Evento.objects
-        .filter(publicado=True, destaque_home=True, data__gte=hoje)
-        .order_by("data", "horario")[:6]
+        .filter(publicado=True, destaque_home=True, data_inicio__gte=hoje)
+        .order_by("data_inicio", "horario")[:6]
     )
     ultimas_noticias = (
         Noticia.objects

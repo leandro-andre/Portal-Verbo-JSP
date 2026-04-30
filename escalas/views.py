@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -449,12 +450,22 @@ class EscalaItensView(EscalaQuerysetMixin, DetailView):
         form = EscalaItemForm(request.POST, instance=item, escala=self.object)
 
         if form.is_valid():
-            salvar_item_escala(form)
-            if item:
-                messages.success(request, "Item da escala atualizado com sucesso.")
+            try:
+                salvar_item_escala(form)
+            except ValidationError as exc:
+                if hasattr(exc, "message_dict"):
+                    for field, errors in exc.message_dict.items():
+                        for error in errors:
+                            form.add_error(field, error)
+                else:
+                    for error in getattr(exc, "messages", []) or [str(exc)]:
+                        form.add_error(None, error)
             else:
-                messages.success(request, "Membro adicionado a escala com sucesso.")
-            return HttpResponseRedirect(self.get_success_url())
+                if item:
+                    messages.success(request, "Item da escala atualizado com sucesso.")
+                else:
+                    messages.success(request, "Membro adicionado a escala com sucesso.")
+                return HttpResponseRedirect(self.get_success_url())
 
         return self.render_to_response(self.get_context_data(form=form, object=self.object))
 

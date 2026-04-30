@@ -26,7 +26,7 @@ def get_dashboard_stats():
     membros_em_departamentos = DepartamentoMembro.objects.filter(ativo=True).count()
     escalas_ativas = Escala.objects.filter(ativa=True).count()
 
-    proximos_eventos = Evento.objects.filter(data__gte=hoje).order_by("data", "horario")[:5]
+    proximos_eventos = Evento.objects.filter(data_inicio__gte=hoje).order_by("data_inicio", "horario")[:5]
     proximas_escalas = Escala.objects.filter(ativa=True, data__gte=hoje).select_related("departamento").order_by("data", "horario")[:5]
     ultimas_noticias = Noticia.objects.order_by("-data_publicacao", "-criado_em")[:5]
     ultimas_mensagens = ContatoMensagem.objects.order_by("-criado_em")[:5]

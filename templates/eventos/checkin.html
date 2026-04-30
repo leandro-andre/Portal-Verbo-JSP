@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Check-in - {{ evento.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Check-in</h1>
+                    <p class="user-hero__text">{{ evento.titulo }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_detalhe' evento.pk %}">Voltar</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:eventos:inscricoes' evento.pk %}">Inscricoes</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar inscrito</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, telefone ou e-mail" autofocus>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Buscar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:eventos:checkin' evento.pk %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Resultado</h2>
+                </div>
+                {% if inscricoes %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Participante</th>
+                                    <th>Contato</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inscricao in inscricoes %}
+                                    <tr>
+                                        <td><strong>{{ inscricao.nome }}</strong></td>
+                                        <td>
+                                            {{ inscricao.email }}
+                                            <div class="module-table__meta">{{ inscricao.telefone|default:"Telefone nao informado" }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if inscricao.status == 'presente' %}module-badge--success{% elif inscricao.status == 'cancelado' %}module-badge--muted{% else %}module-badge--info{% endif %}">
+                                                {{ inscricao.get_status_display }}
+                                            </span>
+                                            {% if inscricao.presente_em %}
+                                                <div class="module-table__meta">{{ inscricao.presente_em|date:"d/m/Y H:i" }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="module-table__actions">
+                                            {% if inscricao.status == 'inscrito' %}
+                                                <form method="post" action="{% url 'usuarios:eventos:marcar_presenca' evento.pk inscricao.pk %}" class="module-inline-form">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn--primary btn--sm">Marcar presenca</button>
+                                                </form>
+                                            {% elif inscricao.status == 'presente' %}
+                                                <span class="module-badge module-badge--success">Check-in feito</span>
+                                            {% else %}
+                                                <span class="module-badge module-badge--muted">Indisponivel</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum inscrito encontrado</h3>
+                        <p class="module-empty__text">Busque por nome, telefone ou e-mail para localizar o participante.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

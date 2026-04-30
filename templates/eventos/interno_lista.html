@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Gestao de eventos - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Gestao de eventos</h1>
+                    <p class="user-hero__text">Eventos especiais com inscricoes e check-in, separados de cultos fixos e escalas.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'usuarios:eventos:novo' %}">Novo evento</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ eventos_total }}</span>
+                    <span class="user-stat__label">Eventos cadastrados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ eventos_publicados }}</span>
+                    <span class="user-stat__label">Publicados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ eventos|length }}</span>
+                    <span class="user-stat__label">Resultado atual</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar por titulo</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Ex.: Conferencia, retiro, treinamento">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="publicados" {% if status_filter == "publicados" %}selected{% endif %}>Publicados</option>
+                            <option value="rascunhos" {% if status_filter == "rascunhos" %}selected{% endif %}>Rascunhos</option>
+                            <option value="inscricoes_abertas" {% if status_filter == "inscricoes_abertas" %}selected{% endif %}>Inscricoes abertas</option>
+                            <option value="inscricoes_fechadas" {% if status_filter == "inscricoes_fechadas" %}selected{% endif %}>Inscricoes fechadas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_categoria">Categoria</label>
+                        <select id="id_categoria" name="categoria" class="form-control">
+                            <option value="">Todas</option>
+                            {% for value,label in categorias %}
+                                <option value="{{ value }}" {% if categoria_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_data_inicio">De</label>
+                        <input id="id_data_inicio" type="date" name="data_inicio" value="{{ data_inicio_filter }}" class="form-control">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_data_fim">Ate</label>
+                        <input id="id_data_fim" type="date" name="data_fim" value="{{ data_fim_filter }}" class="form-control">
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de eventos</h2>
+                </div>
+                {% if eventos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Titulo</th>
+                                    <th>Data</th>
+                                    <th>Categoria</th>
+                                    <th>Inscricoes</th>
+                                    <th>Publicacao</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for evento in eventos %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ evento.titulo }}</strong>
+                                            <div class="module-table__meta">{{ evento.local|default:"Local nao informado" }}</div>
+                                        </td>
+                                        <td>{{ evento.data_inicio|date:"d/m/Y" }} as {{ evento.horario|time:"H:i" }}</td>
+                                        <td>{{ evento.get_tipo_display|default:"-" }}</td>
+                                        <td>
+                                            {{ evento.inscritos_count }} inscrito(s)
+                                            <div class="module-table__meta">{{ evento.presentes_count }} presente(s)</div>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if evento.publicado %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if evento.publicado %}Publicado{% else %}Rascunho{% endif %}
+                                            </span>
+                                            <span class="module-badge {% if evento.inscricoes_abertas %}module-badge--info{% else %}module-badge--muted{% endif %}">
+                                                {% if evento.inscricoes_abertas %}Inscricoes abertas{% else %}Fechadas{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:eventos:interno_detalhe' evento.pk %}">Gerir</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:eventos:editar' evento.pk %}">Editar</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum evento encontrado</h3>
+                        <p class="module-empty__text">Crie o primeiro evento especial para liberar inscricoes e check-in.</p>
+                        <div class="module-empty__actions">
+                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:eventos:novo' %}">Novo evento</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

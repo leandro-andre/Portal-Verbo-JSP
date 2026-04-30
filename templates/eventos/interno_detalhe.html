@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ evento.titulo }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">{{ evento.titulo }}</h1>
+                    <p class="user-hero__text">{{ evento.data_inicio|date:"d/m/Y" }} as {{ evento.horario|time:"H:i" }}{% if evento.local %} | {{ evento.local }}{% endif %}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_lista' %}">Voltar</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:eventos:editar' evento.pk %}">Editar</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_inscritos }}</span>
+                    <span class="user-stat__label">Inscritos</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_presentes }}</span>
+                    <span class="user-stat__label">Presentes</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if vagas_disponiveis == None %}Livre{% else %}{{ vagas_disponiveis }}{% endif %}</span>
+                    <span class="user-stat__label">Vagas disponiveis</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Dados principais</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="user-field">
+                        <span class="user-field__label">Categoria</span>
+                        <span class="user-field__value">{{ evento.get_tipo_display|default:"Nao informada" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Periodo</span>
+                        <span class="user-field__value">{{ evento.data_inicio|date:"d/m/Y" }}{% if evento.data_fim %} a {{ evento.data_fim|date:"d/m/Y" }}{% endif %}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Publicacao</span>
+                        <span class="user-field__value">{% if evento.publicado %}Publicado{% else %}Rascunho{% endif %} | {% if evento.inscricoes_abertas %}Inscricoes abertas{% else %}Inscricoes fechadas{% endif %}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Capacidade</span>
+                        <span class="user-field__value">{{ evento.capacidade_maxima|default:"Sem limite definido" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Descricao</span>
+                        <span class="user-field__value">{{ evento.descricao|default:"Sem descricao." }}</span>
+                    </div>
+                    <div class="user-form__actions">
+                        <a class="btn btn--soft" href="{% url 'usuarios:eventos:inscricoes' evento.pk %}">Ver inscricoes</a>
+                        <a class="btn btn--primary" href="{% url 'usuarios:eventos:checkin' evento.pk %}">Check-in</a>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

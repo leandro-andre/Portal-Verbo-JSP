@@ -213,7 +213,7 @@ class SecretariaEventoListView(SecretariaRequiredMixin, ListView):
         query = (self.request.GET.get("q") or "").strip()
         status = (self.request.GET.get("status") or "").strip()
 
-        queryset = Evento.objects.all().order_by("-data", "-horario", "-id")
+        queryset = Evento.objects.all().order_by("-data_inicio", "-horario", "-id")
         if query:
             queryset = queryset.filter(titulo__icontains=query)
         if status == "publicados":

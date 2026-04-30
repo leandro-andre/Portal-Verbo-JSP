@@ -102,7 +102,7 @@
                             <div class="alert-chip-stack">
                                 {% for participacao in indisponiveis %}
                                     <span class="alert-chip alert-chip--warning">
-                                        {{ participacao.membro }} - {{ participacao.get_papel_display }}
+                                        {{ participacao.membro.get_full_name|default:participacao.membro.username }} - {{ participacao.get_papel_display }}
                                     </span>
                                 {% endfor %}
                             </div>

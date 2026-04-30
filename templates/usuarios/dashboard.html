@@ -150,7 +150,7 @@
                                 {% for evento in proximos_eventos %}
                                     <li>
                                         <strong>{{ evento.titulo }}</strong><br>
-                                        <span>{{ evento.data|date:"d/m/Y" }} as {{ evento.horario|time:"H:i" }}</span>
+                                        <span>{{ evento.data_inicio|date:"d/m/Y" }} as {{ evento.horario|time:"H:i" }}</span>
                                     </li>
                                 {% endfor %}
                             </ul>

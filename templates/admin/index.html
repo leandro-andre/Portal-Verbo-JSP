@@ -462,7 +462,7 @@
                                 <li class="dashboard-list__item">
                                     <a class="dashboard-list__title" href="{% url 'admin:eventos_evento_change' ev.id %}">{{ ev.titulo }}</a>
                                     <div class="dashboard-list__meta">
-                                        {{ ev.data|date:"d/m/Y" }} as {{ ev.horario|time:"H:i" }}
+                                        {{ ev.data_inicio|date:"d/m/Y" }} as {{ ev.horario|time:"H:i" }}
                                         {% if ev.local %} | {{ ev.local }}{% endif %}
                                     </div>
                                 </li>

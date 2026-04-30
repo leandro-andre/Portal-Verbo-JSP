@@ -82,7 +82,7 @@
                                                 <div class="module-table__meta">{{ evento.descricao|truncatechars:90 }}</div>
                                             {% endif %}
                                         </td>
-                                        <td>{{ evento.data|date:"d/m/Y" }}</td>
+                                        <td>{{ evento.data_inicio|date:"d/m/Y" }}</td>
                                         <td>{{ evento.horario|time:"H:i" }}</td>
                                         <td>{{ evento.get_tipo_display|default:"-" }}</td>
                                         <td>

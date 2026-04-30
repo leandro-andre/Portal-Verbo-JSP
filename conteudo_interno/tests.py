@@ -87,12 +87,12 @@ class ConteudoInternoViewsTests(TestCase):
         )
         self.sobre = SobrePage.load()
         self.evento = Evento.objects.create(
-            titulo="Culto especial",
+            titulo="Conferencia especial",
             descricao="Descricao inicial",
-            data="2026-05-10",
+            data_inicio="2026-05-10",
             horario="19:00",
             local="Templo",
-            tipo=Evento.TipoEvento.CULTO,
+            tipo=Evento.TipoEvento.CONFERENCIA,
             publicado=True,
             destaque_home=False,
         )
@@ -189,11 +189,14 @@ class ConteudoInternoViewsTests(TestCase):
             {
                 "titulo": "Novo evento interno",
                 "descricao": "Descricao do evento",
-                "data": "2026-05-17",
+                "data_inicio": "2026-05-17",
+                "data_fim": "",
                 "horario": "20:00",
                 "local": "Auditorio",
-                "tipo": Evento.TipoEvento.EVENTO,
+                "tipo": Evento.TipoEvento.ESPECIAL,
+                "capacidade_maxima": "",
                 "publicado": "",
+                "inscricoes_abertas": "on",
                 "destaque_home": "on",
             },
             follow=True,

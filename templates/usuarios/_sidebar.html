@@ -30,6 +30,9 @@
                     <a class="user-nav__link {% if active_section == 'minhas_criancas' %}is-active{% endif %}" href="{% url 'usuarios:infantil:minhas_criancas' %}">
                         Minhas criancas
                     </a>
+                    <a class="user-nav__link {% if active_section == 'minhas_inscricoes' %}is-active{% endif %}" href="{% url 'usuarios:eventos:minhas_inscricoes' %}">
+                        Minhas inscricoes
+                    </a>
                 {% endif %}
             </div>
         </div>
@@ -50,7 +53,7 @@
             </div>
         </div>
 
-        {% if can_view_departamentos or can_view_infantil or can_view_secretaria or can_view_midia %}
+        {% if can_view_departamentos or can_view_infantil or can_view_secretaria or can_view_midia or can_manage_eventos %}
             <div class="user-nav__group">
                 <p class="user-nav__heading">Departamentos</p>
                 <div class="user-nav__items">
@@ -67,6 +70,11 @@
                     {% if can_view_secretaria %}
                         <a class="user-nav__link {% if active_section == 'secretaria' %}is-active{% endif %}" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">
                             Secretaria
+                        </a>
+                    {% endif %}
+                    {% if can_manage_eventos %}
+                        <a class="user-nav__link {% if active_section == 'eventos' %}is-active{% endif %}" href="{% url 'usuarios:eventos:interno_lista' %}">
+                            Eventos
                         </a>
                     {% endif %}
                     {% if can_view_midia %}

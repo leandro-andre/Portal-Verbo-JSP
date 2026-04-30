@@ -22,7 +22,7 @@
           {% for evento in destaques %}
             <article class="service-card">
               <div class="service-card__top">
-                <div class="service-card__day">{{ evento.data|date:"l" }}</div>
+                <div class="service-card__day">{{ evento.data_inicio|date:"l" }}</div>
                 {% if evento.tipo %}<span class="badge">{{ evento.get_tipo_display }}</span>{% endif %}
               </div>
               <div class="service-card__time">{{ evento.horario|time:"H:i" }}</div>

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Inscricoes - {{ evento.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Inscricoes</h1>
+                    <p class="user-hero__text">{{ evento.titulo }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_detalhe' evento.pk %}">Voltar</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:eventos:checkin' evento.pk %}">Check-in</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, telefone ou e-mail">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value,label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Buscar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:eventos:inscricoes' evento.pk %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Participantes</h2>
+                </div>
+                {% if inscricoes %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Contato</th>
+                                    <th>Usuario</th>
+                                    <th>Status</th>
+                                    <th>Check-in</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inscricao in inscricoes %}
+                                    <tr>
+                                        <td><strong>{{ inscricao.nome }}</strong></td>
+                                        <td>
+                                            {{ inscricao.email }}
+                                            <div class="module-table__meta">{{ inscricao.telefone|default:"Telefone nao informado" }}</div>
+                                        </td>
+                                        <td>{{ inscricao.usuario|default:"Sem vinculo" }}</td>
+                                        <td>{{ inscricao.get_status_display }}</td>
+                                        <td>{{ inscricao.presente_em|date:"d/m/Y H:i"|default:"-" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma inscricao encontrada</h3>
+                        <p class="module-empty__text">Ajuste os filtros ou aguarde novas inscricoes.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

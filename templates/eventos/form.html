@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_lista' %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__body">
+                    <form method="post" enctype="multipart/form-data" class="user-form">
+                        {% csrf_token %}
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.titulo.id_for_label }}">Titulo</label>
+                            {{ form.titulo }}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.descricao.id_for_label }}">Descricao</label>
+                            {{ form.descricao }}
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.data_inicio.id_for_label }}">Data inicio</label>
+                                {{ form.data_inicio }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.data_fim.id_for_label }}">Data fim</label>
+                                {{ form.data_fim }}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.horario.id_for_label }}">Horario</label>
+                                {{ form.horario }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.local.id_for_label }}">Local</label>
+                                {{ form.local }}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.tipo.id_for_label }}">Categoria</label>
+                                {{ form.tipo }}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.capacidade_maxima.id_for_label }}">Capacidade maxima</label>
+                                {{ form.capacidade_maxima }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.imagem.id_for_label }}">Imagem/banner</label>
+                            {{ form.imagem }}
+                        </div>
+
+                        <div class="user-form__grid">
+                            <label class="module-checkbox-row" for="{{ form.publicado.id_for_label }}">
+                                {{ form.publicado }}
+                                <span>Publicado</span>
+                            </label>
+                            <label class="module-checkbox-row" for="{{ form.inscricoes_abertas.id_for_label }}">
+                                {{ form.inscricoes_abertas }}
+                                <span>Inscricoes abertas</span>
+                            </label>
+                            <label class="module-checkbox-row" for="{{ form.destaque_home.id_for_label }}">
+                                {{ form.destaque_home }}
+                                <span>Destacar na home</span>
+                            </label>
+                        </div>
+
+                        {% for field in form %}
+                            {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                        {% endfor %}
+                        {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                        <div class="user-form__actions">
+                            <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                            <a class="btn btn--outline" href="{% url 'usuarios:eventos:interno_lista' %}">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

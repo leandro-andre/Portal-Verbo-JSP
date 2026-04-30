@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Minhas inscricoes - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Minhas inscricoes</h1>
+                    <p class="user-hero__text">Acompanhe os eventos em que voce se inscreveu.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Inscricoes</h2>
+                </div>
+                {% if inscricoes %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Evento</th>
+                                    <th>Data</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inscricao in inscricoes %}
+                                    <tr id="inscricao-{{ inscricao.pk }}">
+                                        <td>
+                                            <strong>{{ inscricao.evento.titulo }}</strong>
+                                            <div class="module-table__meta">{{ inscricao.evento.local|default:"Local nao informado" }}</div>
+                                        </td>
+                                        <td>{{ inscricao.evento.data_inicio|date:"d/m/Y" }} as {{ inscricao.evento.horario|time:"H:i" }}</td>
+                                        <td>{{ inscricao.get_status_display }}</td>
+                                        <td class="module-table__actions">
+                                            {% if inscricao.status == 'inscrito' %}
+                                                <form method="post" action="{% url 'usuarios:eventos:cancelar_inscricao' inscricao.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja cancelar esta inscricao?">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn--outline btn--sm">Cancelar</button>
+                                                </form>
+                                            {% else %}
+                                                <span class="module-badge module-badge--muted">Sem acao</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma inscricao</h3>
+                        <p class="module-empty__text">Quando voce se inscrever em um evento publicado, ele aparecera aqui.</p>
+                        <div class="module-empty__actions">
+                            <a class="btn btn--primary btn--sm" href="{% url 'eventos:agenda' %}">Ver agenda</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

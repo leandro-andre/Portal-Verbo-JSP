@@ -26,11 +26,23 @@ def gerar_escalas_do_mes(*, departamento, ano, mes, cultos_padroes):
 
 
 def criar_escala(form):
-    return form.save()
+    escala = form.save(commit=False)
+    if getattr(escala, "culto_padrao_id", None):
+        if not (escala.titulo or "").strip():
+            escala.titulo = escala.culto_padrao.nome
+        escala.horario = escala.culto_padrao.horario
+    escala.save()
+    return escala
 
 
 def atualizar_escala(form):
-    return form.save()
+    escala = form.save(commit=False)
+    if getattr(escala, "culto_padrao_id", None):
+        if not (escala.titulo or "").strip():
+            escala.titulo = escala.culto_padrao.nome
+        escala.horario = escala.culto_padrao.horario
+    escala.save()
+    return escala
 
 
 def get_itens_da_escala(escala):

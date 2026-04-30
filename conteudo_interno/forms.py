@@ -133,17 +133,21 @@ class EventoInternoForm(_BaseStyledGovernedForm):
         fields = [
             "titulo",
             "descricao",
-            "data",
+            "data_inicio",
+            "data_fim",
             "horario",
             "local",
             "tipo",
             "imagem",
+            "capacidade_maxima",
             "publicado",
+            "inscricoes_abertas",
             "destaque_home",
         ]
         widgets = {
             "descricao": forms.Textarea(attrs={"rows": 5}),
-            "data": forms.DateInput(attrs={"type": "date"}),
+            "data_inicio": forms.DateInput(attrs={"type": "date"}),
+            "data_fim": forms.DateInput(attrs={"type": "date"}),
             "horario": forms.TimeInput(attrs={"type": "time"}),
         }
 
