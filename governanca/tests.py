@@ -93,10 +93,10 @@ class GovernancaPermissionsTests(TestCase):
         self.evento = Evento.objects.create(
             titulo="Culto de Domingo",
             descricao="Descricao inicial",
-            data="2026-05-10",
+            data_inicio="2026-05-10",
             horario="19:00",
             local="Templo sede",
-            tipo=Evento.TipoEvento.CULTO,
+            tipo=Evento.TipoEvento.ESPECIAL,
             publicado=True,
             destaque_home=False,
         )
@@ -212,10 +212,10 @@ class GovernancaAdminTests(GovernancaPermissionsTests):
             {
                 "titulo": "Culto de Domingo Atualizado",
                 "descricao": "Descricao revisada",
-                "data": "2026-05-10",
+                "data_inicio": "2026-05-10",
                 "horario": "19:00",
                 "local": "Templo sede",
-                "tipo": Evento.TipoEvento.CULTO,
+                "tipo": Evento.TipoEvento.ESPECIAL,
                 "destaque_home": "on",
                 "_save": "Salvar",
             },
