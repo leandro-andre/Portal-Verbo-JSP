@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Galeria - {{ ministro.nome_exibicao }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Galeria de fotos</p>
+                    <h1 class="user-hero__title">{{ ministro.nome_exibicao }}</h1>
+                    <p class="user-hero__text">Adicione imagens, edite legendas e marque a foto de destaque.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:detalhe' ministro.pk %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Adicionar foto</h2></div>
+                <form method="post" enctype="multipart/form-data" class="module-form">
+                    {% csrf_token %}
+                    <div class="form-grid">
+                        {% for field in form %}
+                            <div class="form-field">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="module-form__actions">
+                        <button type="submit" class="btn btn--primary">Adicionar foto</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Fotos cadastradas</h2></div>
+                {% if fotos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Foto</th>
+                                    <th>Legenda</th>
+                                    <th>Destaque</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for foto in fotos %}
+                                    <tr>
+                                        <td><img src="{{ foto.imagem.url }}" alt="{{ foto.legenda|default:ministro.nome_exibicao }}" class="media-preview__image"></td>
+                                        <td>{{ foto.legenda|default:"-" }}</td>
+                                        <td>{% if foto.destaque %}Sim{% else %}Nao{% endif %}</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:ministros:foto_editar' foto.pk %}">Editar</a>
+                                            {% if not foto.destaque %}
+                                                <form method="post" action="{% url 'usuarios:ministros:foto_destaque' foto.pk %}" class="module-inline-form">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn--outline btn--sm">Destacar</button>
+                                                </form>
+                                            {% endif %}
+                                            <form method="post" action="{% url 'usuarios:ministros:foto_excluir' foto.pk %}" class="module-inline-form" data-confirm="Excluir esta foto?">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn--outline btn--sm">Excluir</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma foto cadastrada</h3>
+                        <p class="module-empty__text">Adicione imagens para formar a galeria deste ministro.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

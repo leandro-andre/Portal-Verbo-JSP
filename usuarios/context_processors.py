@@ -9,6 +9,7 @@ from governanca.permissions import (
     usuario_pode_acessar_painel_secretaria,
 )
 from infantil.permissions import usuario_pode_visualizar_infantil
+from ministros.permissions import usuario_pode_gerenciar_ministros
 
 
 def internal_permissions(request):
@@ -21,6 +22,7 @@ def internal_permissions(request):
             "can_view_secretaria": False,
             "can_view_midia": False,
             "can_manage_eventos": False,
+            "can_manage_ministros": False,
         }
 
     departamentos_do_usuario = get_departamentos_do_usuario(request.user)
@@ -35,4 +37,5 @@ def internal_permissions(request):
         "can_view_secretaria": usuario_pode_acessar_painel_secretaria(request.user),
         "can_view_midia": usuario_pode_acessar_painel_midia(request.user),
         "can_manage_eventos": usuario_pode_gerenciar_eventos(request.user),
+        "can_manage_ministros": usuario_pode_gerenciar_ministros(request.user),
     }

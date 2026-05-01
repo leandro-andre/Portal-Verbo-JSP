@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Formulario indisponivel - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <div class="module-empty">
+            <h1 class="module-empty__title">Formulario indisponivel</h1>
+            <p class="module-empty__text">O link informado nao esta disponivel para preenchimento.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

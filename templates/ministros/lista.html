@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Ministros - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Ministerio</p>
+                    <h1 class="user-hero__title">Ministros</h1>
+                    <p class="user-hero__text">Organize ministros da casa e visitantes, dados de cuidado, galeria e informacoes financeiras protegidas.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--soft" href="{% url 'usuarios:ministros:galeria_lista' %}">Galeria geral</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:ministros:novo' %}">Novo ministro</a>
+                </div>
+            </section>
+
+            <section class="user-stats">
+                <div class="user-stat">
+                    <span class="user-stat__value">{{ total_ministros }}</span>
+                    <span class="user-stat__label">Cadastrados</span>
+                </div>
+                <div class="user-stat">
+                    <span class="user-stat__value">{{ pendentes_count }}</span>
+                    <span class="user-stat__label">Pendentes</span>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, igreja ou cidade">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_tipo">Tipo</label>
+                        <select id="id_tipo" name="tipo" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in tipo_choices %}
+                                <option value="{{ value }}" {% if tipo_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_ativo">Ativo</label>
+                        <select id="id_ativo" name="ativo" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="ativos" {% if ativo_filter == "ativos" %}selected{% endif %}>Ativos</option>
+                            <option value="inativos" {% if ativo_filter == "inativos" %}selected{% endif %}>Inativos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:ministros:lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de ministros</h2>
+                </div>
+                {% if ministros %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Ministro</th>
+                                    <th>Tipo</th>
+                                    <th>Cidade/Estado</th>
+                                    <th>Igreja origem</th>
+                                    <th>Status</th>
+                                    <th>Ativo</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ministro in ministros %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ ministro.nome_exibicao }}</strong>
+                                            <div class="module-table__meta">{{ ministro.nome_completo }}</div>
+                                        </td>
+                                        <td>{{ ministro.get_tipo_display }}</td>
+                                        <td>{{ ministro.cidade_estado|default:"-" }}</td>
+                                        <td>{{ ministro.igreja_origem|default:"-" }}</td>
+                                        <td><span class="module-badge module-badge--info">{{ ministro.get_status_display }}</span></td>
+                                        <td>
+                                            <span class="module-badge {% if ministro.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if ministro.ativo %}Ativo{% else %}Inativo{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:ministros:detalhe' ministro.pk %}">Detalhes</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:ministros:editar' ministro.pk %}">Editar</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:ministros:galeria' ministro.pk %}">Galeria</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum ministro encontrado</h3>
+                        <p class="module-empty__text">Ajuste os filtros ou cadastre o primeiro ministro.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

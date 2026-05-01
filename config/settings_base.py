@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "infantil",
     "eventos",
     "noticias",
+    "ministros",
 ]
 
 MIDDLEWARE = [

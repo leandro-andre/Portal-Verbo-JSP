@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Galeria de ministros - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Ministros</p>
+                    <h1 class="user-hero__title">Galeria geral</h1>
+                    <p class="user-hero__text">Liste fotos de todos os ministros e filtre pelo nome do ministro.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:lista' %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Filtrar por ministro</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome do ministro">
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Filtrar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:ministros:galeria_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Adicionar foto</h2></div>
+                <form method="post" enctype="multipart/form-data" class="module-form">
+                    {% csrf_token %}
+                    <div class="form-grid">
+                        {% for field in form %}
+                            <div class="form-field">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="module-form__actions">
+                        <button type="submit" class="btn btn--primary">Adicionar foto</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Fotos</h2></div>
+                {% if fotos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Foto</th>
+                                    <th>Ministro</th>
+                                    <th>Legenda</th>
+                                    <th>Destaque</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for foto in fotos %}
+                                    <tr>
+                                        <td><img src="{{ foto.imagem.url }}" alt="{{ foto.legenda|default:foto.ministro.nome_exibicao }}" class="media-preview__image"></td>
+                                        <td>{{ foto.ministro.nome_exibicao }}</td>
+                                        <td>{{ foto.legenda|default:"-" }}</td>
+                                        <td>{% if foto.destaque %}Sim{% else %}Nao{% endif %}</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:ministros:foto_editar' foto.pk %}">Editar</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:ministros:galeria' foto.ministro.pk %}">Ver ministro</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma foto encontrada</h3>
+                        <p class="module-empty__text">Adicione fotos ou ajuste o filtro de ministro.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

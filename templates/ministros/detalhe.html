@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ministro.nome_exibicao }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">{{ ministro.get_tipo_display }}</p>
+                    <h1 class="user-hero__title">{{ ministro.nome_exibicao }}</h1>
+                    <p class="user-hero__text">{{ ministro.igreja_origem|default:"Origem nao informada" }}{% if ministro.cidade_estado %} - {{ ministro.cidade_estado }}{% endif %}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--soft" href="{% url 'usuarios:ministros:editar' ministro.pk %}">Editar</a>
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:galeria' ministro.pk %}">Galeria</a>
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:lista' %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Dados principais</h2></div>
+                <div class="user-profile-grid">
+                    <div>
+                        {% if ministro.foto_principal %}
+                            <img src="{{ ministro.foto_principal.url }}" alt="Foto de {{ ministro.nome_exibicao }}" class="media-preview__image">
+                        {% elif ministro.foto_destaque %}
+                            <img src="{{ ministro.foto_destaque.imagem.url }}" alt="Foto de {{ ministro.nome_exibicao }}" class="media-preview__image">
+                        {% endif %}
+                    </div>
+                    <div class="user-fields">
+                        <div class="user-field"><span class="user-field__label">Nome completo</span><span class="user-field__value">{{ ministro.nome_completo }}</span></div>
+                        <div class="user-field"><span class="user-field__label">Telefone</span><span class="user-field__value">{{ ministro.telefone_whatsapp|default:"-" }}</span></div>
+                        <div class="user-field"><span class="user-field__label">E-mail</span><span class="user-field__value">{{ ministro.email|default:"-" }}</span></div>
+                        <div class="user-field"><span class="user-field__label">Status</span><span class="user-field__value">{{ ministro.get_status_display }}</span></div>
+                        <div class="user-field"><span class="user-field__label">Ativo</span><span class="user-field__value">{% if ministro.ativo %}Sim{% else %}Nao{% endif %}</span></div>
+                    </div>
+                </div>
+                {% if ministro.biografia %}
+                    <div class="user-field"><span class="user-field__label">Biografia</span><span class="user-field__value">{{ ministro.biografia|linebreaksbr }}</span></div>
+                {% endif %}
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Dados financeiros</h2></div>
+                <div class="user-fields">
+                    <div class="user-field"><span class="user-field__label">Tipo de chave PIX</span><span class="user-field__value">{{ ministro.get_tipo_chave_pix_display|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Chave PIX</span><span class="user-field__value">{{ ministro.chave_pix|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Favorecido</span><span class="user-field__value">{{ ministro.favorecido_nome|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">CPF/CNPJ</span><span class="user-field__value">{{ ministro.favorecido_documento|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Banco</span><span class="user-field__value">{{ ministro.banco|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Observacoes financeiras</span><span class="user-field__value">{{ ministro.observacoes_financeiras|linebreaksbr|default:"-" }}</span></div>
+                    {% if ministro.qr_code_pix %}
+                        <div class="user-field"><span class="user-field__label">QR Code PIX</span><img src="{{ ministro.qr_code_pix.url }}" alt="QR Code PIX" class="media-preview__image"></div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Cuidados</h2></div>
+                <div class="user-fields">
+                    <div class="user-field"><span class="user-field__label">Restricao alimentar</span><span class="user-field__value">{{ ministro.restricao_alimentar|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Alergias</span><span class="user-field__value">{{ ministro.alergias|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Alimentacao</span><span class="user-field__value">{{ ministro.preferencia_alimentacao|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Hospedagem</span><span class="user-field__value">{{ ministro.observacoes_hospedagem|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Transporte</span><span class="user-field__value">{{ ministro.observacoes_transporte|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Necessidades especiais</span><span class="user-field__value">{{ ministro.necessidades_especiais|linebreaksbr|default:"-" }}</span></div>
+                    <div class="user-field"><span class="user-field__label">Observacoes internas</span><span class="user-field__value">{{ ministro.observacoes_internas|linebreaksbr|default:"-" }}</span></div>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Formulario externo</h2>
+                </div>
+                <p class="module-empty__text">{{ formulario_url }}</p>
+                <form method="post" action="{% url 'usuarios:ministros:regenerar_token' ministro.pk %}" class="module-inline-form" data-confirm="Gerar um novo link invalida o link anterior. Continuar?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--soft">Regenerar link</button>
+                </form>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

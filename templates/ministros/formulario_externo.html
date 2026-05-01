@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Formulario do ministro - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container">
+        <section class="user-hero user-hero--compact">
+            <div>
+                <p class="user-hero__eyebrow">Cadastro de ministro visitante</p>
+                <h1 class="user-hero__title">Atualize suas informacoes</h1>
+                <p class="user-hero__text">Preencha os dados abaixo para que nossa equipe organize sua visita com cuidado.</p>
+            </div>
+        </section>
+
+        <form method="post" enctype="multipart/form-data" class="module-form">
+            {% csrf_token %}
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Dados principais</h2></div>
+                <div class="form-grid">
+                    {% for field in form %}
+                        {% if field.name in "nome_completo nome_ministerial telefone_whatsapp email igreja_origem cidade estado pais foto_principal" %}
+                            <div class="form-field">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="{{ form.biografia.id_for_label }}">{{ form.biografia.label }}</label>
+                    {{ form.biografia }}
+                    {% for error in form.biografia.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">PIX</h2></div>
+                <div class="form-grid">
+                    {% for field in form %}
+                        {% if field.name in "tipo_chave_pix chave_pix qr_code_pix favorecido_nome favorecido_documento banco" %}
+                            <div class="form-field">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header"><h2 class="module-card__title">Cuidados importantes</h2></div>
+                <div class="form-grid">
+                    {% for field in form %}
+                        {% if field.name in "restricao_alimentar alergias preferencia_alimentacao observacoes_hospedagem observacoes_transporte necessidades_especiais" %}
+                            <div class="form-field">
+                                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <div class="module-form__actions">
+                <button type="submit" class="btn btn--primary">Enviar informacoes</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Ministros</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:lista' %}">Voltar</a>
+                </div>
+            </section>
+
+            <form method="post" enctype="multipart/form-data" class="module-form">
+                {% csrf_token %}
+                <section class="module-card">
+                    <div class="module-card__header"><h2 class="module-card__title">Dados principais</h2></div>
+                    <div class="form-grid">
+                        {% for field in form %}
+                            {% if field.name in "nome_completo nome_ministerial tipo status telefone_whatsapp email igreja_origem cidade estado pais foto_principal ativo" %}
+                                <div class="form-field">
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="{{ form.biografia.id_for_label }}">{{ form.biografia.label }}</label>
+                        {{ form.biografia }}
+                        {% for error in form.biografia.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                    </div>
+                </section>
+
+                <section class="module-card">
+                    <div class="module-card__header"><h2 class="module-card__title">Dados financeiros</h2></div>
+                    <div class="form-grid">
+                        {% for field in form %}
+                            {% if field.name in "tipo_chave_pix chave_pix qr_code_pix favorecido_nome favorecido_documento banco" %}
+                                <div class="form-field">
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="{{ form.observacoes_financeiras.id_for_label }}">{{ form.observacoes_financeiras.label }}</label>
+                        {{ form.observacoes_financeiras }}
+                        {% for error in form.observacoes_financeiras.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                    </div>
+                </section>
+
+                <section class="module-card">
+                    <div class="module-card__header"><h2 class="module-card__title">Cuidados e observacoes</h2></div>
+                    <div class="form-grid">
+                        {% for field in form %}
+                            {% if field.name in "restricao_alimentar alergias preferencia_alimentacao observacoes_hospedagem observacoes_transporte necessidades_especiais observacoes_internas" %}
+                                <div class="form-field">
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% for error in field.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </section>
+
+                <div class="module-form__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:ministros:lista' %}">Cancelar</a>
+                    <button type="submit" class="btn btn--primary">{{ submit_label }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

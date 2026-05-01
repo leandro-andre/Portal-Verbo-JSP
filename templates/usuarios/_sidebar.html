@@ -53,7 +53,7 @@
             </div>
         </div>
 
-        {% if can_view_departamentos or can_view_infantil or can_view_secretaria or can_view_midia or can_manage_eventos %}
+        {% if can_view_departamentos or can_view_infantil or can_view_secretaria or can_view_midia or can_manage_eventos or can_manage_ministros %}
             <div class="user-nav__group">
                 <p class="user-nav__heading">Departamentos</p>
                 <div class="user-nav__items">
@@ -75,6 +75,11 @@
                     {% if can_manage_eventos %}
                         <a class="user-nav__link {% if active_section == 'eventos' %}is-active{% endif %}" href="{% url 'usuarios:eventos:interno_lista' %}">
                             Eventos
+                        </a>
+                    {% endif %}
+                    {% if can_manage_ministros %}
+                        <a class="user-nav__link {% if active_section == 'ministros' %}is-active{% endif %}" href="{% url 'usuarios:ministros:lista' %}">
+                            Ministros
                         </a>
                     {% endif %}
                     {% if can_view_midia %}
