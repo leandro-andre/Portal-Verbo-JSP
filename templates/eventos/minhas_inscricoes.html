@@ -45,11 +45,13 @@
                                         <td>{{ inscricao.get_status_display }}</td>
                                         <td class="module-table__actions">
                                             {% if inscricao.status == 'inscrito' %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:eventos:minha_inscricao' inscricao.pk %}">QR Code</a>
                                                 <form method="post" action="{% url 'usuarios:eventos:cancelar_inscricao' inscricao.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja cancelar esta inscricao?">
                                                     {% csrf_token %}
                                                     <button type="submit" class="btn btn--outline btn--sm">Cancelar</button>
                                                 </form>
                                             {% else %}
+                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:eventos:minha_inscricao' inscricao.pk %}">Ver</a>
                                                 <span class="module-badge module-badge--muted">Sem acao</span>
                                             {% endif %}
                                         </td>

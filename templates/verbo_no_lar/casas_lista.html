@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Verbo no Lar - Casas{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">Casas</h1>
+                    <p class="user-hero__text">Gestao de casas, participantes, escalas, materiais e relatorios.</p>
+                </div>
+                <div class="user-hero__actions">
+                    {% if can_create %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:verbo_no_lar:casa_nova' %}">Nova casa</a>
+                    {% endif %}
+                    <a class="btn btn--soft" href="{% url 'usuarios:verbo_no_lar:materiais' %}">Materiais</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome da casa ou bairro">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_ativo">Status</label>
+                        <select id="id_ativo" name="ativo" class="form-control">
+                            <option value="">Todos</option>
+                            <option value="ativos" {% if ativo_filter == "ativos" %}selected{% endif %}>Ativos</option>
+                            <option value="inativos" {% if ativo_filter == "inativos" %}selected{% endif %}>Inativos</option>
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Buscar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:casa_lista' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de casas</h2>
+                </div>
+                {% if casas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Casa</th>
+                                    <th>Responsavel</th>
+                                    <th>Bairro</th>
+                                    <th>Dia/Horario</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for casa in casas %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ casa.nome }}</strong>
+                                            <div class="module-table__meta">{{ casa.endereco|default:"Endereco nao informado" }}</div>
+                                        </td>
+                                        <td>{{ casa.casal_responsavel.get_full_name|default:casa.casal_responsavel.username }}</td>
+                                        <td>{{ casa.bairro|default:"-" }}</td>
+                                        <td>{{ casa.dia_horario_padrao }}</td>
+                                        <td>
+                                            <span class="module-badge {% if casa.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if casa.ativo %}Ativa{% else %}Inativa{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:verbo_no_lar:casa_detalhe' casa.pk %}">Ver</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:verbo_no_lar:participantes' casa.pk %}">Participantes</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:verbo_no_lar:escalas' casa.pk %}">Escala</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:verbo_no_lar:relatorios' casa.pk %}">Relatorios</a>
+                                            {% if casa.link_google_maps %}
+                                                <a class="btn btn--primary btn--sm" href="{{ casa.link_google_maps }}" target="_blank" rel="noopener">Como chegar</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma casa encontrada</h3>
+                        <p class="module-empty__text">Ajuste os filtros ou cadastre uma nova casa.</p>
+                        {% if can_create %}
+                            <div class="module-empty__actions">
+                                <a class="btn btn--primary btn--sm" href="{% url 'usuarios:verbo_no_lar:casa_nova' %}">Nova casa</a>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

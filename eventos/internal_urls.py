@@ -12,6 +12,8 @@ urlpatterns = [
     path("gestao/<int:pk>/editar/", views.EventoUpdateView.as_view(), name="editar"),
     path("gestao/<int:pk>/inscricoes/", views.EventoInscricaoListView.as_view(), name="inscricoes"),
     path("gestao/<int:pk>/check-in/", views.EventoCheckinView.as_view(), name="checkin"),
+    path("gestao/<int:pk>/leitor-qr/", views.EventoLeitorQRCodeView.as_view(), name="leitor_qr"),
+    path("gestao/<int:pk>/api/check-in/", views.EventoCheckinApiView.as_view(), name="checkin_api"),
     path(
         "gestao/<int:pk>/check-in/<int:inscricao_pk>/",
         views.EventoMarcarPresencaView.as_view(),
@@ -20,6 +22,8 @@ urlpatterns = [
     # Jornada do usuário (logado)
     path("<int:pk>/inscricao/", views.EventoInscricaoCreateView.as_view(), name="inscrever"),
     path("minhas-inscricoes/", views.MinhasInscricoesView.as_view(), name="minhas_inscricoes"),
+    path("minhas-inscricoes/<int:pk>/", views.MinhaInscricaoDetailView.as_view(), name="minha_inscricao"),
+    path("minhas-inscricoes/<int:pk>/qrcode.png", views.InscricaoQRCodeView.as_view(), name="inscricao_qrcode"),
     path(
         "minhas-inscricoes/<int:pk>/cancelar/",
         views.CancelarMinhaInscricaoView.as_view(),

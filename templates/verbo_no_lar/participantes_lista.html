@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Participantes - {{ casa.nome }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">Participantes</h1>
+                    <p class="user-hero__text">{{ casa.nome }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:casa_detalhe' casa.pk %}">Voltar</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:verbo_no_lar:participante_novo' casa.pk %}">Adicionar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome do membro ou visitante">
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Buscar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:participantes' casa.pk %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista</h2>
+                </div>
+                {% if participantes %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Tipo</th>
+                                    <th>Telefone</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in participantes %}
+                                    <tr>
+                                        <td><strong>{{ p.nome_exibicao }}</strong></td>
+                                        <td>{{ p.get_tipo_display }}</td>
+                                        <td>{{ p.telefone|default:"-" }}</td>
+                                        <td>
+                                            <span class="module-badge {% if p.ativo %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {% if p.ativo %}Ativo{% else %}Inativo{% endif %}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:verbo_no_lar:participante_editar' p.pk %}">Editar</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum participante</h3>
+                        <p class="module-empty__text">Cadastre membros e visitantes para esta casa.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

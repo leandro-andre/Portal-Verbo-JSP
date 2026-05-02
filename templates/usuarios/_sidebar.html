@@ -77,6 +77,11 @@
                             Eventos
                         </a>
                     {% endif %}
+                    {% if can_manage_verbo_no_lar %}
+                        <a class="user-nav__link {% if active_section == 'verbo_no_lar' %}is-active{% endif %}" href="{% url 'usuarios:verbo_no_lar:casa_lista' %}">
+                            Verbo no Lar
+                        </a>
+                    {% endif %}
                     {% if can_manage_ministros %}
                         <a class="user-nav__link {% if active_section == 'ministros' %}is-active{% endif %}" href="{% url 'usuarios:ministros:lista' %}">
                             Ministros

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Relatorio - {{ casa.nome }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">Relatorio do encontro</h1>
+                    <p class="user-hero__text">{{ casa.nome }} | {{ relatorio.data|date:"d/m/Y" }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:relatorios' casa.pk %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Resumo</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="user-field">
+                        <span class="user-field__label">Ministro</span>
+                        <span class="user-field__value">{{ relatorio.ministro }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Tema</span>
+                        <span class="user-field__value">{{ relatorio.tema|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Presentes</span>
+                        <span class="user-field__value">{{ relatorio.quantidade_presentes }} ({{ relatorio.quantidade_visitantes }} visitantes)</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Criado por</span>
+                        <span class="user-field__value">{{ relatorio.criado_por.get_full_name|default:relatorio.criado_por.username }} em {{ relatorio.criado_em|date:"d/m/Y H:i" }}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Pedidos de oracao</h2>
+                </div>
+                <div class="module-card__body">
+                    {% if relatorio.pedidos_oracao %}
+                        <div style="white-space:pre-line;">{{ relatorio.pedidos_oracao }}</div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Nenhum pedido registrado</h3>
+                            <p class="module-empty__text">Se houver, inclua nos proximos relatorios.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Observacoes</h2>
+                </div>
+                <div class="module-card__body">
+                    {% if relatorio.observacoes %}
+                        <div style="white-space:pre-line;">{{ relatorio.observacoes }}</div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Sem observacoes</h3>
+                            <p class="module-empty__text">Use este campo para registrar fatos importantes do encontro.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

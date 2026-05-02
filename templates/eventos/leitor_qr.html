@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Leitor de QR Code - {{ evento.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Leitor de QR Code</h1>
+                    <p class="user-hero__text">{{ evento.titulo }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:checkin' evento.pk %}">Voltar</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:eventos:interno_detalhe' evento.pk %}">Evento</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Camera</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="module-empty__text">
+                        Dica: no celular, a camera costuma funcionar apenas em HTTPS (ou em <strong>localhost</strong>).
+                    </div>
+
+                    <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+                        <div style="min-width:280px;">
+                            <div id="qr-reader" style="width:320px;max-width:100%;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,.08);"></div>
+                            <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+                                <button id="btn-start" type="button" class="btn btn--primary">Iniciar camera</button>
+                                <button id="btn-stop" type="button" class="btn btn--outline" disabled>Parar</button>
+                            </div>
+                        </div>
+
+                        <div style="min-width:260px;flex:1;">
+                            <div class="user-field">
+                                <span class="user-field__label">Resultado</span>
+                                <span id="result-message" class="user-field__value">Aguardando leitura...</span>
+                            </div>
+
+                            <div id="result-details" class="module-empty__text" style="white-space:pre-line;"></div>
+
+                            <hr style="margin:16px 0;opacity:.2;">
+
+                            <h3 style="margin:0 0 8px 0;">Fallback manual</h3>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+                                <div style="flex:1;min-width:240px;">
+                                    <label class="form-label" for="manual-token">Token/UUID</label>
+                                    <input id="manual-token" class="form-control" placeholder="Cole o UUID ou a URL do QR Code">
+                                </div>
+                                <button id="btn-manual" type="button" class="btn btn--soft">Confirmar check-in</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="csrf-form" style="display:none;">{% csrf_token %}</form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+<script>
+(() => {
+  const eventoPk = "{{ evento.pk }}";
+  const apiUrl = "{% url 'usuarios:eventos:checkin_api' evento.pk %}";
+
+  const msgEl = document.getElementById("result-message");
+  const detailsEl = document.getElementById("result-details");
+  const btnStart = document.getElementById("btn-start");
+  const btnStop = document.getElementById("btn-stop");
+  const btnManual = document.getElementById("btn-manual");
+  const manualTokenEl = document.getElementById("manual-token");
+
+  function setResult(message, details = "", kind = "info") {
+    msgEl.textContent = message;
+    detailsEl.textContent = details || "";
+    msgEl.style.fontWeight = "600";
+    msgEl.style.color = (kind === "success") ? "#0f5132" : (kind === "error") ? "#842029" : "";
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(";").shift();
+    return "";
+  }
+
+  function extractUuidOrFail(text) {
+    const raw = (text || "").trim();
+    if (!raw) return "";
+    // Aceita UUID "puro"
+    const uuidMatch = raw.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return uuidMatch ? uuidMatch[0] : "";
+  }
+
+  let lastToken = "";
+  let scanner = null;
+
+  async function submitToken(token) {
+    if (!token) {
+      setResult("QR Code invalido.", "", "error");
+      return;
+    }
+    if (token === lastToken) return;
+    lastToken = token;
+
+    setResult("Validando...", "", "info");
+
+    const form = new FormData();
+    form.append("token", token);
+
+    try {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        body: form,
+      });
+      const payload = await res.json().catch(() => null);
+      if (!payload) {
+        setResult("Erro ao processar resposta do servidor.", "", "error");
+        return;
+      }
+      const details = payload.data
+        ? `Nome: ${payload.data.nome || "-"}\nE-mail: ${payload.data.email || "-"}\nTelefone: ${payload.data.telefone || "-"}`
+        : "";
+      if (payload.ok) {
+        setResult(payload.message || "OK", details, payload.code === "realizado" ? "success" : "info");
+      } else {
+        setResult(payload.message || "Erro", details, "error");
+      }
+    } catch (e) {
+      setResult("Falha de rede ao validar check-in.", String(e || ""), "error");
+    } finally {
+      setTimeout(() => { lastToken = ""; }, 1200);
+    }
+  }
+
+  async function startScanner() {
+    if (!window.Html5Qrcode) {
+      setResult("Biblioteca de camera nao carregou.", "", "error");
+      return;
+    }
+    if (!scanner) scanner = new Html5Qrcode("qr-reader");
+
+    try {
+      btnStart.disabled = true;
+      setResult("Abrindo camera...", "", "info");
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (decodedText) => {
+          const token = extractUuidOrFail(decodedText);
+          submitToken(token);
+        }
+      );
+      btnStop.disabled = false;
+      setResult("Aponte a camera para o QR Code.", "", "info");
+    } catch (e) {
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+      setResult("Nao foi possivel acessar a camera.", "Verifique permissao do navegador e se a pagina esta em HTTPS.", "error");
+    }
+  }
+
+  async function stopScanner() {
+    if (!scanner) return;
+    try {
+      await scanner.stop();
+      await scanner.clear();
+    } catch (e) {}
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    setResult("Camera parada.", "", "info");
+  }
+
+  btnStart.addEventListener("click", startScanner);
+  btnStop.addEventListener("click", stopScanner);
+  btnManual.addEventListener("click", () => {
+    const token = extractUuidOrFail(manualTokenEl.value);
+    submitToken(token);
+  });
+})();
+</script>
+{% endblock %}
+

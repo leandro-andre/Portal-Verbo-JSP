@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "eventos",
     "noticias",
     "ministros",
+    "verbo_no_lar",
 ]
 
 MIDDLEWARE = [

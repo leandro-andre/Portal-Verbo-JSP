@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Check-in{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Check-in por QR Code</h1>
+                    {% if inscricao %}
+                        <p class="user-hero__text">{{ inscricao.evento.titulo }}</p>
+                    {% else %}
+                        <p class="user-hero__text">Inscricao nao encontrada</p>
+                    {% endif %}
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:dashboard' %}">Voltar</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Confirmar presenca</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    {% if not inscricao %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Inscricao invalida</h3>
+                            <p class="module-empty__text">Verifique se o QR Code pertence a este sistema.</p>
+                        </div>
+                    {% else %}
+                        <div class="user-field">
+                            <span class="user-field__label">Participante</span>
+                            <span class="user-field__value">{{ inscricao.nome }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Contato</span>
+                            <span class="user-field__value">{{ inscricao.email }}{% if inscricao.telefone %} | {{ inscricao.telefone }}{% endif %}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Status</span>
+                            <span class="user-field__value">{{ inscricao.get_status_display }}</span>
+                        </div>
+
+                        {% if inscricao.status == 'presente' %}
+                            <div class="module-badge module-badge--success">Inscricao ja fez check-in</div>
+                        {% elif inscricao.status == 'cancelado' %}
+                            <div class="module-badge module-badge--muted">Inscricao cancelada</div>
+                        {% else %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn--primary">Confirmar presenca</button>
+                            </form>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Materiais - Verbo no Lar{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">Materiais de apoio</h1>
+                    <p class="user-hero__text">Materiais gerais e por casa.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:casa_lista' %}">Casas</a>
+                    {% if can_create %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:verbo_no_lar:material_novo' %}">Novo material</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Titulo, texto base ou conteudo">
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Buscar</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:materiais' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista</h2>
+                </div>
+                {% if materiais %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Titulo</th>
+                                    <th>Data</th>
+                                    <th>Casa</th>
+                                    <th>Anexo</th>
+                                    <th class="module-table__actions">Acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for m in materiais %}
+                                    <tr>
+                                        <td><strong>{{ m.titulo }}</strong><div class="module-table__meta">{{ m.texto_base|default:"" }}</div></td>
+                                        <td>{{ m.data|date:"d/m/Y"|default:"-" }}</td>
+                                        <td>{% if m.casa %}{{ m.casa.nome }}{% else %}<span class="module-badge module-badge--info">Geral</span>{% endif %}</td>
+                                        <td>{% if m.anexo %}<a href="{{ m.anexo.url }}" target="_blank" rel="noopener">Baixar</a>{% else %}-{% endif %}</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:verbo_no_lar:material_detalhe' m.pk %}">Ver</a>
+                                            {% if can_create %}
+                                                <a class="btn btn--outline btn--sm" href="{% url 'usuarios:verbo_no_lar:material_editar' m.pk %}">Editar</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum material</h3>
+                        <p class="module-empty__text">Cadastre materiais para apoiar os encontros.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

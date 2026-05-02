@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Escala - {{ casa.nome }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">Escala</h1>
+                    <p class="user-hero__text">{{ casa.nome }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:casa_detalhe' casa.pk %}">Voltar</a>
+                    <a class="btn btn--primary" href="{% url 'usuarios:verbo_no_lar:escala_nova' casa.pk %}">Nova escala</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Historico</h2>
+                </div>
+                {% if escalas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Ministro</th>
+                                    <th>Tema</th>
+                                    <th>Status</th>
+                                    <th class="module-table__actions">Acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in escalas %}
+                                    <tr>
+                                        <td>{{ e.data|date:"d/m/Y" }}{% if e.horario %} {{ e.horario|time:"H:i" }}{% endif %}</td>
+                                        <td><strong>{{ e.ministro }}</strong></td>
+                                        <td>{{ e.tema|default:"-" }}</td>
+                                        <td>
+                                            <span class="module-badge {% if e.status == 'confirmado' %}module-badge--success{% elif e.status == 'cancelado' %}module-badge--muted{% elif e.status == 'realizado' %}module-badge--info{% else %}module-badge--info{% endif %}">
+                                                {{ e.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:verbo_no_lar:escala_editar' e.pk %}">Editar</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma escala</h3>
+                        <p class="module-empty__text">Crie a primeira escala para organizar o ministro do encontro.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

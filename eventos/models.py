@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+import uuid
+from django.utils import timezone
 
 
 class Evento(models.Model):
@@ -114,6 +116,16 @@ class InscricaoEvento(models.Model):
         blank=True,
         help_text="Reservado para integracao futura. Nao usado agora.",
     )
+
+    codigo_checkin = models.UUIDField(
+        "Codigo de check-in",
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        db_index=True,
+    )
+    checkin_realizado = models.BooleanField("Check-in realizado", default=False)
+    checkin_em = models.DateTimeField("Check-in em", blank=True, null=True)
     presente_em = models.DateTimeField("Presente em", blank=True, null=True)
     checkin_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -144,3 +156,26 @@ class InscricaoEvento(models.Model):
 
     def __str__(self):
         return f"{self.nome} - {self.evento}"
+
+    def registrar_checkin(self, *, por_usuario, quando=None):
+        if self.status == InscricaoEvento.Status.PRESENTE or self.checkin_realizado:
+            return False
+        if self.status == InscricaoEvento.Status.CANCELADO:
+            raise ValidationError("Nao e possivel fazer check-in de uma inscricao cancelada.")
+        quando = quando or timezone.now()
+        self.status = InscricaoEvento.Status.PRESENTE
+        self.checkin_realizado = True
+        self.checkin_em = quando
+        self.presente_em = quando
+        self.checkin_por = por_usuario
+        self.save(
+            update_fields=[
+                "status",
+                "checkin_realizado",
+                "checkin_em",
+                "presente_em",
+                "checkin_por",
+                "atualizado_em",
+            ]
+        )
+        return True

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}{{ material.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">{{ material.titulo }}</h1>
+                    <p class="user-hero__text">
+                        {% if material.data %}{{ material.data|date:"d/m/Y" }}{% else %}Sem data{% endif %}
+                        {% if material.casa %} | {{ material.casa.nome }}{% else %} | Geral{% endif %}
+                    </p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:materiais' %}">Voltar</a>
+                    {% if material.anexo %}
+                        <a class="btn btn--primary" href="{{ material.anexo.url }}" target="_blank" rel="noopener">Baixar anexo</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Conteudo</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="user-field">
+                        <span class="user-field__label">Texto base</span>
+                        <span class="user-field__value">{{ material.texto_base|default:"-" }}</span>
+                    </div>
+                    {% if material.conteudo %}
+                        <div class="user-field">
+                            <span class="user-field__label">Material</span>
+                            <span class="user-field__value" style="white-space:pre-line;">{{ material.conteudo }}</span>
+                        </div>
+                    {% else %}
+                        <div class="module-empty">
+                            <h3 class="module-empty__title">Sem conteudo escrito</h3>
+                            <p class="module-empty__text">Use o anexo ou edite este material para adicionar conteudo.</p>
+                        </div>
+                    {% endif %}
+
+                    {% if material.observacoes %}
+                        <div class="user-field">
+                            <span class="user-field__label">Observacoes</span>
+                            <span class="user-field__value">{{ material.observacoes }}</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

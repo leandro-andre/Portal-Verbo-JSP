@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Inscricao - {{ inscricao.evento.titulo }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Eventos</p>
+                    <h1 class="user-hero__title">Minha inscricao</h1>
+                    <p class="user-hero__text">{{ inscricao.evento.titulo }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:eventos:minhas_inscricoes' %}">Voltar</a>
+                    <a class="btn btn--soft" href="{% url 'eventos:agenda' %}">Agenda</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">QR Code de check-in</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="user-field">
+                        <span class="user-field__label">Status</span>
+                        <span class="user-field__value">{{ inscricao.get_status_display }}</span>
+                    </div>
+                    {% if inscricao.status == 'presente' %}
+                        <div class="module-badge module-badge--success">Check-in ja realizado</div>
+                    {% endif %}
+
+                    <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
+                        <div>
+                            <img
+                                src="{% url 'usuarios:eventos:inscricao_qrcode' inscricao.pk %}"
+                                alt="QR Code de check-in"
+                                style="width:240px;height:240px;border-radius:12px;border:1px solid rgba(0,0,0,.08);background:#fff;"
+                            />
+                        </div>
+                        <div style="min-width:240px;">
+                            <p class="module-empty__text" style="margin-top:0;">
+                                Mostre este QR Code na entrada para a equipe realizar o check-in.
+                            </p>
+                            <div class="user-form__actions">
+                                <a class="btn btn--primary" href="{% url 'usuarios:eventos:inscricao_qrcode' inscricao.pk %}" download="qrcode-checkin.png">
+                                    Baixar QR Code
+                                </a>
+                                <button class="btn btn--outline" type="button" onclick="window.print()">Imprimir</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="module-empty" style="text-align:left;">
+                        <h3 class="module-empty__title">Dados da inscricao</h3>
+                        <p class="module-empty__text">
+                            <strong>Nome:</strong> {{ inscricao.nome }}<br/>
+                            <strong>E-mail:</strong> {{ inscricao.email }}<br/>
+                            <strong>Telefone:</strong> {{ inscricao.telefone|default:"-" }}<br/>
+                            <strong>Data:</strong> {{ inscricao.evento.data_inicio|date:"d/m/Y" }} as {{ inscricao.evento.horario|time:"H:i" }}
+                        </p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+

@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{{ casa.nome }} - Verbo no Lar{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Verbo no Lar</p>
+                    <h1 class="user-hero__title">{{ casa.nome }}</h1>
+                    <p class="user-hero__text">{{ casa.bairro|default:"Bairro nao informado" }}{% if casa.dia_horario_padrao and casa.dia_horario_padrao != '-' %} | {{ casa.dia_horario_padrao }}{% endif %}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:verbo_no_lar:casa_lista' %}">Voltar</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:verbo_no_lar:participantes' casa.pk %}">Participantes</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:verbo_no_lar:escalas' casa.pk %}">Escala</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:verbo_no_lar:relatorios' casa.pk %}">Relatorios</a>
+                    {% if can_edit %}
+                        <a class="btn btn--primary" href="{% url 'usuarios:verbo_no_lar:casa_editar' casa.pk %}">Editar</a>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Dados completos</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <div class="user-field">
+                        <span class="user-field__label">Responsavel</span>
+                        <span class="user-field__value">{{ casa.casal_responsavel.get_full_name|default:casa.casal_responsavel.username }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Anfitriao</span>
+                        <span class="user-field__value">{{ casa.anfitriao.get_full_name|default:casa.anfitriao.username|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">WhatsApp</span>
+                        <span class="user-field__value">{{ casa.telefone_whatsapp|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Endereco</span>
+                        <span class="user-field__value">{{ casa.endereco|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Ponto de referencia</span>
+                        <span class="user-field__value">{{ casa.ponto_referencia|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Capacidade</span>
+                        <span class="user-field__value">{{ casa.capacidade_aproximada|default:"-" }}</span>
+                    </div>
+                    <div class="user-field">
+                        <span class="user-field__label">Status</span>
+                        <span class="user-field__value">{% if casa.ativo %}Ativa{% else %}Inativa{% endif %}</span>
+                    </div>
+                    {% if casa.observacoes %}
+                        <div class="user-field">
+                            <span class="user-field__label">Observacoes</span>
+                            <span class="user-field__value">{{ casa.observacoes }}</span>
+                        </div>
+                    {% endif %}
+
+                    <div class="user-form__actions">
+                        {% if casa.link_google_maps %}
+                            <a class="btn btn--primary" href="{{ casa.link_google_maps }}" target="_blank" rel="noopener">Como chegar</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Participantes ativos</h2>
+                </div>
+                {% if participantes_ativos %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Tipo</th>
+                                    <th>Telefone</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in participantes_ativos %}
+                                    <tr>
+                                        <td><strong>{{ p.nome_exibicao }}</strong></td>
+                                        <td>{{ p.get_tipo_display }}</td>
+                                        <td>{{ p.telefone|default:"-" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum participante ativo</h3>
+                        <p class="module-empty__text">Cadastre participantes para esta casa.</p>
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Ultimas escalas</h2>
+                </div>
+                {% if proximas_escalas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Ministro</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in proximas_escalas %}
+                                    <tr>
+                                        <td>{{ e.data|date:"d/m/Y" }}{% if e.horario %} {{ e.horario|time:"H:i" }}{% endif %}</td>
+                                        <td><strong>{{ e.ministro }}</strong></td>
+                                        <td>{{ e.get_status_display }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma escala registrada</h3>
+                        <p class="module-empty__text">Cadastre escalas para organizar os ministros.</p>
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Ultimos relatorios</h2>
+                </div>
+                {% if ultimos_relatorios %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Ministro</th>
+                                    <th>Presentes</th>
+                                    <th class="module-table__actions">Acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in ultimos_relatorios %}
+                                    <tr>
+                                        <td>{{ r.data|date:"d/m/Y" }}</td>
+                                        <td>{{ r.ministro }}</td>
+                                        <td>{{ r.quantidade_presentes }} ({{ r.quantidade_visitantes }} visitantes)</td>
+                                        <td class="module-table__actions">
+                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:verbo_no_lar:relatorio_detalhe' r.pk %}">Ver</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhum relatorio ainda</h3>
+                        <p class="module-empty__text">Depois do encontro, registre o relatorio para manter historico.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
