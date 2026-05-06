@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404
 
 from departamentos.models import Departamento, DepartamentoMembro
 from governanca.permissions import usuario_pode_acessar_painel_midia
+from usuarios.permissions import usuario_tem_acesso_total_pastoral
 
 from .models import AulaSala, ChamadaResponsavel, Crianca, SalaInfantil, SalaMembro
 
@@ -26,7 +27,7 @@ def get_departamentos_infantis():
 def usuario_eh_admin_infantil(usuario):
     return bool(
         getattr(usuario, "is_authenticated", False)
-        and (usuario.is_staff or usuario.is_superuser)
+        and (usuario.is_superuser or usuario_tem_acesso_total_pastoral(usuario))
     )
 
 

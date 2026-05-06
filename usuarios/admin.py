@@ -1,21 +1,44 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+
 from .models import Usuario
+
 
 @admin.register(Usuario)
 class UsuarioAdmin(UserAdmin):
-    """
-    Customização do Admin de Usuários para incluir os novos campos.
-    """
     model = Usuario
-    
-    # Adicionando os novos campos aos fieldsets do UserAdmin original
     fieldsets = UserAdmin.fieldsets + (
-        ("Informações Adicionais", {
-            "fields": ("telefone", "foto", "data_nascimento", "is_membro"),
-        }),
+        (
+            "Informacoes adicionais",
+            {
+                "fields": (
+                    "telefone",
+                    "foto",
+                    "data_nascimento",
+                    "status_eclesiastico",
+                    "discipulado_concluido",
+                    "discipulado_concluido_em",
+                    "qualificado_por",
+                    "qualificado_em",
+                    "eh_pastor",
+                ),
+            },
+        ),
     )
-    
-    # Campos que aparecerão na listagem
-    list_display = ("username", "email", "first_name", "last_name", "is_membro", "is_staff")
-    list_filter = ("is_membro", "is_staff", "is_superuser", "is_active")
+    readonly_fields = ("qualificado_em",)
+    list_display = (
+        "username",
+        "email",
+        "first_name",
+        "last_name",
+        "status_eclesiastico",
+        "eh_pastor",
+        "is_staff",
+    )
+    list_filter = (
+        "status_eclesiastico",
+        "eh_pastor",
+        "is_staff",
+        "is_superuser",
+        "is_active",
+    )

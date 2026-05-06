@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Contribuicoes - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Financeiro</p>
+                    <h1 class="user-hero__title">Contribuicoes</h1>
+                    <p class="user-hero__text">Acompanhe dizimos, ofertas, missoes e campanhas registrados pelo Mercado Pago.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:financeiro:configuracao' %}">Configuracoes</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ total_filtrado }}</span>
+                    <span class="user-stat__label">Registros filtrados</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if tipo_filter %}{{ tipo_filter|title }}{% else %}Todos{% endif %}</span>
+                    <span class="user-stat__label">Tipo</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if status_filter %}{{ status_filter|title }}{% else %}Todos{% endif %}</span>
+                    <span class="user-stat__label">Status</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_tipo">Tipo</label>
+                        <select id="id_tipo" name="tipo" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in tipos %}
+                                <option value="{{ value }}" {% if tipo_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_data_inicio">De</label>
+                        <input id="id_data_inicio" type="date" name="data_inicio" value="{{ data_inicio }}" class="form-control">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_data_fim">Ate</label>
+                        <input id="id_data_fim" type="date" name="data_fim" value="{{ data_fim }}" class="form-control">
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:financeiro:contribuicoes' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Lista de contribuicoes</h2>
+                </div>
+                {% if contribuicoes %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Valor</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Data</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for contribuicao in contribuicoes %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ contribuicao.usuario.get_full_name|default:contribuicao.usuario.username|default:"Sem usuario" }}</strong>
+                                            {% if contribuicao.descricao %}
+                                                <div class="module-table__meta">{{ contribuicao.descricao|truncatechars:80 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>R$ {{ contribuicao.valor }}</td>
+                                        <td>{{ contribuicao.get_tipo_display }}</td>
+                                        <td>
+                                            <span class="module-badge {% if contribuicao.status == 'aprovado' %}module-badge--success{% elif contribuicao.status == 'erro' or contribuicao.status == 'recusado' %}module-badge--danger{% else %}module-badge--muted{% endif %}">
+                                                {{ contribuicao.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ contribuicao.criado_em|date:"d/m/Y H:i" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma contribuicao encontrada</h3>
+                        <p class="module-empty__text">A lista sera preenchida quando os membros iniciarem contribuicoes.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -15,7 +15,7 @@ class MinistrosTests(TestCase):
             username="secretaria.ministros",
             password="senha-forte-123",
             email="secretaria.ministros@example.com",
-            is_staff=True,
+            status_eclesiastico=user_model.StatusEclesiastico.MEMBRO,
         )
         self.usuario_comum = user_model.objects.create_user(
             username="usuario.ministros",

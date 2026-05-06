@@ -13,6 +13,7 @@ from departamentos.permissions import (
     get_departamentos_gerenciaveis,
     usuario_pode_gerenciar_cultos_padrao,
 )
+from usuarios.permissions import usuario_tem_acesso_total_sistema
 
 from .forms import (
     CultoPadraoForm,
@@ -27,6 +28,7 @@ from .permissions import (
     EscalaLeaderRequiredMixin,
     EscalaManagerRequiredMixin,
     OwnIndisponibilidadeRequiredMixin,
+    usuario_pode_acessar_escalas,
 )
 from .services import (
     alternar_status_culto_padrao,
@@ -58,7 +60,7 @@ class EscalaQuerysetMixin(EscalaLeaderRequiredMixin):
 
     def get_queryset(self):
         queryset = Escala.objects.com_relacoes_basicas().com_itens_prefetch()
-        if self.request.user.is_superuser:
+        if usuario_tem_acesso_total_sistema(self.request.user):
             return queryset
         return queryset.filter(departamento__in=self.get_manageable_departamentos())
 
@@ -242,7 +244,7 @@ class EscalaListView(EscalaLeaderRequiredMixin, ListView):
         return self._manageable_departamentos
 
     def test_func(self):
-        return self.request.user.is_superuser or self.get_manageable_departamentos().exists()
+        return usuario_pode_acessar_escalas(self.request.user)
 
     def get_queryset(self):
         query = (self.request.GET.get("q") or "").strip()
@@ -285,7 +287,9 @@ class GerarEscalasMesView(EscalaManagerRequiredMixin, FormView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["departamentos_queryset"] = (
-            Departamento.objects.all() if self.request.user.is_superuser else self.get_manageable_departamentos()
+            Departamento.objects.all()
+            if usuario_tem_acesso_total_sistema(self.request.user)
+            else self.get_manageable_departamentos()
         )
         kwargs["cultos_queryset"] = CultoPadrao.objects.filter(ativo=True)
         return kwargs
@@ -338,7 +342,7 @@ class EscalaCreateView(EscalaLeaderRequiredMixin, CreateView):
         return self._manageable_departamentos
 
     def test_func(self):
-        return self.request.user.is_superuser or self.get_manageable_departamentos().exists()
+        return usuario_pode_acessar_escalas(self.request.user)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()

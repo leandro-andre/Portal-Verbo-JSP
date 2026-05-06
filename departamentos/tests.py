@@ -19,6 +19,7 @@ from .permissions import (
     get_departamentos_gerenciaveis,
     usuario_eh_lider,
     usuario_pode_acessar_indisponibilidades,
+    usuario_pode_acessar_departamentos,
     usuario_pertence_departamento,
     usuario_pode_criar_departamentos,
     usuario_pode_editar_propria_indisponibilidade,
@@ -352,6 +353,13 @@ class PermissionHelpersTests(TestCase):
             email="staff.permissoes@example.com",
             is_staff=True,
         )
+        self.pastor = user_model.objects.create_user(
+            username="pastor.permissoes",
+            password="senha-forte-123",
+            first_name="Pastor",
+            email="pastor.permissoes@example.com",
+            eh_pastor=True,
+        )
         self.infantil = Departamento.objects.create(nome="Infantil Permissoes")
         self.louvor = Departamento.objects.create(nome="Louvor Permissoes")
         DepartamentoMembro.objects.create(
@@ -381,6 +389,7 @@ class PermissionHelpersTests(TestCase):
         self.assertTrue(usuario_eh_lider(self.lider, self.infantil))
         self.assertFalse(usuario_eh_lider(self.lider, self.louvor))
         self.assertFalse(usuario_eh_lider(self.membro, self.infantil))
+        self.assertFalse(usuario_eh_lider(self.pastor, self.infantil))
 
     def test_get_departamentos_do_usuario(self):
         departamentos = list(get_departamentos_do_usuario(self.lider).order_by("nome"))
@@ -389,16 +398,32 @@ class PermissionHelpersTests(TestCase):
     def test_get_departamentos_gerenciaveis(self):
         departamentos = list(get_departamentos_gerenciaveis(self.lider))
         self.assertEqual(departamentos, [self.infantil])
+        self.assertEqual(
+            set(get_departamentos_gerenciaveis(self.pastor)),
+            {self.infantil, self.louvor},
+        )
 
     def test_funcoes_de_gestao_respeitam_cargo(self):
         self.assertTrue(usuario_pode_gerenciar_membros(self.lider, self.infantil))
         self.assertTrue(usuario_pode_gerenciar_escalas(self.lider, self.infantil))
+        self.assertFalse(usuario_pode_gerenciar_membros(self.lider, self.louvor))
+        self.assertFalse(usuario_pode_gerenciar_escalas(self.lider, self.louvor))
         self.assertFalse(usuario_pode_gerenciar_membros(self.membro, self.infantil))
         self.assertFalse(usuario_pode_gerenciar_escalas(self.membro, self.infantil))
-        self.assertTrue(usuario_pode_criar_departamentos(self.staff))
-        self.assertTrue(usuario_pode_gerenciar_cultos_padrao(self.staff))
+        self.assertTrue(usuario_pode_gerenciar_membros(self.pastor, self.infantil))
+        self.assertTrue(usuario_pode_gerenciar_escalas(self.pastor, self.louvor))
+        self.assertFalse(usuario_pode_criar_departamentos(self.staff))
+        self.assertFalse(usuario_pode_gerenciar_cultos_padrao(self.staff))
+        self.assertTrue(usuario_pode_criar_departamentos(self.pastor))
+        self.assertTrue(usuario_pode_gerenciar_cultos_padrao(self.pastor))
         self.assertFalse(usuario_pode_criar_departamentos(self.lider))
         self.assertTrue(usuario_pode_acessar_indisponibilidades(self.membro))
+
+    def test_acesso_a_departamentos_respeita_vinculo_ou_acesso_total(self):
+        self.assertTrue(usuario_pode_acessar_departamentos(self.lider))
+        self.assertTrue(usuario_pode_acessar_departamentos(self.membro))
+        self.assertTrue(usuario_pode_acessar_departamentos(self.pastor))
+        self.assertFalse(usuario_pode_acessar_departamentos(self.staff))
 
 
 class IndisponibilidadesViewsTests(TestCase):
@@ -492,7 +517,7 @@ class DepartamentosInternosViewsTests(TestCase):
             password="senha-forte-123",
             first_name="Staff",
             email="staff.departamento@example.com",
-            is_staff=True,
+            eh_pastor=True,
         )
         self.membro = user_model.objects.create_user(
             username="membro.comum",
@@ -647,6 +672,7 @@ class EscalasInternasViewsTests(TestCase):
             password="senha-forte-123",
             first_name="Paulo",
             email="lider.escala@example.com",
+            status_eclesiastico=user_model.StatusEclesiastico.MEMBRO,
         )
         self.outro_usuario = user_model.objects.create_user(
             username="visitante.escala",
@@ -660,6 +686,7 @@ class EscalasInternasViewsTests(TestCase):
             first_name="Maria",
             last_name="Escalada",
             email="maria.escala@example.com",
+            status_eclesiastico=user_model.StatusEclesiastico.MEMBRO,
         )
         self.departamento_louvor = Departamento.objects.create(
             nome="Louvor Escalas",
@@ -678,7 +705,7 @@ class EscalasInternasViewsTests(TestCase):
             password="senha-forte-123",
             first_name="Staff",
             email="staff.culto@example.com",
-            is_staff=True,
+            eh_pastor=True,
         )
         DepartamentoMembro.objects.create(
             membro=self.lider,

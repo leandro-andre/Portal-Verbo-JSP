@@ -28,7 +28,7 @@
                     <span class="user-stat__label">Perfil preenchido</span>
                 </article>
                 <article class="user-stat">
-                    <span class="user-stat__value">{% if user.is_membro %}Membro{% else %}Visitante{% endif %}</span>
+                    <span class="user-stat__value">{{ user.get_status_eclesiastico_display }}</span>
                     <span class="user-stat__label">Status da conta</span>
                 </article>
                 <article class="user-stat">

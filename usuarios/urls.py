@@ -17,4 +17,5 @@ urlpatterns = [
     path("conteudo/", include("conteudo_interno.urls", namespace="conteudo")),
     path("ministros/", include("ministros.internal_urls", namespace="ministros")),
     path("verbo-no-lar/", include("verbo_no_lar.internal_urls", namespace="verbo_no_lar")),
+    path("financeiro/", include("financeiro.internal_urls", namespace="financeiro")),
 ]

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Pagamento - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Financeiro</p>
+                    <h1 class="user-hero__title">Pagamento recebido para verificacao</h1>
+                    <p class="user-hero__text">O status final pode levar alguns instantes para ser confirmado pelo Mercado Pago.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{% url 'financeiro:contribuir' %}">Nova contribuicao</a>
+                    <a class="btn btn--soft" href="{% url 'usuarios:dashboard' %}">Voltar ao painel</a>
+                </div>
+            </section>
+
+            {% if contribuicao %}
+                <section class="module-card">
+                    <div class="module-card__header">
+                        <h2 class="module-card__title">Resumo da contribuicao</h2>
+                    </div>
+                    <div class="module-card__body user-card__body--stack">
+                        <div class="user-field">
+                            <span class="user-field__label">Tipo</span>
+                            <span class="user-field__value">{{ contribuicao.get_tipo_display }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Valor</span>
+                            <span class="user-field__value">R$ {{ contribuicao.valor }}</span>
+                        </div>
+                        <div class="user-field">
+                            <span class="user-field__label">Status</span>
+                            <span class="module-badge {% if contribuicao.status == 'aprovado' %}module-badge--success{% elif contribuicao.status == 'erro' or contribuicao.status == 'recusado' %}module-badge--danger{% else %}module-badge--muted{% endif %}">
+                                {{ contribuicao.get_status_display }}
+                            </span>
+                        </div>
+                    </div>
+                </section>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

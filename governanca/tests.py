@@ -17,6 +17,8 @@ from .permissions import (
     usuario_pode_executar_acao_conteudo,
     usuario_pode_gerenciar_ao_vivo,
     usuario_pode_gerenciar_site_publico,
+    usuario_tem_acesso_midia,
+    usuario_tem_acesso_secretaria,
 )
 
 
@@ -45,6 +47,12 @@ class GovernancaPermissionsTests(TestCase):
             password="senha-forte-123",
             email="midia.lider@example.com",
             is_staff=True,
+        )
+        self.pastor = user_model.objects.create_user(
+            username="pastor.negocio",
+            password="senha-forte-123",
+            email="pastor.negocio@example.com",
+            eh_pastor=True,
         )
         self.sem_permissao = user_model.objects.create_user(
             username="usuario.sem.permissao",
@@ -113,6 +121,10 @@ class GovernancaPermissionsTests(TestCase):
         self.assertFalse(usuario_eh_secretaria(self.midia))
         self.assertTrue(usuario_eh_midia(self.midia))
         self.assertFalse(usuario_eh_midia(self.secretaria))
+        self.assertFalse(usuario_eh_secretaria(self.pastor))
+        self.assertFalse(usuario_eh_midia(self.pastor))
+        self.assertFalse(usuario_eh_secretaria(self.superuser))
+        self.assertFalse(usuario_eh_midia(self.superuser))
 
         self.assertTrue(usuario_pode_gerenciar_site_publico(self.secretaria))
         self.assertFalse(usuario_pode_gerenciar_site_publico(self.midia))
@@ -120,6 +132,19 @@ class GovernancaPermissionsTests(TestCase):
         self.assertTrue(usuario_pode_gerenciar_ao_vivo(self.secretaria))
         self.assertTrue(usuario_pode_gerenciar_ao_vivo(self.midia))
         self.assertFalse(usuario_pode_gerenciar_ao_vivo(self.sem_permissao))
+
+    def test_acesso_nao_altera_identidade_de_secretaria_ou_midia(self):
+        self.assertTrue(usuario_tem_acesso_secretaria(self.secretaria))
+        self.assertFalse(usuario_tem_acesso_secretaria(self.midia))
+        self.assertTrue(usuario_tem_acesso_midia(self.midia))
+        self.assertFalse(usuario_tem_acesso_midia(self.secretaria))
+
+        self.assertTrue(usuario_tem_acesso_secretaria(self.pastor))
+        self.assertTrue(usuario_tem_acesso_midia(self.pastor))
+        self.assertTrue(usuario_tem_acesso_secretaria(self.superuser))
+        self.assertTrue(usuario_tem_acesso_midia(self.superuser))
+        self.assertFalse(usuario_tem_acesso_secretaria(self.sem_permissao))
+        self.assertFalse(usuario_tem_acesso_midia(self.sem_permissao))
 
     def test_permissoes_por_modelo_e_campo(self):
         self.assertTrue(usuario_pode_executar_acao_conteudo(self.secretaria, SiteConfig, "change"))

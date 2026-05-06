@@ -7,6 +7,7 @@ app_name = "conteudo_interno"
 
 urlpatterns = [
     path("secretaria/", views.SecretariaDashboardView.as_view(), name="secretaria_dashboard"),
+    path("secretaria/pessoas/", views.SecretariaQualificacaoPessoasView.as_view(), name="secretaria_qualificacao"),
     path("secretaria/site/", views.SecretariaSiteConfigUpdateView.as_view(), name="secretaria_site"),
     path("secretaria/contato/", views.SecretariaContatoUpdateView.as_view(), name="secretaria_contato"),
     path("secretaria/sobre/", views.SecretariaSobreUpdateView.as_view(), name="secretaria_sobre"),

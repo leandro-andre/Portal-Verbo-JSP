@@ -158,7 +158,9 @@ class Escala(models.Model):
             )
 
         def gerenciaveis_por_usuario(self, usuario, departamentos_queryset):
-            if getattr(usuario, "is_superuser", False):
+            from usuarios.permissions import usuario_tem_acesso_total_pastoral
+
+            if getattr(usuario, "is_superuser", False) or usuario_tem_acesso_total_pastoral(usuario):
                 return self
             return self.filter(departamento__in=departamentos_queryset)
 

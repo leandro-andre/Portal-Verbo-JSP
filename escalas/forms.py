@@ -1,6 +1,8 @@
 from django import forms
+from django.db.models import Q
 
 from departamentos.models import DepartamentoMembro
+from usuarios.permissions import usuario_pode_ser_escalado_departamento
 
 from .models import CultoPadrao, Escala, EscalaItem, IndisponibilidadeMembro
 
@@ -108,6 +110,9 @@ class EscalaItemForm(FormControlMixin, forms.ModelForm):
         if escala is not None:
             self.fields["participacao"].queryset = (
                 DepartamentoMembro.objects.filter(
+                    Q(membro__status_eclesiastico="membro")
+                    | Q(membro__eh_pastor=True)
+                    | Q(membro__is_superuser=True),
                     departamento=escala.departamento,
                     ativo=True,
                 )
@@ -115,6 +120,12 @@ class EscalaItemForm(FormControlMixin, forms.ModelForm):
                 .order_by("membro__first_name", "membro__last_name", "membro__username")
             )
         self.apply_control_classes()
+
+    def clean_participacao(self):
+        participacao = self.cleaned_data["participacao"]
+        if not usuario_pode_ser_escalado_departamento(participacao.membro):
+            raise forms.ValidationError("A pessoa escalada precisa estar qualificada como membro.")
+        return participacao
 
     def save(self, commit=True):
         instance = super().save(commit=False)

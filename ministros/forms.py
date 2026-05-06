@@ -16,6 +16,7 @@ class MinistroInternoForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Ministro
         fields = [
+            "usuario",
             "nome_completo",
             "nome_ministerial",
             "tipo",
@@ -59,6 +60,7 @@ class MinistroInternoForm(StyledFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._apply_default_classes()
+        self.fields["usuario"].required = False
 
 
 class MinistroVisitanteForm(StyledFormMixin, forms.ModelForm):

@@ -1,7 +1,9 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from .models import Departamento, DepartamentoMembro
+from usuarios.permissions import usuario_pode_ser_escalado_departamento
 
 
 class DepartamentoForm(forms.ModelForm):
@@ -42,9 +44,12 @@ class DepartamentoMembroForm(forms.ModelForm):
         self.departamento = departamento
 
         user_model = get_user_model()
-        self.fields["membro"].queryset = user_model.objects.filter(is_active=True).order_by(
-            "first_name", "last_name", "username"
-        )
+        self.fields["membro"].queryset = user_model.objects.filter(
+            Q(status_eclesiastico=user_model.StatusEclesiastico.MEMBRO)
+            | Q(eh_pastor=True)
+            | Q(is_superuser=True),
+            is_active=True,
+        ).order_by("first_name", "last_name", "username")
         self.fields["membro"].widget.attrs.setdefault("class", "form-control")
         self.fields["papel"].widget.attrs.setdefault("class", "form-control")
         self.fields["ativo"].widget.attrs.setdefault("class", "module-checkbox")
@@ -55,6 +60,12 @@ class DepartamentoMembroForm(forms.ModelForm):
         cleaned_data = super().clean()
         membro = cleaned_data.get("membro")
         ativo = cleaned_data.get("ativo")
+
+        if membro and not usuario_pode_ser_escalado_departamento(membro):
+            self.add_error(
+                "membro",
+                "A pessoa precisa estar qualificada como membro antes de servir em departamento.",
+            )
 
         if self.departamento and membro and ativo:
             queryset = DepartamentoMembro.objects.filter(

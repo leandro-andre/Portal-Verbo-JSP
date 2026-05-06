@@ -10,9 +10,17 @@ class FotoMinistroInline(admin.TabularInline):
 
 @admin.register(Ministro)
 class MinistroAdmin(admin.ModelAdmin):
-    list_display = ("nome_exibicao", "tipo", "cidade", "estado", "status", "ativo")
+    list_display = ("nome_exibicao", "usuario", "tipo", "cidade", "estado", "status", "ativo")
     list_filter = ("tipo", "status", "ativo")
-    search_fields = ("nome_completo", "nome_ministerial", "igreja_origem", "cidade")
+    search_fields = (
+        "nome_completo",
+        "nome_ministerial",
+        "usuario__username",
+        "usuario__first_name",
+        "usuario__last_name",
+        "igreja_origem",
+        "cidade",
+    )
     readonly_fields = ("token_formulario", "criado_em", "atualizado_em")
     inlines = [FotoMinistroInline]
 

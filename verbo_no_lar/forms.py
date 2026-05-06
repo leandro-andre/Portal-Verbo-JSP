@@ -1,5 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from ministros.models import Ministro
+from usuarios.permissions import usuario_pode_ser_escalado_verbo_no_lar
 
 from .models import (
     CasaVerboNoLar,
@@ -51,6 +53,10 @@ class ParticipanteVerboNoLarForm(forms.ModelForm):
     def __init__(self, *args, casa=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.casa = casa
+        self.fields["ministro"].queryset = Ministro.objects.filter(
+            ativo=True,
+            status__in=(Ministro.Status.APROVADO, Ministro.Status.ATUALIZADO),
+        ).order_by("nome_ministerial", "nome_completo")
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs.setdefault("class", "module-checkbox")
@@ -98,6 +104,12 @@ class EscalaVerboNoLarForm(forms.ModelForm):
         if commit:
             escala.save()
         return escala
+
+    def clean_ministro(self):
+        ministro = self.cleaned_data["ministro"]
+        if ministro.usuario_id and not usuario_pode_ser_escalado_verbo_no_lar(ministro.usuario):
+            raise ValidationError("O usuario vinculado a este ministro nao esta apto para escala no Verbo no Lar.")
+        return ministro
 
 
 class MaterialApoioVerboNoLarForm(forms.ModelForm):

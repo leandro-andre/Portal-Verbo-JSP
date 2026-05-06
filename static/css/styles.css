@@ -1959,6 +1959,12 @@ a {
 .module-inline-form{
   display: inline;
 }
+.module-table__date-input{
+  display: inline-block;
+  width: auto;
+  min-width: 150px;
+  margin-right: 6px;
+}
 .module-badge{
   display: inline-flex;
   align-items: center;
@@ -1986,6 +1992,10 @@ a {
 .module-badge--warning{
   background: rgba(245, 158, 11, 0.14);
   color: #92400e;
+}
+.module-badge--danger{
+  background: rgba(220, 38, 38, 0.12);
+  color: #991b1b;
 }
 .module-badge--info{
   background: rgba(59, 130, 246, 0.12);

@@ -14,6 +14,7 @@ from .permissions import (
     DepartmentMemberRequiredMixin,
     get_departamentos_do_usuario,
     get_departamentos_gerenciaveis,
+    usuario_pode_acessar_departamentos,
     usuario_pode_criar_departamentos,
 )
 
@@ -24,10 +25,7 @@ class DepartamentoListView(DepartmentMemberRequiredMixin, ListView):
     context_object_name = "departamentos"
 
     def test_func(self):
-        return (
-            usuario_pode_criar_departamentos(self.request.user)
-            or get_departamentos_do_usuario(self.request.user).exists()
-        )
+        return usuario_pode_acessar_departamentos(self.request.user)
 
     def get_queryset(self):
         query = (self.request.GET.get("q") or "").strip()

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Qualificacao de Pessoas - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Secretaria</p>
+                    <h1 class="user-hero__title">Qualificacao de Pessoas</h1>
+                    <p class="user-hero__text">Acompanhe visitantes, registre discipulado concluido e qualifique pessoas como membros.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_dashboard' %}">Voltar para Secretaria</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ visitantes_total }}</span>
+                    <span class="user-stat__label">Visitantes</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ membros_total }}</span>
+                    <span class="user-stat__label">Membros</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ pessoas|length }}</span>
+                    <span class="user-stat__label">Nesta pagina</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <form method="get" class="module-toolbar">
+                    <div>
+                        <label class="form-label" for="id_q">Buscar pessoa</label>
+                        <input id="id_q" type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Nome, usuario ou e-mail">
+                    </div>
+                    <div>
+                        <label class="form-label" for="id_status">Status</label>
+                        <select id="id_status" name="status" class="form-control">
+                            <option value="">Todos</option>
+                            {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="module-toolbar__actions">
+                        <button type="submit" class="btn btn--soft">Aplicar filtros</button>
+                        <a class="btn btn--outline" href="{% url 'usuarios:conteudo:secretaria_qualificacao' %}">Limpar</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Pessoas cadastradas</h2>
+                </div>
+                {% if pessoas %}
+                    <div class="module-table-wrap">
+                        <table class="module-table">
+                            <thead>
+                                <tr>
+                                    <th>Pessoa</th>
+                                    <th>Status</th>
+                                    <th>Discipulado</th>
+                                    <th>Qualificacao</th>
+                                    <th class="module-table__actions">Acoes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pessoa in pessoas %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ pessoa.get_full_name|default:pessoa.username }}</strong>
+                                            <div class="module-table__meta">{{ pessoa.email|default:pessoa.username }}</div>
+                                        </td>
+                                        <td>
+                                            <span class="module-badge {% if pessoa.is_membro %}module-badge--success{% else %}module-badge--muted{% endif %}">
+                                                {{ pessoa.get_status_eclesiastico_display }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if pessoa.discipulado_concluido %}
+                                                <span class="module-badge module-badge--success">Concluido</span>
+                                                <div class="module-table__meta">{{ pessoa.discipulado_concluido_em|date:"d/m/Y"|default:"Sem data" }}</div>
+                                            {% else %}
+                                                <span class="module-badge module-badge--warning">Pendente</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if pessoa.qualificado_em %}
+                                                <strong>{{ pessoa.qualificado_em|date:"d/m/Y H:i" }}</strong>
+                                                <div class="module-table__meta">Por {{ pessoa.qualificado_por.get_full_name|default:pessoa.qualificado_por.username|default:"-" }}</div>
+                                            {% else %}
+                                                <span class="module-table__meta">Ainda nao qualificado</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="module-table__actions">
+                                            {% if not pessoa.is_membro %}
+                                                <form method="post" class="module-inline-form">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="usuario_id" value="{{ pessoa.pk }}">
+                                                    <input type="date" name="discipulado_concluido_em" value="{{ pessoa.discipulado_concluido_em|date:'Y-m-d' }}" class="form-control module-table__date-input">
+                                                    <button type="submit" name="acao" value="marcar_discipulado" class="btn btn--soft btn--sm">Marcar discipulado</button>
+                                                    <button type="submit" name="acao" value="qualificar" class="btn btn--primary btn--sm">Promover para membro</button>
+                                                </form>
+                                            {% else %}
+                                                <span class="module-table__meta">Membro qualificado</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="module-empty">
+                        <h3 class="module-empty__title">Nenhuma pessoa encontrada</h3>
+                        <p class="module-empty__text">Ajuste os filtros para localizar visitantes ou membros cadastrados.</p>
+                    </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

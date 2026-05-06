@@ -6,8 +6,19 @@ from departamentos.permissions import (
     usuario_pode_gerenciar_cultos_padrao,
     usuario_pode_gerenciar_escalas,
 )
+from usuarios.permissions import usuario_tem_acesso_total_sistema
 
 from .models import CultoPadrao, Escala, IndisponibilidadeMembro
+
+
+def usuario_pode_acessar_escalas(usuario):
+    return bool(
+        getattr(usuario, "is_authenticated", False)
+        and (
+            usuario_tem_acesso_total_sistema(usuario)
+            or get_departamentos_gerenciaveis(usuario).exists()
+        )
+    )
 
 
 def usuario_pode_acessar_indisponibilidades(usuario):
@@ -18,7 +29,7 @@ def usuario_pode_editar_propria_indisponibilidade(usuario, indisponibilidade):
     return bool(
         getattr(usuario, "is_authenticated", False)
         and (
-            usuario.is_superuser
+            usuario_tem_acesso_total_sistema(usuario)
             or indisponibilidade.membro_id == getattr(usuario, "pk", None)
         )
     )
@@ -48,9 +59,7 @@ class EscalaLeaderRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
 class EscalaManagerRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
     def test_func(self):
-        return self.request.user.is_superuser or get_departamentos_gerenciaveis(
-            self.request.user
-        ).exists()
+        return usuario_pode_acessar_escalas(self.request.user)
 
 
 class CultoPadraoManagerRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):

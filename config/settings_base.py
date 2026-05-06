@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "noticias",
     "ministros",
     "verbo_no_lar",
+    "financeiro",
 ]
 
 MIDDLEWARE = [

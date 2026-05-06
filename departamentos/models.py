@@ -97,7 +97,9 @@ class Departamento(models.Model):
     def pode_gerenciar_escalas(self, user, allowed_roles=None):
         if not user.is_authenticated:
             return False
-        if user.is_superuser:
+        from usuarios.permissions import usuario_tem_acesso_total_pastoral
+
+        if user.is_superuser or usuario_tem_acesso_total_pastoral(user):
             return True
 
         roles = allowed_roles or DepartamentoMembro.PAPEIS_GESTAO_ESCALA
@@ -116,10 +118,21 @@ class DepartamentoMembro(models.Model):
     class Papel(models.TextChoices):
         LIDER = "lider", "Lider"
         VICE_LIDER = "vice_lider", "Vice-lider"
-        MEMBRO = "membro", "Membro"
+        LIDERADO = "liderado", "Liderado"
+        AUXILIAR = "auxiliar", "Auxiliar"
         VOLUNTARIO = "voluntario", "Voluntario"
+        MEMBRO = "membro", "Membro (legado)"
 
-    PAPEIS_GESTAO_ESCALA = (Papel.LIDER,)
+    PAPEIS_LIDERANCA = (Papel.LIDER,)
+    PAPEIS_GESTAO_ESCALA = PAPEIS_LIDERANCA
+    PAPEIS_SERVICO = (
+        Papel.LIDER,
+        Papel.VICE_LIDER,
+        Papel.LIDERADO,
+        Papel.AUXILIAR,
+        Papel.VOLUNTARIO,
+        Papel.MEMBRO,
+    )
 
     membro = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -137,7 +150,7 @@ class DepartamentoMembro(models.Model):
         "Papel no departamento",
         max_length=20,
         choices=Papel.choices,
-        default=Papel.MEMBRO,
+        default=Papel.LIDERADO,
     )
     ativo = models.BooleanField("Ativo", default=True)
     data_entrada = models.DateField("Data de entrada", blank=True, null=True)

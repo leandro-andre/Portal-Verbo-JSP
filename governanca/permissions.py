@@ -1,7 +1,15 @@
 from core.models import SiteConfig, SobrePage
-from departamentos.models import Departamento, DepartamentoMembro
+from departamentos.models import DepartamentoMembro
 from eventos.models import Evento
 from noticias.models import Noticia
+from usuarios.permissions import (
+    usuario_eh_midia,
+    usuario_eh_secretaria,
+    usuario_tem_acesso_midia,
+    usuario_tem_acesso_secretaria,
+    usuario_tem_acesso_total_pastoral,
+    usuario_tem_cargo_departamental,
+)
 
 
 PAPEIS_GOVERNANCA_PUBLICA = (
@@ -10,41 +18,42 @@ PAPEIS_GOVERNANCA_PUBLICA = (
 )
 
 ROLE_SUPERUSER = "superuser"
+ROLE_PASTOR = "pastor"
 ROLE_SECRETARIA = "secretaria"
 ROLE_MIDIA = "midia"
 
 CONTENT_GOVERNANCE_POLICY = {
     SiteConfig._meta.label_lower: {
-        "view": (ROLE_SUPERUSER, ROLE_SECRETARIA, ROLE_MIDIA),
-        "add": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "change": (ROLE_SUPERUSER, ROLE_SECRETARIA, ROLE_MIDIA),
+        "view": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA, ROLE_MIDIA),
+        "add": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "change": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA, ROLE_MIDIA),
         "delete": (ROLE_SUPERUSER,),
-        "publish": (ROLE_SUPERUSER, ROLE_SECRETARIA),
+        "publish": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
         "field_roles": {
-            "__default__": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-            "youtube_embed_url": (ROLE_SUPERUSER, ROLE_SECRETARIA, ROLE_MIDIA),
+            "__default__": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+            "youtube_embed_url": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA, ROLE_MIDIA),
         },
     },
     SobrePage._meta.label_lower: {
-        "view": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "add": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "change": (ROLE_SUPERUSER, ROLE_SECRETARIA),
+        "view": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "add": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "change": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
         "delete": (ROLE_SUPERUSER,),
-        "publish": (ROLE_SUPERUSER, ROLE_SECRETARIA),
+        "publish": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
     },
     Evento._meta.label_lower: {
-        "view": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "add": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "change": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "delete": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "publish": (ROLE_SUPERUSER, ROLE_SECRETARIA),
+        "view": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "add": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "change": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "delete": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "publish": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
     },
     Noticia._meta.label_lower: {
-        "view": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "add": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "change": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "delete": (ROLE_SUPERUSER, ROLE_SECRETARIA),
-        "publish": (ROLE_SUPERUSER, ROLE_SECRETARIA),
+        "view": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "add": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "change": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "delete": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
+        "publish": (ROLE_SUPERUSER, ROLE_PASTOR, ROLE_SECRETARIA),
     },
 }
 
@@ -63,66 +72,46 @@ def _resolve_model_class(model_or_instance):
     raise TypeError("Informe uma classe de model ou uma instancia de model.")
 
 
+def _usuario_autenticado(usuario):
+    return bool(getattr(usuario, "is_authenticated", False))
+
+
 def usuario_tem_cargo_em_departamentos(usuario, codigos_departamento, papeis=None, somente_ativo=True):
-    if not getattr(usuario, "is_authenticated", False):
-        return False
-    if usuario.is_superuser:
-        return True
+    """Verifica identidade/cargo real no departamento.
 
-    filtros = {
-        "membro": usuario,
-        "departamento__codigo__in": tuple(codigos_departamento),
-        "departamento__ativo": True,
-    }
-    if somente_ativo:
-        filtros["ativo"] = True
-
-    papeis = tuple(papeis or PAPEIS_GOVERNANCA_PUBLICA)
-    if papeis:
-        filtros["papel__in"] = papeis
-
-    return DepartamentoMembro.objects.filter(**filtros).exists()
-
-
-def usuario_eh_secretaria(usuario):
-    return usuario_tem_cargo_em_departamentos(
+    Esta funcao nao concede acesso por pastor, superuser ou is_staff. Ela responde
+    apenas se o usuario possui vinculo departamental compativel com os codigos e
+    papeis informados.
+    """
+    return usuario_tem_cargo_departamental(
         usuario,
-        (Departamento.CodigoSistema.SECRETARIA,),
-    )
-
-
-def usuario_eh_midia(usuario):
-    return usuario_tem_cargo_em_departamentos(
-        usuario,
-        (Departamento.CodigoSistema.MIDIA,),
+        codigos_departamento,
+        papeis=tuple(papeis or PAPEIS_GOVERNANCA_PUBLICA),
+        somente_ativo=somente_ativo,
     )
 
 
 def usuario_pode_gerenciar_site_publico(usuario):
-    return bool(getattr(usuario, "is_authenticated", False) and (usuario.is_superuser or usuario_eh_secretaria(usuario)))
+    return usuario_tem_acesso_secretaria(usuario)
 
 
 def usuario_pode_gerenciar_ao_vivo(usuario):
-    return bool(
-        getattr(usuario, "is_authenticated", False)
-        and (usuario.is_superuser or usuario_eh_secretaria(usuario) or usuario_eh_midia(usuario))
-    )
+    return usuario_tem_acesso_secretaria(usuario) or usuario_tem_acesso_midia(usuario)
 
 
 def usuario_pode_acessar_painel_secretaria(usuario):
-    return usuario_pode_gerenciar_site_publico(usuario)
+    return usuario_tem_acesso_secretaria(usuario)
 
 
 def usuario_pode_acessar_painel_midia(usuario):
-    return bool(
-        getattr(usuario, "is_authenticated", False)
-        and (usuario.is_superuser or usuario_eh_midia(usuario))
-    )
+    return usuario_tem_acesso_midia(usuario)
 
 
 def _usuario_tem_role(usuario, role_name):
     if role_name == ROLE_SUPERUSER:
-        return bool(getattr(usuario, "is_authenticated", False) and usuario.is_superuser)
+        return bool(_usuario_autenticado(usuario) and usuario.is_superuser)
+    if role_name == ROLE_PASTOR:
+        return usuario_tem_acesso_total_pastoral(usuario)
     if role_name == ROLE_SECRETARIA:
         return usuario_eh_secretaria(usuario)
     if role_name == ROLE_MIDIA:
@@ -137,7 +126,7 @@ def get_content_governance_policy(model_or_instance):
 def usuario_pode_executar_acao_conteudo(usuario, model_or_instance, acao):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser:
+    if usuario.is_superuser or usuario_tem_acesso_total_pastoral(usuario):
         return True
 
     policy = get_content_governance_policy(model_or_instance)
@@ -152,7 +141,7 @@ def usuario_pode_publicar_conteudo(usuario, model_or_instance):
 def usuario_pode_editar_campo(usuario, model_or_instance, campo, obj=None):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser:
+    if usuario.is_superuser or usuario_tem_acesso_total_pastoral(usuario):
         return True
 
     model_class = _resolve_model_class(model_or_instance)

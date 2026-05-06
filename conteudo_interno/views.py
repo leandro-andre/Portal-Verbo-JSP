@@ -1,9 +1,12 @@
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied
+from django.db.models import Q
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse, reverse_lazy
+from django.utils.dateparse import parse_date
 from django.views import View
 from django.views.generic import CreateView, ListView, TemplateView, UpdateView
 
@@ -98,9 +101,103 @@ class SecretariaDashboardView(SecretariaRequiredMixin, TemplateView):
                 "eventos_publicados": Evento.objects.filter(publicado=True).count(),
                 "noticias_total": Noticia.objects.count(),
                 "noticias_publicadas": Noticia.objects.filter(publicado=True).count(),
+                "visitantes_total": get_user_model().objects.filter(
+                    status_eclesiastico=get_user_model().StatusEclesiastico.VISITANTE,
+                    is_active=True,
+                ).count(),
+                "membros_total": get_user_model().objects.filter(
+                    status_eclesiastico=get_user_model().StatusEclesiastico.MEMBRO,
+                    is_active=True,
+                ).count(),
             }
         )
         return context
+
+
+class SecretariaQualificacaoPessoasView(SecretariaRequiredMixin, ListView):
+    template_name = "conteudo_interno/qualificacao_pessoas.html"
+    context_object_name = "pessoas"
+    paginate_by = 30
+
+    def get_queryset(self):
+        user_model = get_user_model()
+        query = (self.request.GET.get("q") or "").strip()
+        status = (self.request.GET.get("status") or user_model.StatusEclesiastico.VISITANTE).strip()
+
+        queryset = user_model.objects.filter(is_active=True).select_related("qualificado_por").order_by(
+            "first_name",
+            "last_name",
+            "username",
+        )
+        if status:
+            queryset = queryset.filter(status_eclesiastico=status)
+        if query:
+            queryset = queryset.filter(
+                Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(username__icontains=query)
+                | Q(email__icontains=query)
+            )
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        user_model = get_user_model()
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "active_section": "secretaria",
+                "search_query": (self.request.GET.get("q") or "").strip(),
+                "status_filter": (self.request.GET.get("status") or user_model.StatusEclesiastico.VISITANTE).strip(),
+                "status_choices": user_model.StatusEclesiastico.choices,
+                "visitantes_total": user_model.objects.filter(
+                    status_eclesiastico=user_model.StatusEclesiastico.VISITANTE,
+                    is_active=True,
+                ).count(),
+                "membros_total": user_model.objects.filter(
+                    status_eclesiastico=user_model.StatusEclesiastico.MEMBRO,
+                    is_active=True,
+                ).count(),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        user_model = get_user_model()
+        pessoa = get_object_or_404(user_model, pk=request.POST.get("usuario_id"), is_active=True)
+        acao = request.POST.get("acao")
+        data_conclusao = parse_date(request.POST.get("discipulado_concluido_em") or "")
+
+        if acao == "marcar_discipulado":
+            pessoa.discipulado_concluido = True
+            if data_conclusao:
+                pessoa.discipulado_concluido_em = data_conclusao
+            pessoa.save(update_fields=["discipulado_concluido", "discipulado_concluido_em"])
+            messages.success(request, "Discipulado marcado como concluido.")
+        elif acao == "qualificar":
+            if not pessoa.discipulado_concluido and not data_conclusao:
+                messages.error(request, "Informe a conclusao do discipulado antes de qualificar como membro.")
+                return HttpResponseRedirect(self._get_redirect_url())
+
+            pessoa.qualificar_como_membro(request.user, discipulado_concluido_em=data_conclusao)
+            pessoa.save(
+                update_fields=[
+                    "status_eclesiastico",
+                    "discipulado_concluido",
+                    "discipulado_concluido_em",
+                    "qualificado_por",
+                    "qualificado_em",
+                ]
+            )
+            messages.success(request, "Pessoa qualificada como membro.")
+        else:
+            messages.error(request, "Acao de qualificacao invalida.")
+
+        return HttpResponseRedirect(self._get_redirect_url())
+
+    def _get_redirect_url(self):
+        query = self.request.META.get("QUERY_STRING")
+        url = reverse("usuarios:conteudo:secretaria_qualificacao")
+        return f"{url}?{query}" if query else url
 
 
 class SecretariaSiteConfigUpdateView(

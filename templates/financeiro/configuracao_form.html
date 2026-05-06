@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Configuracoes financeiras - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Financeiro</p>
+                    <h1 class="user-hero__title">Configuracoes financeiras</h1>
+                    <p class="user-hero__text">Configure as credenciais do Mercado Pago e valide a conexao usada nas contribuicoes.</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--outline" href="{% url 'usuarios:financeiro:contribuicoes' %}">Ver contribuicoes</a>
+                </div>
+            </section>
+
+            <section class="module-summary module-summary--triple">
+                <article class="user-stat">
+                    <span class="user-stat__value">{% if object.conectado %}Conectado{% else %}Nao conectado{% endif %}</span>
+                    <span class="user-stat__label">Status</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ object.get_ambiente_display }}</span>
+                    <span class="user-stat__label">Ambiente</span>
+                </article>
+                <article class="user-stat">
+                    <span class="user-stat__value">{{ object.ultima_verificacao|date:"d/m/Y H:i"|default:"-" }}</span>
+                    <span class="user-stat__label">Ultima verificacao</span>
+                </article>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__body">
+                    <form method="post" class="user-form">
+                        {% csrf_token %}
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.ambiente.id_for_label }}">Ambiente</label>
+                                {{ form.ambiente }}
+                                {% for error in form.ambiente.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.webhook_url.id_for_label }}">Webhook URL</label>
+                                {{ form.webhook_url }}
+                                {% for error in form.webhook_url.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.mercado_pago_access_token.id_for_label }}">Access token</label>
+                                {{ form.mercado_pago_access_token }}
+                                {% if form.mercado_pago_access_token.help_text %}<div class="module-table__meta">{{ form.mercado_pago_access_token.help_text }}</div>{% endif %}
+                                {% for error in form.mercado_pago_access_token.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.mercado_pago_public_key.id_for_label }}">Public key</label>
+                                {{ form.mercado_pago_public_key }}
+                                {% for error in form.mercado_pago_public_key.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.mercado_pago_webhook_secret.id_for_label }}">Segredo do webhook</label>
+                            {{ form.mercado_pago_webhook_secret }}
+                            {% if form.mercado_pago_webhook_secret.help_text %}<div class="module-table__meta">{{ form.mercado_pago_webhook_secret.help_text }}</div>{% endif %}
+                            {% for error in form.mercado_pago_webhook_secret.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                        </div>
+
+                        {% if object.mensagem_status %}
+                            <div class="module-empty module-empty--compact">
+                                <h2 class="module-empty__title">Retorno da ultima verificacao</h2>
+                                <p class="module-empty__text">{{ object.mensagem_status }}</p>
+                            </div>
+                        {% endif %}
+
+                        {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                        <div class="user-form__actions">
+                            <button type="submit" class="btn btn--primary">Salvar configuracoes</button>
+                            <button type="submit" name="acao" value="testar_conexao" class="btn btn--soft">Testar conexao</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

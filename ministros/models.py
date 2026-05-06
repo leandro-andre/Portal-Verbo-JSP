@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models
@@ -40,6 +41,14 @@ class Ministro(models.Model):
         ALEATORIA = "aleatoria", "Chave aleatoria"
 
     nome_completo = models.CharField("Nome completo", max_length=160)
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Usuario vinculado",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="perfil_ministerial",
+    )
     nome_ministerial = models.CharField("Nome ministerial/publico", max_length=160, blank=True)
     tipo = models.CharField("Tipo", max_length=20, choices=Tipo.choices, default=Tipo.VISITANTE)
     status = models.CharField(

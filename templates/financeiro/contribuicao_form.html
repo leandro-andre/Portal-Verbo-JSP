@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Contribuir - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Financeiro</p>
+                    <h1 class="user-hero__title">Nova contribuicao</h1>
+                    <p class="user-hero__text">Escolha o tipo, informe o valor e conclua o pagamento pelo ambiente seguro do Mercado Pago.</p>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__body">
+                    <form method="post" class="user-form">
+                        {% csrf_token %}
+
+                        <div class="user-form__grid">
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.tipo.id_for_label }}">Tipo</label>
+                                {{ form.tipo }}
+                                {% for error in form.tipo.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="{{ form.valor.id_for_label }}">Valor</label>
+                                {{ form.valor }}
+                                {% for error in form.valor.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.descricao.id_for_label }}">Descricao opcional</label>
+                            {{ form.descricao }}
+                            {% for error in form.descricao.errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+                        </div>
+
+                        {% for error in form.non_field_errors %}<div class="form-error">{{ error }}</div>{% endfor %}
+
+                        <div class="user-form__actions">
+                            <button type="submit" class="btn btn--primary">Contribuir</button>
+                            <a class="btn btn--outline" href="{% url 'usuarios:dashboard' %}">Cancelar</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

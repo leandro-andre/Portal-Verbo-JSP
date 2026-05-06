@@ -2,13 +2,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
 from departamentos.models import DepartamentoMembro
 from departamentos.permissions import get_departamentos_gerenciaveis
-from governanca.permissions import usuario_eh_secretaria
+from usuarios.permissions import usuario_tem_acesso_secretaria
 
 
 def usuario_pode_gerenciar_eventos(usuario):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser or usuario_eh_secretaria(usuario):
+    if usuario_tem_acesso_secretaria(usuario):
         return True
     return get_departamentos_gerenciaveis(
         usuario,

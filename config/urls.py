@@ -26,6 +26,7 @@ urlpatterns = [
     path("", include("eventos.urls")),
     path("", include("noticias.urls")),
     path("", include("ministros.urls")),
+    path("financeiro/", include("financeiro.urls")),
 ]
 
 if settings.DEBUG:

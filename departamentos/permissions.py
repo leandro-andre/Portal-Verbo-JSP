@@ -2,6 +2,10 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import get_object_or_404
 
 from .models import Departamento, DepartamentoMembro
+from usuarios.permissions import (
+    usuario_eh_lider_departamento,
+    usuario_tem_acesso_total_sistema,
+)
 
 
 PAPEIS_GESTAO_DEPARTAMENTO = (DepartamentoMembro.Papel.LIDER,)
@@ -17,7 +21,7 @@ def _as_departamento_id(departamento):
 def get_departamentos_do_usuario(usuario, somente_ativos=True):
     if not getattr(usuario, "is_authenticated", False):
         return Departamento.objects.none()
-    if usuario.is_superuser:
+    if usuario_tem_acesso_total_sistema(usuario):
         return Departamento.objects.all()
 
     filtros = {"participacoes__membro": usuario}
@@ -29,7 +33,7 @@ def get_departamentos_do_usuario(usuario, somente_ativos=True):
 def usuario_pertence_departamento(usuario, departamento, somente_ativo=True):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser:
+    if usuario_tem_acesso_total_sistema(usuario):
         return True
 
     filtros = {
@@ -44,7 +48,7 @@ def usuario_pertence_departamento(usuario, departamento, somente_ativo=True):
 def usuario_tem_cargo_no_departamento(usuario, departamento, papeis, somente_ativo=True):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser:
+    if usuario_tem_acesso_total_sistema(usuario):
         return True
 
     filtros = {
@@ -58,17 +62,13 @@ def usuario_tem_cargo_no_departamento(usuario, departamento, papeis, somente_ati
 
 
 def usuario_eh_lider(usuario, departamento):
-    return usuario_tem_cargo_no_departamento(
-        usuario,
-        departamento,
-        PAPEIS_GESTAO_ESCALA,
-    )
+    return usuario_eh_lider_departamento(usuario, departamento)
 
 
 def get_departamentos_gerenciaveis(usuario, papeis=None):
     if not getattr(usuario, "is_authenticated", False):
         return Departamento.objects.none()
-    if usuario.is_superuser:
+    if usuario_tem_acesso_total_sistema(usuario):
         return Departamento.objects.all()
 
     papeis = tuple(papeis or PAPEIS_GESTAO_DEPARTAMENTO)
@@ -79,17 +79,27 @@ def get_departamentos_gerenciaveis(usuario, papeis=None):
     ).distinct()
 
 
+def usuario_pode_acessar_departamentos(usuario):
+    return bool(
+        getattr(usuario, "is_authenticated", False)
+        and (
+            usuario_pode_criar_departamentos(usuario)
+            or get_departamentos_do_usuario(usuario).exists()
+        )
+    )
+
+
 def usuario_pode_criar_departamentos(usuario):
     return bool(
         getattr(usuario, "is_authenticated", False)
-        and (usuario.is_staff or usuario.is_superuser)
+        and usuario_tem_acesso_total_sistema(usuario)
     )
 
 
 def usuario_pode_gerenciar_cultos_padrao(usuario):
     return bool(
         getattr(usuario, "is_authenticated", False)
-        and (usuario.is_staff or usuario.is_superuser)
+        and usuario_tem_acesso_total_sistema(usuario)
     )
 
 

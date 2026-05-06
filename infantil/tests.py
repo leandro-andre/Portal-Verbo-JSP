@@ -227,7 +227,7 @@ class InfantilPermissionsTests(TestCase):
             password="senha-forte-123",
             first_name="Staff",
             email="staff.infantil@example.com",
-            is_staff=True,
+            eh_pastor=True,
         )
         self.lider_sala = user_model.objects.create_user(
             username="lider.sala.infantil",

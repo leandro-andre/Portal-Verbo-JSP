@@ -1,14 +1,12 @@
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 
-from governanca.permissions import usuario_eh_secretaria
+from usuarios.permissions import usuario_tem_acesso_secretaria
 
 
 def usuario_pode_gerenciar_verbo_no_lar(usuario):
     if not getattr(usuario, "is_authenticated", False):
         return False
-    if usuario.is_superuser or usuario_eh_secretaria(usuario):
-        return True
-    if usuario.is_staff:
+    if usuario_tem_acesso_secretaria(usuario):
         return True
     return False
 
