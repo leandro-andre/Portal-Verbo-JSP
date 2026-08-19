@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+
+from church_journey.selectors import get_legacy_department_eligible_user_filter
 
 from .models import Departamento, DepartamentoMembro
 from usuarios.permissions import usuario_pode_ser_escalado_departamento
@@ -45,9 +46,7 @@ class DepartamentoMembroForm(forms.ModelForm):
 
         user_model = get_user_model()
         self.fields["membro"].queryset = user_model.objects.filter(
-            Q(status_eclesiastico=user_model.StatusEclesiastico.MEMBRO)
-            | Q(eh_pastor=True)
-            | Q(is_superuser=True),
+            get_legacy_department_eligible_user_filter(),
             is_active=True,
         ).order_by("first_name", "last_name", "username")
         self.fields["membro"].widget.attrs.setdefault("class", "form-control")

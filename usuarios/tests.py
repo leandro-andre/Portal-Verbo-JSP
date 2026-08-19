@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -19,6 +20,12 @@ from escalas.permissions import usuario_pode_acessar_escalas
 from ministros.models import Ministro
 from pessoas.models import Person
 from usuarios.context_processors import internal_permissions
+from usuarios.roles import (
+    PASTOR_GROUP,
+    PORTAL_ADMIN_GROUP,
+    SECRETARY_GROUP,
+    setup_portal_roles,
+)
 
 from .models import AccessRequest
 from .permissions import (
@@ -37,6 +44,11 @@ from .permissions import (
     usuario_tem_acesso_total_pastoral,
     usuario_tem_acesso_total_sistema,
 )
+
+
+def assign_role(usuario, group_name):
+    setup_portal_roles()
+    usuario.groups.add(Group.objects.get(name=group_name))
 
 
 class UsuarioQualificacaoTests(TestCase):
@@ -653,8 +665,20 @@ class AdminAccessRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]["id"], self.access_request.id)
 
-    def test_secretaria_atual_pode_listar_solicitacoes(self):
+    def test_departamento_secretaria_nao_concede_global_role(self):
         self.client.force_login(self.make_secretaria())
+
+        response = self.client.get(reverse("access-request-admin-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_global_role_secretaria_pode_listar_solicitacoes(self):
+        secretaria = self.user_model.objects.create_user(
+            username="secretaria.group",
+            password="senha-forte-123",
+        )
+        assign_role(secretaria, SECRETARY_GROUP)
+        self.client.force_login(secretaria)
 
         response = self.client.get(reverse("access-request-admin-list"))
 
@@ -1181,6 +1205,215 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         response = self.client.get(reverse("admin-user-detail", args=[self.portal_user.pk]))
 
         self.assertEqual(response.status_code, 403)
+
+
+class GlobalRolesSetupTests(TestCase):
+    def test_setup_portal_roles_cria_grupos(self):
+        setup_portal_roles()
+
+        self.assertTrue(Group.objects.filter(name=PORTAL_ADMIN_GROUP).exists())
+        self.assertTrue(Group.objects.filter(name=SECRETARY_GROUP).exists())
+        self.assertTrue(Group.objects.filter(name=PASTOR_GROUP).exists())
+
+    def test_setup_portal_roles_e_idempotente(self):
+        setup_portal_roles()
+        setup_portal_roles()
+
+        self.assertEqual(Group.objects.filter(name=PORTAL_ADMIN_GROUP).count(), 1)
+        self.assertEqual(Group.objects.filter(name=SECRETARY_GROUP).count(), 1)
+        self.assertEqual(Group.objects.filter(name=PASTOR_GROUP).count(), 1)
+
+    def test_administrador_recebe_permissions_esperadas(self):
+        setup_portal_roles()
+        group = Group.objects.get(name=PORTAL_ADMIN_GROUP)
+
+        self.assertTrue(group.permissions.filter(codename="add_person").exists())
+        self.assertTrue(group.permissions.filter(codename="approve_accessrequest").exists())
+        self.assertTrue(group.permissions.filter(codename="disable_usuario").exists())
+
+    def test_secretaria_recebe_permissions_esperadas(self):
+        setup_portal_roles()
+        group = Group.objects.get(name=SECRETARY_GROUP)
+
+        self.assertTrue(group.permissions.filter(codename="change_person").exists())
+        self.assertTrue(group.permissions.filter(codename="reject_accessrequest").exists())
+        self.assertTrue(group.permissions.filter(codename="view_usuario").exists())
+        self.assertFalse(group.permissions.filter(codename="disable_usuario").exists())
+
+    def test_pastor_recebe_permissions_esperadas(self):
+        setup_portal_roles()
+        group = Group.objects.get(name=PASTOR_GROUP)
+
+        self.assertTrue(group.permissions.filter(codename="view_person").exists())
+        self.assertTrue(group.permissions.filter(codename="view_accessrequest").exists())
+        self.assertTrue(group.permissions.filter(codename="view_usuario").exists())
+        self.assertFalse(group.permissions.filter(codename="approve_accessrequest").exists())
+
+    def test_midia_nao_e_criada_como_global_role(self):
+        setup_portal_roles()
+
+        self.assertFalse(Group.objects.filter(name="Midia").exists())
+        self.assertFalse(Group.objects.filter(name="Mídia").exists())
+
+    def test_papeis_departamentais_nao_sao_criados_como_groups_globais(self):
+        setup_portal_roles()
+
+        self.assertFalse(Group.objects.filter(name="Lider").exists())
+        self.assertFalse(Group.objects.filter(name="Professor").exists())
+        self.assertFalse(Group.objects.filter(name="Auxiliar").exists())
+
+
+class GlobalRolesAuthorizationMatrixTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.access_request = AccessRequest.objects.create(
+            full_name="Ana Souza",
+            birth_date=date(1991, 6, 11),
+            email="ana@example.com",
+            phone="81988887777",
+        )
+        self.target_user = self.user_model.objects.create_user(
+            username="target.user",
+            password="Senha-forte-123",
+            person=self.person,
+        )
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(
+            username=username,
+            password="Senha-forte-123",
+        )
+        assign_role(usuario, group_name)
+        return usuario
+
+    def test_administrador_funcional_nao_superuser_gerencia_modulos(self):
+        admin = self.make_user_with_role("portal.admin.functional", PORTAL_ADMIN_GROUP)
+        self.client.force_login(admin)
+
+        people_list = self.client.get(reverse("person-list"))
+        people_create = self.client.post(
+            reverse("person-list"),
+            {"full_name": "Nova Pessoa", "birth_date": "1995-01-01"},
+            content_type="application/json",
+        )
+        people_update = self.client.patch(
+            reverse("person-detail", args=[self.person.pk]),
+            {"preferred_name": "Mari"},
+            content_type="application/json",
+        )
+        request_list = self.client.get(reverse("access-request-admin-list"))
+        approve = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+        users_list = self.client.get(reverse("admin-user-list"))
+        disable = self.client.post(reverse("admin-user-disable", args=[self.target_user.pk]))
+        enable = self.client.post(reverse("admin-user-enable", args=[self.target_user.pk]))
+
+        self.assertFalse(admin.is_superuser)
+        self.assertEqual(people_list.status_code, 200)
+        self.assertEqual(people_create.status_code, 201)
+        self.assertEqual(people_update.status_code, 200)
+        self.assertEqual(request_list.status_code, 200)
+        self.assertEqual(approve.status_code, 200)
+        self.assertEqual(users_list.status_code, 200)
+        self.assertEqual(disable.status_code, 200)
+        self.assertEqual(enable.status_code, 200)
+
+    def test_secretaria_pode_fluxo_de_pessoas_e_solicitacoes_mas_nao_lifecycle_usuario(self):
+        secretaria = self.make_user_with_role("secretary.functional", SECRETARY_GROUP)
+        self.client.force_login(secretaria)
+
+        self.assertEqual(self.client.get(reverse("person-list")).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("person-list"),
+                {"full_name": "Pessoa Secretaria", "birth_date": "1995-01-01"},
+                content_type="application/json",
+            ).status_code,
+            201,
+        )
+        self.assertEqual(
+            self.client.patch(
+                reverse("person-detail", args=[self.person.pk]),
+                {"preferred_name": "Mari"},
+                content_type="application/json",
+            ).status_code,
+            200,
+        )
+        self.assertEqual(self.client.get(reverse("access-request-admin-list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("admin-user-list")).status_code, 200)
+        self.assertEqual(self.client.post(reverse("admin-user-disable", args=[self.target_user.pk])).status_code, 403)
+
+    def test_pastor_tem_somente_leitura_nos_modulos_novos(self):
+        pastor = self.make_user_with_role("pastor.functional", PASTOR_GROUP)
+        self.client.force_login(pastor)
+
+        self.assertEqual(self.client.get(reverse("person-list")).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("person-list"),
+                {"full_name": "Pessoa Pastor", "birth_date": "1995-01-01"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.patch(
+                reverse("person-detail", args=[self.person.pk]),
+                {"preferred_name": "Mari"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get(reverse("access-request-admin-list")).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"create_new_person": True},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get(reverse("admin-user-list")).status_code, 200)
+        self.assertEqual(self.client.post(reverse("admin-user-disable", args=[self.target_user.pk])).status_code, 403)
+
+    def test_usuario_comum_recebe_403_sem_logout(self):
+        comum = self.user_model.objects.create_user(
+            username="common.no.roles",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(comum)
+
+        response = self.client.get(reverse("person-list"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_superuser_passa_sem_group_mas_nao_recebe_role_funcional(self):
+        superuser = self.user_model.objects.create_superuser(
+            username="technical.superuser",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(superuser)
+
+        self.assertEqual(self.client.get(reverse("person-list")).status_code, 200)
+        current_user = self.client.get(reverse("auth-current-user")).json()["user"]
+        self.assertEqual(current_user["roles"], [])
+        self.assertIn("PEOPLE_VIEW", current_user["capabilities"])
+
+    def test_current_user_retorna_roles_e_capabilities(self):
+        secretaria = self.make_user_with_role("secretary.current", SECRETARY_GROUP)
+        self.client.force_login(secretaria)
+
+        current_user = self.client.get(reverse("auth-current-user")).json()["user"]
+
+        self.assertEqual(current_user["roles"], ["SECRETARY"])
+        self.assertIn("PEOPLE_VIEW", current_user["capabilities"])
+        self.assertIn("ACCESS_REQUEST_APPROVE", current_user["capabilities"])
+        self.assertNotIn("USER_DISABLE", current_user["capabilities"])
 
 
 class PermissoesPorPerfilTests(TestCase):

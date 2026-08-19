@@ -195,6 +195,11 @@
   gap: 9px;
 }
 
+.topbar__user-copy {
+  display: grid;
+  gap: 1px;
+}
+
 .topbar__user-avatar {
   background: #eef2f7;
   color: #344054;
@@ -203,6 +208,12 @@
 .topbar__user-name {
   color: #344054;
   font-size: 14px;
+  font-weight: 700;
+}
+
+.topbar__user-role {
+  color: var(--color-text-muted);
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1205,7 +1216,7 @@
     padding: 0 16px;
   }
 
-  .topbar__user-name {
+  .topbar__user-copy {
     display: none;
   }
 

@@ -5,6 +5,7 @@ import { ApiHttpError } from '../api/people'
 import { UserAccessBusinessError, UserAccessHttpError } from '../api/users'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import PersonAvatar from '../components/people/PersonAvatar'
+import { useCan } from '../hooks/useAuth'
 import { usePerson } from '../hooks/usePeople'
 import { useDisableUser, useEnableUser, useUser } from '../hooks/useUsers'
 import type { PortalUser } from '../types/user'
@@ -105,6 +106,8 @@ function UserAccessPage() {
   const [dialogMode, setDialogMode] = useState<'disable' | 'enable' | null>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const canDisableUser = useCan('USER_DISABLE')
+  const canEnableUser = useCan('USER_ENABLE')
   const isNotFound = !isValidId || (personError instanceof ApiHttpError && personError.status === 404)
   const isForbidden = userError instanceof UserAccessHttpError && userError.status === 403
 
@@ -215,7 +218,7 @@ function UserAccessPage() {
               <Link className="button button--secondary" to={`/pessoas/${person.id}`}>
                 Ver perfil
               </Link>
-              {user.access_status === 'ACTIVE' ? (
+              {user.access_status === 'ACTIVE' && canDisableUser ? (
                 <button
                   className="button button--primary"
                   type="button"
@@ -228,7 +231,7 @@ function UserAccessPage() {
                   Bloquear acesso
                 </button>
               ) : null}
-              {user.access_status === 'BLOCKED' ? (
+              {user.access_status === 'BLOCKED' && canEnableUser ? (
                 <button
                   className="button button--primary"
                   type="button"

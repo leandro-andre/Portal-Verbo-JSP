@@ -1,5 +1,7 @@
 from django.apps import apps
 
+from church_journey.selectors import is_legacy_department_eligible_for_user_account
+
 
 def _is_authenticated(usuario):
     return bool(getattr(usuario, "is_authenticated", False))
@@ -127,7 +129,7 @@ def usuario_pode_montar_escala(usuario, departamento):
 
 
 def usuario_pode_ser_escalado_departamento(usuario):
-    return usuario_eh_membro(usuario) or usuario_tem_acesso_total_sistema(usuario)
+    return is_legacy_department_eligible_for_user_account(usuario)
 
 
 def usuario_pode_ser_escalado_verbo_no_lar(usuario):

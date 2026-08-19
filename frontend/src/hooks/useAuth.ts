@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { activateAccount, getCurrentUser, login, logout } from '../api/auth'
-import type { ActivateAccountInput, CurrentUserResponse, LoginInput } from '../types/auth'
+import type { ActivateAccountInput, Capability, CurrentUserResponse, LoginInput } from '../types/auth'
 
 export const currentUserQueryKey = ['auth', 'current-user'] as const
 
@@ -41,4 +41,9 @@ export function useActivateAccount() {
   return useMutation({
     mutationFn: (payload: ActivateAccountInput) => activateAccount(payload),
   })
+}
+
+export function useCan(capability: Capability) {
+  const { data: currentUser } = useCurrentUser()
+  return Boolean(currentUser?.user?.capabilities.includes(capability))
 }

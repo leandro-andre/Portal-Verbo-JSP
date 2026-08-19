@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PeopleTable from '../components/people/PeopleTable'
+import { useCan } from '../hooks/useAuth'
 import { usePeople } from '../hooks/usePeople'
 
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
@@ -16,6 +17,7 @@ function PeoplePage() {
     return state?.successMessage ?? null
   })
   const { data: people = [], isError, isLoading, refetch } = usePeople()
+  const canCreatePeople = useCan('PEOPLE_CREATE')
   const normalizedSearch = search.trim().toLowerCase()
 
   const filteredPeople = people.filter((person) => {
@@ -49,13 +51,15 @@ function PeoplePage() {
           </p>
         </div>
 
-        <Link
-          className="button button--primary"
-          to="/pessoas/nova"
-        >
-          <Plus size={17} aria-hidden="true" />
-          Nova pessoa
-        </Link>
+        {canCreatePeople ? (
+          <Link
+            className="button button--primary"
+            to="/pessoas/nova"
+          >
+            <Plus size={17} aria-hidden="true" />
+            Nova pessoa
+          </Link>
+        ) : null}
       </div>
 
       {successMessage ? (

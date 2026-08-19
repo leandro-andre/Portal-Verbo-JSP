@@ -6,6 +6,7 @@ import { ApiHttpError } from '../api/people'
 import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
+import { useCan } from '../hooks/useAuth'
 import { usePerson, useUpdatePerson } from '../hooks/usePeople'
 import type { Person, PersonStatus } from '../types/person'
 
@@ -123,10 +124,14 @@ function LifecycleDialog({
 }
 
 function PersonProfile({
+  canChangePeople,
+  canViewUsers,
   onLifecycleClick,
   person,
   successMessage,
 }: {
+  canChangePeople: boolean
+  canViewUsers: boolean
   onLifecycleClick: () => void
   person: Person
   successMessage: string | null
@@ -149,16 +154,18 @@ function PersonProfile({
           {hasDifferentFullName ? <p>{person.full_name}</p> : null}
           <PersonStatusBadge status={person.status} />
         </div>
-        <div className="profile-actions">
-          <Link className="button button--primary" to={`/pessoas/${person.id}/editar`}>
-            <Edit3 size={17} aria-hidden="true" />
-            Editar pessoa
-          </Link>
-          <button className="button button--secondary" type="button" onClick={onLifecycleClick}>
-            <RefreshCcw size={17} aria-hidden="true" />
-            {lifecycleLabel}
-          </button>
-        </div>
+        {canChangePeople ? (
+          <div className="profile-actions">
+            <Link className="button button--primary" to={`/pessoas/${person.id}/editar`}>
+              <Edit3 size={17} aria-hidden="true" />
+              Editar pessoa
+            </Link>
+            <button className="button button--secondary" type="button" onClick={onLifecycleClick}>
+              <RefreshCcw size={17} aria-hidden="true" />
+              {lifecycleLabel}
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {successMessage ? (
@@ -196,9 +203,11 @@ function PersonProfile({
                   value={<AccessStatusBadge status={person.portal_user.access_status} />}
                 />
               </dl>
-              <Link className="button button--secondary" to={`/pessoas/${person.id}/acesso`}>
-                Gerenciar acesso
-              </Link>
+              {canViewUsers ? (
+                <Link className="button button--secondary" to={`/pessoas/${person.id}/acesso`}>
+                  Gerenciar acesso
+                </Link>
+              ) : null}
             </div>
           ) : (
             <p className="page-heading__description">Sem acesso ao Portal</p>
@@ -216,6 +225,8 @@ function PersonProfilePage() {
   const isValidId = Number.isInteger(personId) && personId > 0
   const { data: person, error, isError, isLoading, refetch } = usePerson(personId)
   const updatePerson = useUpdatePerson(personId)
+  const canChangePeople = useCan('PEOPLE_CHANGE')
+  const canViewUsers = useCan('USER_VIEW')
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
   const [lifecycleSuccessMessage, setLifecycleSuccessMessage] = useState<string | null>(null)
@@ -271,6 +282,8 @@ function PersonProfilePage() {
       ) : person ? (
         <>
           <PersonProfile
+            canChangePeople={canChangePeople}
+            canViewUsers={canViewUsers}
             onLifecycleClick={() => {
               setLifecycleError(null)
               setIsLifecycleDialogOpen(true)

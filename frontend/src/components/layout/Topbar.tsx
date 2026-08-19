@@ -12,6 +12,13 @@ function Topbar({ title, isSidebarCollapsed, onToggleSidebar }: TopbarProps) {
   const { data: currentUser } = useCurrentUser()
   const logout = useLogout()
   const displayName = currentUser?.user?.display_name || 'Usuario'
+  const roleLabel = currentUser?.user?.roles[0]
+    ? {
+        PORTAL_ADMIN: 'Administrador do Portal',
+        SECRETARY: 'Secretaria',
+        PASTOR: 'Pastor',
+      }[currentUser.user.roles[0]]
+    : 'Acesso administrativo'
   const initials = displayName
     .split(' ')
     .filter(Boolean)
@@ -42,7 +49,10 @@ function Topbar({ title, isSidebarCollapsed, onToggleSidebar }: TopbarProps) {
           <span className="topbar__user-avatar" aria-hidden="true">
             {initials}
           </span>
-          <span className="topbar__user-name">{displayName}</span>
+          <span className="topbar__user-copy">
+            <span className="topbar__user-name">{displayName}</span>
+            <span className="topbar__user-role">{roleLabel}</span>
+          </span>
         </div>
         <button
           className="icon-button"

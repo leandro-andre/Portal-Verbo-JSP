@@ -47,6 +47,10 @@ class Usuario(AbstractUser):
     class Meta:
         verbose_name = "Usuário"
         verbose_name_plural = "Usuários"
+        permissions = [
+            ("disable_usuario", "Can disable usuario access"),
+            ("enable_usuario", "Can enable usuario access"),
+        ]
 
     @property
     def is_membro(self):
@@ -135,6 +139,10 @@ class AccessRequest(models.Model):
         ordering = ["-created_at", "-id"]
         verbose_name = "Solicitacao de acesso"
         verbose_name_plural = "Solicitacoes de acesso"
+        permissions = [
+            ("approve_accessrequest", "Can approve access request"),
+            ("reject_accessrequest", "Can reject access request"),
+        ]
         indexes = [
             models.Index(fields=["status", "email"], name="access_req_status_email_idx"),
             models.Index(fields=["status", "phone"], name="access_req_status_phone_idx"),

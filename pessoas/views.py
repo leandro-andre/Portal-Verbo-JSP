@@ -7,11 +7,23 @@ from .serializers import PersonSerializer
 
 
 POSSIBLE_DUPLICATE_CODE = "POSSIBLE_DUPLICATE"
+ACTION_PERMISSIONS = {
+    "list": "pessoas.view_person",
+    "retrieve": "pessoas.view_person",
+    "create": "pessoas.add_person",
+    "update": "pessoas.change_person",
+    "partial_update": "pessoas.change_person",
+}
 
 
 class IsActiveAuthenticated(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user.is_authenticated and request.user.is_active)
+        permission = ACTION_PERMISSIONS.get(getattr(view, "action", None))
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and (permission is None or request.user.has_perm(permission))
+        )
 
 
 class PersonViewSet(

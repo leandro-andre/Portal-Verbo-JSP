@@ -1,19 +1,23 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from pessoas.models import Person
+from usuarios.roles import PORTAL_ADMIN_GROUP, setup_portal_roles
 
 
 class PersonApiTests(APITestCase):
     def setUp(self):
+        setup_portal_roles()
         self.user = get_user_model().objects.create_user(
             username="person.api",
             password="senha-forte-123",
         )
+        self.user.groups.add(Group.objects.get(name=PORTAL_ADMIN_GROUP))
         self.client.force_authenticate(self.user)
 
     def test_get_people_exige_autenticacao(self):

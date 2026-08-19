@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "governanca",
     "conteudo_interno",
+    "church_journey",
     "usuarios",
     "pessoas",
     "core",

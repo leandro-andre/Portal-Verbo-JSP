@@ -16,7 +16,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from pessoas.models import Person
-from usuarios.permissions import usuario_tem_acesso_secretaria
+from usuarios.roles import (
+    ACCESS_REQUEST_APPROVE,
+    ACCESS_REQUEST_REJECT,
+    ACCESS_REQUEST_VIEW,
+    USER_DISABLE,
+    USER_ENABLE,
+    USER_VIEW,
+    get_capabilities,
+    get_role_codes,
+)
 
 from .models import AccessRequest
 from .serializers import (
@@ -61,6 +70,9 @@ def _current_user_payload(user):
             "is_active": user.is_active,
             "is_staff": user.is_staff,
             "is_superuser": user.is_superuser,
+            "person_id": user.person_id,
+            "roles": get_role_codes(user),
+            "capabilities": get_capabilities(user),
         },
     }
 
@@ -189,7 +201,29 @@ def activate_account_view(request):
 
 class CanReviewAccessRequests(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user.is_active and usuario_tem_acesso_secretaria(request.user))
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(ACCESS_REQUEST_VIEW)
+        )
+
+
+class CanApproveAccessRequests(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(ACCESS_REQUEST_APPROVE)
+        )
+
+
+class CanRejectAccessRequests(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(ACCESS_REQUEST_REJECT)
+        )
 
 
 class CanManageUsers(BasePermission):
@@ -197,7 +231,25 @@ class CanManageUsers(BasePermission):
         return bool(
             request.user.is_authenticated
             and request.user.is_active
-            and request.user.is_superuser
+            and request.user.has_perm(USER_VIEW)
+        )
+
+
+class CanDisableUsers(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(USER_DISABLE)
+        )
+
+
+class CanEnableUsers(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(USER_ENABLE)
         )
 
 
@@ -270,7 +322,7 @@ class AdminAccessRequestDetailView(APIView):
 
 
 class AdminAccessRequestApproveView(APIView):
-    permission_classes = [CanReviewAccessRequests]
+    permission_classes = [CanApproveAccessRequests]
 
     def post(self, request, pk):
         serializer = ApproveAccessRequestSerializer(data=request.data)
@@ -303,7 +355,7 @@ class AdminAccessRequestApproveView(APIView):
 
 
 class AdminAccessRequestRejectView(APIView):
-    permission_classes = [CanReviewAccessRequests]
+    permission_classes = [CanRejectAccessRequests]
 
     def post(self, request, pk):
         serializer = RejectAccessRequestSerializer(data=request.data)
@@ -348,6 +400,8 @@ class AdminUserDetailView(APIView):
 
 
 class AdminUserDisableView(AdminUserDetailView):
+    permission_classes = [CanDisableUsers]
+
     def post(self, request, pk):
         usuario = self.get_object(pk)
         try:
@@ -362,6 +416,8 @@ class AdminUserDisableView(AdminUserDetailView):
 
 
 class AdminUserEnableView(AdminUserDetailView):
+    permission_classes = [CanEnableUsers]
+
     def post(self, request, pk):
         usuario = self.get_object(pk)
         try:

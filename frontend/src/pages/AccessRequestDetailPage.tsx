@@ -9,6 +9,7 @@ import {
   useApproveAccessRequest,
   useRejectAccessRequest,
 } from '../hooks/useAccessRequests'
+import { useCan } from '../hooks/useAuth'
 import type { AccessRequest, AccessRequestPerson } from '../types/accessRequest'
 
 type IdentityResolution =
@@ -167,8 +168,10 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
   const [rejectionReason, setRejectionReason] = useState('')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [activationUrl, setActivationUrl] = useState<string | null>(null)
+  const canApproveRequest = useCan('ACCESS_REQUEST_APPROVE')
+  const canRejectRequest = useCan('ACCESS_REQUEST_REJECT')
   const isPending = request.status === 'PENDING'
-  const canApprove = isPending && resolution !== null
+  const canApprove = isPending && canApproveRequest && resolution !== null
 
   const handleBusinessError = (error: unknown) => {
     if (error instanceof AccessRequestBusinessError) {
@@ -268,7 +271,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
           </dl>
         </section>
 
-        {isPending ? (
+        {isPending && canApproveRequest ? (
           <section className="profile-section">
             <h2>Resolucao de identidade</h2>
             <div className="identity-resolution">
@@ -303,31 +306,35 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
         ) : null}
       </div>
 
-      {isPending ? (
+      {isPending && (canRejectRequest || canApproveRequest) ? (
         <div className="review-actions">
-          <button
-            className="button button--secondary"
-            type="button"
-            onClick={() => {
-              setDialogError(null)
-              setDialogMode('reject')
-            }}
-          >
-            <XCircle size={17} aria-hidden="true" />
-            Rejeitar solicitacao
-          </button>
-          <button
-            className="button button--primary"
-            type="button"
-            disabled={!canApprove}
-            onClick={() => {
-              setDialogError(null)
-              setDialogMode('approve')
-            }}
-          >
-            <CheckCircle2 size={17} aria-hidden="true" />
-            Aprovar acesso
-          </button>
+          {canRejectRequest ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => {
+                setDialogError(null)
+                setDialogMode('reject')
+              }}
+            >
+              <XCircle size={17} aria-hidden="true" />
+              Rejeitar solicitacao
+            </button>
+          ) : null}
+          {canApproveRequest ? (
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={!canApprove}
+              onClick={() => {
+                setDialogError(null)
+                setDialogMode('approve')
+              }}
+            >
+              <CheckCircle2 size={17} aria-hidden="true" />
+              Aprovar acesso
+            </button>
+          ) : null}
         </div>
       ) : null}
 

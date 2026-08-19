@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import './App.css'
 import AppShell from './components/layout/AppShell'
 import AccessRequestPage from './pages/AccessRequestPage'
@@ -13,6 +14,30 @@ import PeoplePage from './pages/PeoplePage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
 import { useCurrentUser } from './hooks/useAuth'
+import type { Capability } from './types/auth'
+
+function AccessDenied() {
+  return (
+    <section className="person-profile-page">
+      <div className="state-panel state-panel--error">
+        <h1>Acesso negado</h1>
+        <p>Sua sessao atual nao possui permissao para acessar esta area.</p>
+      </div>
+    </section>
+  )
+}
+
+function AuthorizedRoute({
+  capability,
+  children,
+}: {
+  capability: Capability
+  children: ReactNode
+}) {
+  const { data: currentUser } = useCurrentUser()
+  const canAccess = Boolean(currentUser?.user?.capabilities.includes(capability))
+  return canAccess ? children : <AccessDenied />
+}
 
 function AdminRoutes() {
   const { data: currentUser, isError, isLoading } = useCurrentUser()
@@ -39,14 +64,14 @@ function AdminRoutes() {
     <AppShell>
       <Routes>
         <Route path="/" element={<Navigate to="/pessoas" replace />} />
-        <Route path="/pessoas" element={<PeoplePage />} />
-        <Route path="/pessoas/nova" element={<PersonCreatePage />} />
-        <Route path="/pessoas/:id/acesso" element={<UserAccessPage />} />
-        <Route path="/pessoas/:id/editar" element={<PersonEditPage />} />
-        <Route path="/pessoas/:id" element={<PersonProfilePage />} />
-        <Route path="/solicitacoes-acesso" element={<AccessRequestsPage />} />
-        <Route path="/solicitacoes-acesso/:id" element={<AccessRequestDetailPage />} />
-        <Route path="/usuarios" element={<UsersPage />} />
+        <Route path="/pessoas" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PeoplePage /></AuthorizedRoute>} />
+        <Route path="/pessoas/nova" element={<AuthorizedRoute capability="PEOPLE_CREATE"><PersonCreatePage /></AuthorizedRoute>} />
+        <Route path="/pessoas/:id/acesso" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
+        <Route path="/pessoas/:id/editar" element={<AuthorizedRoute capability="PEOPLE_CHANGE"><PersonEditPage /></AuthorizedRoute>} />
+        <Route path="/pessoas/:id" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PersonProfilePage /></AuthorizedRoute>} />
+        <Route path="/solicitacoes-acesso" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestsPage /></AuthorizedRoute>} />
+        <Route path="/solicitacoes-acesso/:id" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestDetailPage /></AuthorizedRoute>} />
+        <Route path="/usuarios" element={<AuthorizedRoute capability="USER_VIEW"><UsersPage /></AuthorizedRoute>} />
         <Route path="*" element={<Navigate to="/pessoas" replace />} />
       </Routes>
     </AppShell>

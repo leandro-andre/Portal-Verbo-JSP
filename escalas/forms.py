@@ -1,5 +1,6 @@
 from django import forms
-from django.db.models import Q
+
+from church_journey.selectors import get_legacy_department_eligible_user_filter
 
 from departamentos.models import DepartamentoMembro
 from usuarios.permissions import usuario_pode_ser_escalado_departamento
@@ -110,9 +111,7 @@ class EscalaItemForm(FormControlMixin, forms.ModelForm):
         if escala is not None:
             self.fields["participacao"].queryset = (
                 DepartamentoMembro.objects.filter(
-                    Q(membro__status_eclesiastico="membro")
-                    | Q(membro__eh_pastor=True)
-                    | Q(membro__is_superuser=True),
+                    get_legacy_department_eligible_user_filter("membro"),
                     departamento=escala.departamento,
                     ativo=True,
                 )
