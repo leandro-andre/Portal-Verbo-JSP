@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "governanca",
     "conteudo_interno",
     "usuarios",
+    "pessoas",
     "core",
     "departamentos",
     "escalas",

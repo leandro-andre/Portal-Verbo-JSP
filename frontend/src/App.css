@@ -1,0 +1,282 @@
+.app-shell {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.portal-header {
+  background: #ffffff;
+  border-bottom: 1px solid #dfe4ec;
+}
+
+.portal-header__content {
+  align-items: center;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 18px 24px;
+}
+
+.portal-header__eyebrow {
+  color: #27364a;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+
+.portal-header__title {
+  color: #697586;
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.portal-nav {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.portal-nav__link {
+  border-radius: 6px;
+  color: #4b5565;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.portal-nav__link:hover,
+.portal-nav__link--active {
+  background: #eef4ff;
+  color: #1d4ed8;
+}
+
+.app-main {
+  margin: 0 auto;
+  max-width: 1120px;
+  padding: 40px 24px;
+}
+
+.people-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.page-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.page-heading__eyebrow {
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.page-heading h1 {
+  color: #111827;
+  font-size: 36px;
+  line-height: 1.15;
+  margin: 0 0 10px;
+}
+
+.page-heading__description {
+  color: #697586;
+  margin: 0;
+  max-width: 620px;
+}
+
+.button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 40px;
+  padding: 9px 14px;
+}
+
+.button--primary {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.button--primary:hover {
+  background: #1e40af;
+}
+
+.button--secondary {
+  background: #ffffff;
+  border-color: #cfd8e3;
+  color: #27364a;
+}
+
+.button--secondary:hover {
+  background: #f8fafc;
+  border-color: #9aa4b2;
+}
+
+.people-toolbar {
+  align-items: flex-end;
+  background: #ffffff;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.search-field {
+  color: #364152;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.search-field input {
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  color: #111827;
+  font: inherit;
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
+.search-field input:focus {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
+  outline: none;
+}
+
+.people-count {
+  color: #697586;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.people-list {
+  display: grid;
+  gap: 14px;
+}
+
+.person-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe4ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: auto 1fr auto;
+  padding: 18px;
+}
+
+.person-card__avatar {
+  align-items: center;
+  background: #e0f2fe;
+  border-radius: 50%;
+  color: #075985;
+  display: flex;
+  font-size: 18px;
+  font-weight: 800;
+  height: 48px;
+  justify-content: center;
+  width: 48px;
+}
+
+.person-card__content {
+  min-width: 0;
+}
+
+.person-card__name {
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+
+.person-card__meta,
+.person-card__role {
+  color: #697586;
+  font-size: 14px;
+  margin: 0;
+}
+
+.person-card__role {
+  color: #364152;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.empty-state {
+  background: #ffffff;
+  border: 1px dashed #cfd8e3;
+  border-radius: 8px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.empty-state h2 {
+  color: #111827;
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.empty-state p {
+  color: #697586;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .portal-header__content,
+  .page-heading,
+  .people-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-nav {
+    flex-wrap: wrap;
+  }
+
+  .app-main {
+    padding: 28px 16px;
+  }
+
+  .page-heading h1 {
+    font-size: 30px;
+  }
+
+  .search-field {
+    max-width: none;
+  }
+
+  .people-count {
+    white-space: normal;
+  }
+
+  .person-card {
+    align-items: flex-start;
+    grid-template-columns: auto 1fr;
+  }
+
+  .person-card .button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
