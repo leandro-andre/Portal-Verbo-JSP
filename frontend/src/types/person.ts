@@ -12,3 +12,25 @@ export type Person = {
   created_at: string
   updated_at: string
 }
+
+export type CreatePersonInput = {
+  full_name: string
+  preferred_name?: string
+  birth_date: string
+  email?: string
+  phone?: string
+  allow_possible_duplicate?: boolean
+}
+
+export type PossibleDuplicateCandidate = Pick<
+  Person,
+  'id' | 'display_name' | 'full_name' | 'birth_date'
+>
+
+export type PossibleDuplicateResponse = {
+  code: 'POSSIBLE_DUPLICATE'
+  message: string
+  candidates: PossibleDuplicateCandidate[]
+}
+
+export type ApiValidationErrors = Partial<Record<keyof CreatePersonInput, string[]>>

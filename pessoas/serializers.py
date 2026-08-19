@@ -5,6 +5,11 @@ from .models import Person
 
 
 class PersonSerializer(serializers.ModelSerializer):
+    allow_possible_duplicate = serializers.BooleanField(
+        default=False,
+        required=False,
+        write_only=True,
+    )
     display_name = serializers.CharField(read_only=True)
 
     class Meta:
@@ -18,12 +23,14 @@ class PersonSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "status",
+            "allow_possible_duplicate",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ("id", "display_name", "created_at", "updated_at")
 
     def validate(self, attrs):
+        allow_possible_duplicate = attrs.pop("allow_possible_duplicate", False)
         values = {}
         if self.instance is not None:
             values = {
@@ -48,6 +55,11 @@ class PersonSerializer(serializers.ModelSerializer):
                 "preferred_name": person.preferred_name,
                 "email": person.email,
                 "phone": person.phone,
+                "allow_possible_duplicate": allow_possible_duplicate,
             }
         )
         return attrs
+
+    def create(self, validated_data):
+        validated_data.pop("allow_possible_duplicate", None)
+        return super().create(validated_data)

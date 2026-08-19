@@ -1,12 +1,21 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import AppShell from './components/layout/AppShell'
+import PersonCreatePage from './pages/PersonCreatePage'
 import PeoplePage from './pages/PeoplePage'
 
 function App() {
   return (
-    <AppShell>
-      <PeoplePage />
-    </AppShell>
+    <BrowserRouter>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<Navigate to="/pessoas" replace />} />
+          <Route path="/pessoas" element={<PeoplePage />} />
+          <Route path="/pessoas/nova" element={<PersonCreatePage />} />
+          <Route path="*" element={<Navigate to="/pessoas" replace />} />
+        </Routes>
+      </AppShell>
+    </BrowserRouter>
   )
 }
 

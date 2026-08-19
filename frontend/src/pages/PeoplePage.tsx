@@ -1,13 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Search } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PeopleTable from '../components/people/PeopleTable'
 import { usePeople } from '../hooks/usePeople'
 
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
 
 function PeoplePage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [successMessage] = useState(() => {
+    const state = location.state as { successMessage?: string } | null
+    return state?.successMessage ?? null
+  })
   const { data: people = [], isError, isLoading, refetch } = usePeople()
   const normalizedSearch = search.trim().toLowerCase()
 
@@ -26,6 +33,12 @@ function PeoplePage() {
   const hasPeople = people.length > 0
   const countLabel = `${filteredPeople.length} ${filteredPeople.length === 1 ? 'pessoa' : 'pessoas'}`
 
+  useEffect(() => {
+    if (location.state) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
+
   return (
     <section className="people-page" id="pessoas">
       <div className="page-heading">
@@ -36,16 +49,20 @@ function PeoplePage() {
           </p>
         </div>
 
-        <button
+        <Link
           className="button button--primary"
-          type="button"
-          disabled
-          title="Cadastro de pessoa sera implementado na PVV-006"
+          to="/pessoas/nova"
         >
           <Plus size={17} aria-hidden="true" />
           Nova pessoa
-        </button>
+        </Link>
       </div>
+
+      {successMessage ? (
+        <div className="form-alert form-alert--success" role="status">
+          {successMessage}
+        </div>
+      ) : null}
 
       <div className="people-toolbar" aria-label="Filtros de pessoas">
         <label className="search-field" htmlFor="people-search">

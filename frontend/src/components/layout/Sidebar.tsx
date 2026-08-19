@@ -1,4 +1,5 @@
 import { UsersRound } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 type SidebarProps = {
   isCollapsed: boolean
@@ -21,10 +22,10 @@ function Sidebar({ isCollapsed }: SidebarProps) {
 
       <nav className="sidebar__nav" aria-label="Modulos do portal">
         {!isCollapsed ? <p className="sidebar__section-label">Pessoas</p> : null}
-        <a className="sidebar__link sidebar__link--active" href="#pessoas" aria-current="page">
+        <Link className="sidebar__link sidebar__link--active" to="/pessoas" aria-current="page">
           <UsersRound size={18} aria-hidden="true" />
           {!isCollapsed ? <span>Pessoas</span> : null}
-        </a>
+        </Link>
       </nav>
 
       <div className="sidebar__user">

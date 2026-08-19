@@ -142,12 +142,71 @@ class PersonApiTests(APITestCase):
 
         self.assertEqual(response.json()[0]["status"], "INACTIVE")
 
-    def test_duplicidade_nao_e_bloqueada(self):
+    def test_possivel_duplicidade_sem_confirmacao_nao_cria_person(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        payload = {"full_name": "Maria Silva", "birth_date": "1990-05-10"}
+
+        response = self.client.post(reverse("person-list"), payload, format="json")
+        body = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(body["code"], "POSSIBLE_DUPLICATE")
+        self.assertEqual(len(body["candidates"]), 1)
+        self.assertEqual(body["candidates"][0]["full_name"], "Maria Silva")
+        self.assertEqual(Person.objects.filter(full_name="Maria Silva").count(), 1)
+
+    def test_possivel_duplicidade_com_confirmacao_cria_person(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        payload = {
+            "full_name": "Maria Silva",
+            "birth_date": "1990-05-10",
+            "allow_possible_duplicate": True,
+        }
+
+        response = self.client.post(reverse("person-list"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Person.objects.filter(full_name="Maria Silva").count(), 2)
+
+    def test_confirmacao_de_duplicidade_nao_e_campo_do_model(self):
+        field_names = {field.name for field in Person._meta.fields}
+
+        self.assertNotIn("allow_possible_duplicate", field_names)
+
+    def test_duas_pessoas_identicas_podem_existir_apos_confirmacao(self):
         payload = {"full_name": "Maria Silva", "birth_date": "1990-05-10"}
 
         first_response = self.client.post(reverse("person-list"), payload, format="json")
-        second_response = self.client.post(reverse("person-list"), payload, format="json")
+        second_response = self.client.post(
+            reverse("person-list"),
+            {**payload, "allow_possible_duplicate": True},
+            format="json",
+        )
 
         self.assertEqual(first_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(second_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Person.objects.filter(full_name="Maria Silva").count(), 2)
+
+    def test_duplicidade_detecta_nome_case_insensitive(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.post(
+            reverse("person-list"),
+            {"full_name": "maria silva", "birth_date": "1990-05-10"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], "POSSIBLE_DUPLICATE")
+
+    def test_data_diferente_nao_gera_duplicidade(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.post(
+            reverse("person-list"),
+            {"full_name": "Maria Silva", "birth_date": "1991-05-10"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Person.objects.filter(full_name="Maria Silva").count(), 2)
