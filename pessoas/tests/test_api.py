@@ -123,6 +123,154 @@ class PersonApiTests(APITestCase):
         person.refresh_from_db()
         self.assertEqual(person.preferred_name, "Mari")
 
+    def test_patch_valido_retorna_sucesso(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"email": "maria@example.com", "phone": "81999999999"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["email"], "maria@example.com")
+        self.assertEqual(response.json()["phone"], "81999999999")
+
+    def test_patch_com_nome_e_nascimento_do_proprio_registro_nao_gera_duplicidade(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"full_name": "Maria Silva", "birth_date": "1990-05-10"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_patch_que_colide_com_outra_person_retorna_possivel_duplicidade(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"full_name": "Maria Silva", "birth_date": "1990-05-10"},
+            format="json",
+        )
+        body = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(body["code"], "POSSIBLE_DUPLICATE")
+        self.assertEqual(body["candidates"][0]["full_name"], "Maria Silva")
+        person.refresh_from_db()
+        self.assertEqual(person.full_name, "Ana Souza")
+
+    def test_patch_com_confirmacao_de_duplicidade_permite_alteracao(self):
+        Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {
+                "full_name": "Maria Silva",
+                "birth_date": "1990-05-10",
+                "allow_possible_duplicate": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        person.refresh_from_db()
+        self.assertEqual(person.full_name, "Maria Silva")
+        self.assertEqual(person.birth_date, date(1990, 5, 10))
+
+    def test_confirmacao_de_duplicidade_no_patch_nao_e_persistida(self):
+        person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"allow_possible_duplicate": True, "preferred_name": "Ana"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        person.refresh_from_db()
+        self.assertFalse(hasattr(person, "allow_possible_duplicate"))
+        self.assertEqual(person.preferred_name, "Ana")
+
+    def test_patch_status_active_para_inactive(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"status": Person.Status.INACTIVE},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        person.refresh_from_db()
+        self.assertEqual(person.status, Person.Status.INACTIVE)
+
+    def test_person_continua_existindo_apos_inativacao(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"status": Person.Status.INACTIVE},
+            format="json",
+        )
+
+        self.assertTrue(Person.objects.filter(pk=person.pk).exists())
+
+    def test_patch_status_inactive_para_active(self):
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            status=Person.Status.INACTIVE,
+        )
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"status": Person.Status.ACTIVE},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        person.refresh_from_db()
+        self.assertEqual(person.status, Person.Status.ACTIVE)
+
+    def test_delete_person_nao_e_permitido(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.delete(reverse("person-detail", args=[person.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Person.objects.filter(pk=person.pk).exists())
+
+    def test_lista_continua_retornando_person_inactive(self):
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            status=Person.Status.INACTIVE,
+        )
+
+        response = self.client.get(reverse("person-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()[0]["id"], person.id)
+        self.assertEqual(response.json()[0]["status"], "INACTIVE")
+
+    def test_detalhe_continua_retornando_person_inactive(self):
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            status=Person.Status.INACTIVE,
+        )
+
+        response = self.client.get(reverse("person-detail", args=[person.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], "INACTIVE")
+
     def test_get_detalhe_retorna_person(self):
         person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
 

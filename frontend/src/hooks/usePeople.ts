@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPerson, getPeople, getPerson } from '../api/people'
-import type { CreatePersonInput } from '../types/person'
+import { createPerson, getPeople, getPerson, updatePerson } from '../api/people'
+import type { CreatePersonInput, UpdatePersonInput } from '../types/person'
 
 export const peopleQueryKey = ['people']
 
@@ -30,6 +30,19 @@ export function useCreatePerson() {
     mutationFn: (payload: CreatePersonInput) => createPerson(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
+    },
+  })
+}
+
+export function useUpdatePerson(id: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UpdatePersonInput) => updatePerson(id, payload),
+    onSuccess: async (person) => {
+      queryClient.setQueryData(personQueryKey(id), person)
+      await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
+      await queryClient.invalidateQueries({ queryKey: personQueryKey(id) })
     },
   })
 }

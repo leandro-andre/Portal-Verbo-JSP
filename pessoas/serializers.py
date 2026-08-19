@@ -63,3 +63,7 @@ class PersonSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop("allow_possible_duplicate", None)
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("allow_possible_duplicate", None)
+        return super().update(instance, validated_data)

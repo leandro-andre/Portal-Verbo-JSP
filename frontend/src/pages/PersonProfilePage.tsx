@@ -1,11 +1,12 @@
-import { ArrowLeft } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Edit3, RefreshCcw } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiHttpError } from '../api/people'
 import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
-import { usePerson } from '../hooks/usePeople'
-import type { Person } from '../types/person'
+import { usePerson, useUpdatePerson } from '../hooks/usePeople'
+import type { Person, PersonStatus } from '../types/person'
 
 function formatDate(value: string) {
   if (!value) {
@@ -48,8 +49,89 @@ function ProfileSection({
   )
 }
 
-function PersonProfile({ person }: { person: Person }) {
+function LifecycleDialog({
+  error,
+  isOpen,
+  isPending,
+  onClose,
+  onConfirm,
+  person,
+}: {
+  error: string | null
+  isOpen: boolean
+  isPending: boolean
+  onClose: () => void
+  onConfirm: () => void
+  person: Person
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  const isActive = person.status === 'ACTIVE'
+  const actionLabel = isActive ? 'Inativar pessoa' : 'Reativar pessoa'
+  const pendingLabel = isActive ? 'Inativando...' : 'Reativando...'
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div
+        className="confirm-dialog"
+        role="dialog"
+        aria-labelledby="lifecycle-dialog-title"
+        aria-describedby="lifecycle-dialog-description"
+        aria-modal="true"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !isPending) {
+            onClose()
+          }
+        }}
+      >
+        <h2 id="lifecycle-dialog-title">
+          {isActive ? `Inativar ${person.display_name}?` : `Reativar ${person.display_name}?`}
+        </h2>
+        <p id="lifecycle-dialog-description">
+          {isActive
+            ? 'A pessoa continuara cadastrada e seu historico sera preservado.'
+            : 'A pessoa voltara a aparecer como ativa no cadastro.'}
+        </p>
+
+        {error ? (
+          <div className="form-alert form-alert--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="form-actions">
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={isPending}
+            onClick={onClose}
+            autoFocus
+          >
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            <RefreshCcw size={17} aria-hidden="true" />
+            {isPending ? pendingLabel : actionLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PersonProfile({
+  onLifecycleClick,
+  person,
+  successMessage,
+}: {
+  onLifecycleClick: () => void
+  person: Person
+  successMessage: string | null
+}) {
   const hasDifferentFullName = person.full_name !== person.display_name
+  const lifecycleLabel = person.status === 'ACTIVE' ? 'Inativar pessoa' : 'Reativar pessoa'
 
   return (
     <>
@@ -66,7 +148,23 @@ function PersonProfile({ person }: { person: Person }) {
           {hasDifferentFullName ? <p>{person.full_name}</p> : null}
           <PersonStatusBadge status={person.status} />
         </div>
+        <div className="profile-actions">
+          <Link className="button button--primary" to={`/pessoas/${person.id}/editar`}>
+            <Edit3 size={17} aria-hidden="true" />
+            Editar pessoa
+          </Link>
+          <button className="button button--secondary" type="button" onClick={onLifecycleClick}>
+            <RefreshCcw size={17} aria-hidden="true" />
+            {lifecycleLabel}
+          </button>
+        </div>
       </header>
+
+      {successMessage ? (
+        <div className="form-alert form-alert--success" role="status">
+          {successMessage}
+        </div>
+      ) : null}
 
       <div className="profile-content">
         <ProfileSection title="Dados pessoais">
@@ -92,10 +190,38 @@ function PersonProfile({ person }: { person: Person }) {
 
 function PersonProfilePage() {
   const { id } = useParams()
+  const location = useLocation()
   const personId = Number(id)
   const isValidId = Number.isInteger(personId) && personId > 0
   const { data: person, error, isError, isLoading, refetch } = usePerson(personId)
+  const updatePerson = useUpdatePerson(personId)
+  const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null)
+  const [lifecycleSuccessMessage, setLifecycleSuccessMessage] = useState<string | null>(null)
+  const navigationState = location.state as { successMessage?: string } | null
+  const successMessage = lifecycleSuccessMessage ?? navigationState?.successMessage ?? null
   const isNotFound = !isValidId || (error instanceof ApiHttpError && error.status === 404)
+
+  const handleLifecycleConfirm = async () => {
+    if (!person) {
+      return
+    }
+
+    const nextStatus: PersonStatus = person.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    setLifecycleError(null)
+
+    try {
+      await updatePerson.mutateAsync({ status: nextStatus })
+      setIsLifecycleDialogOpen(false)
+      setLifecycleSuccessMessage(
+        nextStatus === 'ACTIVE'
+          ? 'Pessoa reativada com sucesso.'
+          : 'Pessoa inativada com sucesso.',
+      )
+    } catch {
+      setLifecycleError('Nao foi possivel alterar o status da pessoa.')
+    }
+  }
 
   return (
     <section className="person-profile-page">
@@ -122,7 +248,24 @@ function PersonProfilePage() {
           </button>
         </div>
       ) : person ? (
-        <PersonProfile person={person} />
+        <>
+          <PersonProfile
+            onLifecycleClick={() => {
+              setLifecycleError(null)
+              setIsLifecycleDialogOpen(true)
+            }}
+            person={person}
+            successMessage={successMessage}
+          />
+          <LifecycleDialog
+            error={lifecycleError}
+            isOpen={isLifecycleDialogOpen}
+            isPending={updatePerson.isPending}
+            onClose={() => setIsLifecycleDialogOpen(false)}
+            onConfirm={() => void handleLifecycleConfirm()}
+            person={person}
+          />
+        </>
       ) : null}
     </section>
   )

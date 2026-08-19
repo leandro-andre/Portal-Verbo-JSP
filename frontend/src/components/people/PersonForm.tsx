@@ -12,13 +12,17 @@ import {
 
 type PersonFormProps = {
   duplicate: PossibleDuplicateResponse | null
+  duplicateConfirmLabel?: string
   generalError: string | null
+  initialValues?: PersonCreateFormValues
   isSubmitting: boolean
   onCancel: () => void
   onConfirmDuplicate: () => void
   onDuplicateBack: () => void
   onSubmit: (values: PersonCreateFormData) => void
   setApiFieldError: (setError: UseFormSetError<PersonCreateFormValues>) => void
+  submitLabel?: string
+  submittingLabel?: string
 }
 
 function formatBirthDate(value: string) {
@@ -32,27 +36,38 @@ function formatBirthDate(value: string) {
 
 function PersonForm({
   duplicate,
+  duplicateConfirmLabel = 'Cadastrar mesmo assim',
   generalError,
+  initialValues,
   isSubmitting,
   onCancel,
   onConfirmDuplicate,
   onDuplicateBack,
   onSubmit,
   setApiFieldError,
+  submitLabel = 'Salvar pessoa',
+  submittingLabel = 'Salvando...',
 }: PersonFormProps) {
   const {
     formState: { errors },
     handleSubmit,
     register,
+    reset,
     setError,
   } = useForm<PersonCreateFormValues, unknown, PersonCreateFormData>({
-    defaultValues: personCreateDefaultValues,
+    defaultValues: initialValues ?? personCreateDefaultValues,
     resolver: zodResolver(personCreateSchema),
   })
 
   useEffect(() => {
     setApiFieldError(setError)
   }, [setApiFieldError, setError])
+
+  useEffect(() => {
+    if (initialValues) {
+      reset(initialValues)
+    }
+  }, [initialValues, reset])
 
   return (
     <form className="person-form" onSubmit={(event) => void handleSubmit(onSubmit)(event)}>
@@ -93,7 +108,7 @@ function PersonForm({
               onClick={onConfirmDuplicate}
             >
               <Save size={17} aria-hidden="true" />
-              {isSubmitting ? 'Cadastrando...' : 'Cadastrar mesmo assim'}
+              {isSubmitting ? submittingLabel : duplicateConfirmLabel}
             </button>
           </div>
         </div>
@@ -202,7 +217,7 @@ function PersonForm({
         </button>
         <button className="button button--primary" type="submit" disabled={isSubmitting || Boolean(duplicate)}>
           <Save size={17} aria-hidden="true" />
-          {isSubmitting ? 'Salvando...' : 'Salvar pessoa'}
+          {isSubmitting ? submittingLabel : submitLabel}
         </button>
       </div>
     </form>

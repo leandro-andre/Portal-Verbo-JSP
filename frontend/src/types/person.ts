@@ -22,6 +22,11 @@ export type CreatePersonInput = {
   allow_possible_duplicate?: boolean
 }
 
+export type UpdatePersonInput = Partial<Omit<CreatePersonInput, 'allow_possible_duplicate'>> & {
+  status?: PersonStatus
+  allow_possible_duplicate?: boolean
+}
+
 export type PossibleDuplicateCandidate = Pick<
   Person,
   'id' | 'display_name' | 'full_name' | 'birth_date'

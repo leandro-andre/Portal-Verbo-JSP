@@ -3,6 +3,7 @@ import type {
   CreatePersonInput,
   Person,
   PossibleDuplicateResponse,
+  UpdatePersonInput,
 } from '../types/person'
 
 export class ApiValidationError extends Error {
@@ -123,6 +124,36 @@ export async function createPerson(payload: CreatePersonInput): Promise<Person> 
 
   if (!response.ok) {
     throw new Error('Nao foi possivel cadastrar a pessoa. Tente novamente.')
+  }
+
+  return data as Person
+}
+
+export async function updatePerson(id: number, payload: UpdatePersonInput): Promise<Person> {
+  const response = await fetch(`/api/people/${id}/`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const data: unknown = await response.json().catch(() => null)
+
+  if (response.status === 409 && isPossibleDuplicateResponse(data)) {
+    throw new PossibleDuplicateError(data)
+  }
+
+  if (response.status === 400) {
+    throw new ApiValidationError(parseValidationErrors(data))
+  }
+
+  if (response.status === 404) {
+    throw new ApiHttpError(404, 'Pessoa nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel salvar as alteracoes. Tente novamente.')
   }
 
   return data as Person

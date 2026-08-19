@@ -121,6 +121,7 @@ function PersonCreatePage() {
 
       <PersonForm
         duplicate={duplicate}
+        duplicateConfirmLabel="Cadastrar mesmo assim"
         generalError={generalError}
         isSubmitting={createPerson.isPending}
         onCancel={() => navigate('/pessoas')}
@@ -128,6 +129,8 @@ function PersonCreatePage() {
         onDuplicateBack={() => setDuplicate(null)}
         onSubmit={(values) => void handleSubmit(values)}
         setApiFieldError={setApiFieldError}
+        submitLabel="Salvar pessoa"
+        submittingLabel="Cadastrando..."
       />
     </section>
   )
