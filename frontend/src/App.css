@@ -975,6 +975,15 @@
   justify-self: flex-start;
 }
 
+.church-journey-empty {
+  display: grid;
+  gap: 14px;
+}
+
+.church-journey-empty .button {
+  justify-self: flex-start;
+}
+
 .identity-resolution {
   display: grid;
   gap: 14px;

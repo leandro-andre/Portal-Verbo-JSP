@@ -1,11 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createPerson, getPeople, getPerson, updatePerson } from '../api/people'
-import type { CreatePersonInput, UpdatePersonInput } from '../types/person'
+import {
+  createPerson,
+  getChurchJourney,
+  getPeople,
+  getPerson,
+  startChurchJourney,
+  updatePerson,
+} from '../api/people'
+import type { CreatePersonInput, StartChurchJourneyInput, UpdatePersonInput } from '../types/person'
 
 export const peopleQueryKey = ['people']
 
 export function personQueryKey(id: number) {
   return ['people', id] as const
+}
+
+export function churchJourneyQueryKey(personId: number) {
+  return ['people', personId, 'church-journey'] as const
 }
 
 export function usePeople() {
@@ -20,6 +31,14 @@ export function usePerson(id: number) {
     queryKey: personQueryKey(id),
     queryFn: () => getPerson(id),
     enabled: Number.isFinite(id),
+  })
+}
+
+export function useChurchJourney(personId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: churchJourneyQueryKey(personId),
+    queryFn: () => getChurchJourney(personId),
+    enabled: enabled && Number.isFinite(personId),
   })
 }
 
@@ -43,6 +62,19 @@ export function useUpdatePerson(id: number) {
       queryClient.setQueryData(personQueryKey(id), person)
       await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
       await queryClient.invalidateQueries({ queryKey: personQueryKey(id) })
+    },
+  })
+}
+
+export function useStartChurchJourney(personId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: StartChurchJourneyInput) => startChurchJourney(personId, payload),
+    onSuccess: async (journey) => {
+      queryClient.setQueryData(churchJourneyQueryKey(personId), journey)
+      await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
+      await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
     },
   })
 }

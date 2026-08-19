@@ -3,7 +3,7 @@
 Esta camada existe para centralizar leituras da jornada eclesiastica sem alterar
 o comportamento legado atual.
 
-Hoje, a fonte de verdade continua sendo `usuarios.Usuario`:
+Na primeira versao, a fonte de verdade era `usuarios.Usuario`:
 
 - `Usuario.status_eclesiastico`
 - `Usuario.discipulado_concluido`
@@ -11,16 +11,18 @@ Hoje, a fonte de verdade continua sendo `usuarios.Usuario`:
 - `Usuario.eh_pastor`
 - `Usuario.is_superuser`
 
-Consumidores novos devem preferir consultar `church_journey.selectors` a partir
-de `pessoas.Person`. Isso preserva a distincao entre `Person.status`, que
+Com a fundacao de `ChurchJourney`, os selectors passam a priorizar o novo
+dominio quando ele existir e usam `Usuario` como fallback legado. Consumidores
+novos devem preferir consultar `church_journey.selectors` a partir de
+`pessoas.Person`. Isso preserva a distincao entre `Person.status`, que
 representa cadastro/identidade, e `ChurchStatus`, que representa a situacao
-eclesiastica legada.
+eclesiastica.
 
 ## ChurchStatus
 
 `ChurchStatus` e um enum interno, nao persistido no banco:
 
-- `VISITOR`: `Usuario.status_eclesiastico == "visitante"`
+- `VISITOR`: `Person` com `ChurchJourney` ou `Usuario.status_eclesiastico == "visitante"`
 - `MEMBER`: `Usuario.status_eclesiastico == "membro"`
 - `UNKNOWN`: `Person` sem `Usuario` vinculado ou estado legado desconhecido
 
@@ -53,9 +55,11 @@ apenas como excecoes da elegibilidade departamental existente.
 
 ## Plano Futuro
 
-Na v1, os selectors leem de `Usuario`.
+Na v1, os selectors liam de `Usuario`.
 
-Na v2, os mesmos selectors poderao ler de modelos futuros como `Membership` e
+Na v2, os selectors priorizam `ChurchJourney` e usam `Usuario` como fallback.
+
+Na v3, os mesmos selectors poderao ler de modelos futuros como `Membership` e
 `Discipleship`, sem obrigar consumidores como Departamentos e Escalas a conhecer
 os detalhes da nova persistencia.
 

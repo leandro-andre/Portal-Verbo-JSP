@@ -19,7 +19,20 @@ def get_legacy_user_account(person):
 
 
 def get_church_status(person):
+    if has_church_journey(person):
+        return ChurchStatus.VISITOR
     return get_church_status_for_user_account(get_legacy_user_account(person))
+
+
+def has_church_journey(person):
+    if person is None:
+        return False
+
+    try:
+        person.church_journey
+    except ObjectDoesNotExist:
+        return False
+    return True
 
 
 def get_church_status_for_user_account(usuario):

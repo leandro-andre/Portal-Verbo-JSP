@@ -1,8 +1,10 @@
 import type {
   ApiValidationErrors,
+  ChurchJourney,
   CreatePersonInput,
   Person,
   PossibleDuplicateResponse,
+  StartChurchJourneyInput,
   UpdatePersonInput,
 } from '../types/person'
 import { csrfJsonHeaders } from './http'
@@ -162,4 +164,53 @@ export async function updatePerson(id: number, payload: UpdatePersonInput): Prom
   }
 
   return data as Person
+}
+
+export async function getChurchJourney(personId: number): Promise<ChurchJourney | null> {
+  const response = await fetch(`/api/people/${personId}/church-journey/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar a jornada da igreja.')
+  }
+
+  return response.json() as Promise<ChurchJourney>
+}
+
+export async function startChurchJourney(
+  personId: number,
+  payload: StartChurchJourneyInput,
+): Promise<ChurchJourney> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/church-journey/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+
+  const data: unknown = await response.json().catch(() => null)
+
+  if (response.status === 404) {
+    throw new ApiHttpError(404, 'Pessoa nao encontrada.')
+  }
+
+  if (response.status === 409) {
+    throw new ApiHttpError(409, 'Esta pessoa ja possui uma jornada eclesiastica.')
+  }
+
+  if (response.status === 400) {
+    throw new ApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel iniciar a jornada da igreja. Tente novamente.')
+  }
+
+  return data as ChurchJourney
 }

@@ -22,6 +22,21 @@ export type Person = {
   updated_at: string
 }
 
+export type ChurchJourneyStatus = 'VISITOR' | 'MEMBER' | 'UNKNOWN'
+
+export type ChurchJourney = {
+  id: number
+  person_id: number
+  started_at: string
+  church_status: ChurchJourneyStatus
+  created_at: string
+  updated_at: string
+}
+
+export type StartChurchJourneyInput = {
+  started_at?: string
+}
+
 export type CreatePersonInput = {
   full_name: string
   preferred_name?: string

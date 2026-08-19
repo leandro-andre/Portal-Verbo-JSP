@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Edit3, RefreshCcw } from 'lucide-react'
+import { ArrowLeft, Edit3, Play, RefreshCcw } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiHttpError } from '../api/people'
@@ -7,8 +7,13 @@ import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
-import { usePerson, useUpdatePerson } from '../hooks/usePeople'
-import type { Person, PersonStatus } from '../types/person'
+import {
+  useChurchJourney,
+  usePerson,
+  useStartChurchJourney,
+  useUpdatePerson,
+} from '../hooks/usePeople'
+import type { ChurchJourney, Person, PersonStatus } from '../types/person'
 
 function formatDate(value: string) {
   if (!value) {
@@ -23,6 +28,14 @@ function formatDate(value: string) {
   }
 
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
+}
+
+function getTodayInputValue() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function DetailItem({ label, value }: { label: string; value: ReactNode }) {
@@ -123,16 +136,116 @@ function LifecycleDialog({
   )
 }
 
+function StartChurchJourneyDialog({
+  error,
+  isOpen,
+  isPending,
+  onClose,
+  onConfirm,
+  person,
+  startedAt,
+  onStartedAtChange,
+}: {
+  error: string | null
+  isOpen: boolean
+  isPending: boolean
+  onClose: () => void
+  onConfirm: () => void
+  person: Person
+  startedAt: string
+  onStartedAtChange: (value: string) => void
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div
+        className="confirm-dialog"
+        role="dialog"
+        aria-labelledby="church-journey-dialog-title"
+        aria-describedby="church-journey-dialog-description"
+        aria-modal="true"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !isPending) {
+            onClose()
+          }
+        }}
+      >
+        <h2 id="church-journey-dialog-title">Iniciar jornada de {person.display_name}?</h2>
+        <p id="church-journey-dialog-description">
+          Ao iniciar a jornada, esta pessoa passara a ser considerada Visitante da igreja.
+        </p>
+
+        <label className="field-group">
+          <span>Data de inicio</span>
+          <input
+            type="date"
+            value={startedAt}
+            disabled={isPending}
+            onChange={(event) => onStartedAtChange(event.target.value)}
+          />
+        </label>
+
+        {error ? (
+          <div className="form-alert form-alert--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="form-actions">
+          <button
+            className="button button--secondary"
+            type="button"
+            disabled={isPending}
+            onClick={onClose}
+            autoFocus
+          >
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            <Play size={17} aria-hidden="true" />
+            {isPending ? 'Iniciando...' : 'Iniciar jornada'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function churchStatusLabel(status: ChurchJourney['church_status']) {
+  if (status === 'VISITOR') {
+    return 'Visitante'
+  }
+  if (status === 'MEMBER') {
+    return 'Membro'
+  }
+  return 'Indefinida'
+}
+
 function PersonProfile({
   canChangePeople,
+  canCreateChurchJourney,
+  canViewChurchJourney,
   canViewUsers,
+  churchJourney,
+  churchJourneyError,
+  churchJourneyLoading,
   onLifecycleClick,
+  onStartChurchJourneyClick,
   person,
   successMessage,
 }: {
   canChangePeople: boolean
+  canCreateChurchJourney: boolean
+  canViewChurchJourney: boolean
   canViewUsers: boolean
+  churchJourney: ChurchJourney | null | undefined
+  churchJourneyError: boolean
+  churchJourneyLoading: boolean
   onLifecycleClick: () => void
+  onStartChurchJourneyClick: () => void
   person: Person
   successMessage: string | null
 }) {
@@ -213,6 +326,34 @@ function PersonProfile({
             <p className="page-heading__description">Sem acesso ao Portal</p>
           )}
         </section>
+
+        {canViewChurchJourney ? (
+          <section className="profile-section">
+            <h2>Jornada na igreja</h2>
+            {churchJourneyLoading ? (
+              <p className="page-heading__description">Carregando jornada...</p>
+            ) : churchJourneyError ? (
+              <p className="page-heading__description">Nao foi possivel carregar a jornada da igreja.</p>
+            ) : churchJourney ? (
+              <dl className="profile-details">
+                <DetailItem label="Situacao" value={churchStatusLabel(churchJourney.church_status)} />
+                <DetailItem label="Inicio" value={formatDate(churchJourney.started_at)} />
+              </dl>
+            ) : (
+              <div className="church-journey-empty">
+                <p className="page-heading__description">
+                  Esta pessoa ainda nao esta na jornada eclesiastica.
+                </p>
+                {canCreateChurchJourney ? (
+                  <button className="button button--primary" type="button" onClick={onStartChurchJourneyClick}>
+                    <Play size={17} aria-hidden="true" />
+                    Iniciar jornada
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </section>
+        ) : null}
       </div>
     </>
   )
@@ -227,9 +368,20 @@ function PersonProfilePage() {
   const updatePerson = useUpdatePerson(personId)
   const canChangePeople = useCan('PEOPLE_CHANGE')
   const canViewUsers = useCan('USER_VIEW')
+  const canViewChurchJourney = useCan('CHURCH_JOURNEY_VIEW')
+  const canCreateChurchJourney = useCan('CHURCH_JOURNEY_CREATE')
+  const {
+    data: churchJourney,
+    isError: isChurchJourneyError,
+    isLoading: isChurchJourneyLoading,
+  } = useChurchJourney(personId, canViewChurchJourney && isValidId)
+  const startChurchJourney = useStartChurchJourney(personId)
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
   const [lifecycleSuccessMessage, setLifecycleSuccessMessage] = useState<string | null>(null)
+  const [isStartJourneyDialogOpen, setIsStartJourneyDialogOpen] = useState(false)
+  const [startJourneyError, setStartJourneyError] = useState<string | null>(null)
+  const [startedAt, setStartedAt] = useState(getTodayInputValue)
   const navigationState = location.state as { successMessage?: string } | null
   const successMessage = lifecycleSuccessMessage ?? navigationState?.successMessage ?? null
   const isNotFound = !isValidId || (error instanceof ApiHttpError && error.status === 404)
@@ -252,6 +404,18 @@ function PersonProfilePage() {
       )
     } catch {
       setLifecycleError('Nao foi possivel alterar o status da pessoa.')
+    }
+  }
+
+  const handleStartJourneyConfirm = async () => {
+    setStartJourneyError(null)
+
+    try {
+      await startChurchJourney.mutateAsync({ started_at: startedAt })
+      setIsStartJourneyDialogOpen(false)
+      setLifecycleSuccessMessage('Jornada na igreja iniciada com sucesso.')
+    } catch {
+      setStartJourneyError('Nao foi possivel iniciar a jornada da igreja.')
     }
   }
 
@@ -283,10 +447,20 @@ function PersonProfilePage() {
         <>
           <PersonProfile
             canChangePeople={canChangePeople}
+            canCreateChurchJourney={canCreateChurchJourney}
+            canViewChurchJourney={canViewChurchJourney}
             canViewUsers={canViewUsers}
+            churchJourney={churchJourney}
+            churchJourneyError={isChurchJourneyError}
+            churchJourneyLoading={isChurchJourneyLoading}
             onLifecycleClick={() => {
               setLifecycleError(null)
               setIsLifecycleDialogOpen(true)
+            }}
+            onStartChurchJourneyClick={() => {
+              setStartJourneyError(null)
+              setStartedAt(getTodayInputValue())
+              setIsStartJourneyDialogOpen(true)
             }}
             person={person}
             successMessage={successMessage}
@@ -298,6 +472,16 @@ function PersonProfilePage() {
             onClose={() => setIsLifecycleDialogOpen(false)}
             onConfirm={() => void handleLifecycleConfirm()}
             person={person}
+          />
+          <StartChurchJourneyDialog
+            error={startJourneyError}
+            isOpen={isStartJourneyDialogOpen}
+            isPending={startChurchJourney.isPending}
+            onClose={() => setIsStartJourneyDialogOpen(false)}
+            onConfirm={() => void handleStartJourneyConfirm()}
+            onStartedAtChange={setStartedAt}
+            person={person}
+            startedAt={startedAt}
           />
         </>
       ) : null}

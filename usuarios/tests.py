@@ -1230,6 +1230,8 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="add_person").exists())
         self.assertTrue(group.permissions.filter(codename="approve_accessrequest").exists())
         self.assertTrue(group.permissions.filter(codename="disable_usuario").exists())
+        self.assertTrue(group.permissions.filter(codename="add_churchjourney").exists())
+        self.assertTrue(group.permissions.filter(codename="change_churchjourney").exists())
 
     def test_secretaria_recebe_permissions_esperadas(self):
         setup_portal_roles()
@@ -1238,6 +1240,8 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="change_person").exists())
         self.assertTrue(group.permissions.filter(codename="reject_accessrequest").exists())
         self.assertTrue(group.permissions.filter(codename="view_usuario").exists())
+        self.assertTrue(group.permissions.filter(codename="add_churchjourney").exists())
+        self.assertTrue(group.permissions.filter(codename="change_churchjourney").exists())
         self.assertFalse(group.permissions.filter(codename="disable_usuario").exists())
 
     def test_pastor_recebe_permissions_esperadas(self):
@@ -1247,6 +1251,8 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="view_person").exists())
         self.assertTrue(group.permissions.filter(codename="view_accessrequest").exists())
         self.assertTrue(group.permissions.filter(codename="view_usuario").exists())
+        self.assertTrue(group.permissions.filter(codename="view_churchjourney").exists())
+        self.assertFalse(group.permissions.filter(codename="add_churchjourney").exists())
         self.assertFalse(group.permissions.filter(codename="approve_accessrequest").exists())
 
     def test_midia_nao_e_criada_como_global_role(self):
@@ -1412,6 +1418,9 @@ class GlobalRolesAuthorizationMatrixTests(TestCase):
 
         self.assertEqual(current_user["roles"], ["SECRETARY"])
         self.assertIn("PEOPLE_VIEW", current_user["capabilities"])
+        self.assertIn("CHURCH_JOURNEY_VIEW", current_user["capabilities"])
+        self.assertIn("CHURCH_JOURNEY_CREATE", current_user["capabilities"])
+        self.assertIn("CHURCH_JOURNEY_CHANGE", current_user["capabilities"])
         self.assertIn("ACCESS_REQUEST_APPROVE", current_user["capabilities"])
         self.assertNotIn("USER_DISABLE", current_user["capabilities"])
 

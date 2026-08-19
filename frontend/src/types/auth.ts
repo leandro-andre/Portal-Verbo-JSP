@@ -10,6 +10,9 @@ export type Capability =
   | 'USER_VIEW'
   | 'USER_DISABLE'
   | 'USER_ENABLE'
+  | 'CHURCH_JOURNEY_VIEW'
+  | 'CHURCH_JOURNEY_CREATE'
+  | 'CHURCH_JOURNEY_CHANGE'
 
 export type CurrentUser = {
   id: number
