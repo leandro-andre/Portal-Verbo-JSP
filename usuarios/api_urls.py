@@ -6,10 +6,20 @@ from .api_views import (
     AdminAccessRequestListView,
     AdminAccessRequestRejectView,
     PublicAccessRequestCreateView,
+    activate_account_view,
+    csrf_view,
+    current_user_view,
+    login_view,
+    logout_view,
 )
 
 
 urlpatterns = [
+    path("auth/csrf/", csrf_view, name="auth-csrf"),
+    path("auth/current-user/", current_user_view, name="auth-current-user"),
+    path("auth/login/", login_view, name="auth-login"),
+    path("auth/logout/", logout_view, name="auth-logout"),
+    path("auth/activate/", activate_account_view, name="auth-activate"),
     path("access-requests/", PublicAccessRequestCreateView.as_view(), name="access-request-create"),
     path(
         "access-requests/admin/",

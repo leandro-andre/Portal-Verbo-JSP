@@ -166,6 +166,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [activationUrl, setActivationUrl] = useState<string | null>(null)
   const isPending = request.status === 'PENDING'
   const canApprove = isPending && resolution !== null
 
@@ -191,13 +192,14 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
 
     setDialogError(null)
     try {
-      await approveRequest.mutateAsync(
+      const response = await approveRequest.mutateAsync(
         resolution.type === 'existing'
           ? { person_id: resolution.personId }
           : { create_new_person: true },
       )
       setDialogMode(null)
       setSuccessMessage('Acesso aprovado. Usuario criado aguardando ativacao.')
+      setActivationUrl(response.created_user.activation_url)
     } catch (error) {
       handleBusinessError(error)
     }
@@ -209,6 +211,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
       await rejectRequest.mutateAsync({ rejection_reason: rejectionReason })
       setDialogMode(null)
       setSuccessMessage('Solicitacao rejeitada.')
+      setActivationUrl(null)
     } catch (error) {
       handleBusinessError(error)
     }
@@ -233,6 +236,11 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
       {successMessage ? (
         <div className="form-alert form-alert--success" role="status">
           {successMessage}
+          {activationUrl ? (
+            <a className="activation-link" href={activationUrl}>
+              Abrir link de ativacao
+            </a>
+          ) : null}
         </div>
       ) : null}
 

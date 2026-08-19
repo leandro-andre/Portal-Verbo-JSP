@@ -4,12 +4,35 @@ import AppShell from './components/layout/AppShell'
 import AccessRequestPage from './pages/AccessRequestPage'
 import AccessRequestDetailPage from './pages/AccessRequestDetailPage'
 import AccessRequestsPage from './pages/AccessRequestsPage'
+import ActivateAccountPage from './pages/ActivateAccountPage'
+import LoginPage from './pages/LoginPage'
 import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
+import { useCurrentUser } from './hooks/useAuth'
 
 function AdminRoutes() {
+  const { data: currentUser, isError, isLoading } = useCurrentUser()
+
+  if (isLoading) {
+    return (
+      <main className="public-access-page">
+        <section className="access-request-shell auth-shell">
+          <div className="access-request-heading">
+            <h1>Carregando sessao...</h1>
+            <p>Aguarde enquanto verificamos seu acesso.</p>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
+  if (isError || !currentUser?.is_authenticated) {
+    const next = encodeURIComponent(window.location.pathname + window.location.search)
+    return <Navigate to={`/login?next=${next}`} replace />
+  }
+
   return (
     <AppShell>
       <Routes>
@@ -30,7 +53,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={<LoginPage />} />
         <Route path="/pedir-acesso" element={<AccessRequestPage />} />
+        <Route path="/ativar-conta/:uid/:token" element={<ActivateAccountPage />} />
         <Route path="/*" element={<AdminRoutes />} />
       </Routes>
     </BrowserRouter>

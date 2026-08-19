@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -8,6 +9,20 @@ from pessoas.models import Person
 
 
 class PersonApiTests(APITestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="person.api",
+            password="senha-forte-123",
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_get_people_exige_autenticacao(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(reverse("person-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_get_people_retorna_200(self):
         response = self.client.get(reverse("person-list"))
 

@@ -5,10 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 from departamentos.models import Departamento, DepartamentoMembro
 from departamentos.permissions import usuario_pode_acessar_departamentos
@@ -335,6 +338,268 @@ class AccessRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class AuthApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.client = Client(enforce_csrf_checks=True)
+
+    def _csrf_headers(self):
+        response = self.client.get(reverse("auth-csrf"))
+        self.assertEqual(response.status_code, 200)
+        return {"HTTP_X_CSRFTOKEN": response.cookies["csrftoken"].value}
+
+    def _activation_payload(self, usuario, password="Senha-forte-123"):
+        uid = urlsafe_base64_encode(force_bytes(usuario.pk))
+        token = default_token_generator.make_token(usuario)
+        return {
+            "uid": uid,
+            "token": token,
+            "password": password,
+            "password_confirm": password,
+        }
+
+    def test_current_user_anonimo_retorna_nao_autenticado(self):
+        response = self.client.get(reverse("auth-current-user"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["is_authenticated"])
+        self.assertIsNone(response.json()["user"])
+
+    def test_login_exige_csrf(self):
+        self.user_model.objects.create_user(
+            username="login.csrf",
+            password="Senha-forte-123",
+            email="login.csrf@example.com",
+        )
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "login.csrf", "password": "Senha-forte-123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_login_com_username_cria_sessao(self):
+        usuario = self.user_model.objects.create_user(
+            username="login.user",
+            password="Senha-forte-123",
+            email="login.user@example.com",
+        )
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "login.user", "password": "Senha-forte-123"},
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["is_authenticated"])
+        self.assertEqual(response.json()["user"]["id"], usuario.id)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_login_com_email_funciona(self):
+        usuario = self.user_model.objects.create_user(
+            username="login.email",
+            password="Senha-forte-123",
+            email="login.email@example.com",
+        )
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "LOGIN.EMAIL@example.com", "password": "Senha-forte-123"},
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user"]["username"], usuario.username)
+
+    def test_login_rejeita_usuario_inativo(self):
+        self.user_model.objects.create_user(
+            username="login.inactive",
+            password="Senha-forte-123",
+            is_active=False,
+        )
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "login.inactive", "password": "Senha-forte-123"},
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "INVALID_CREDENTIALS")
+
+    def test_logout_exige_csrf(self):
+        usuario = self.user_model.objects.create_user(
+            username="logout.csrf",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(usuario)
+
+        response = self.client.post(reverse("auth-logout"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_logout_remove_sessao(self):
+        usuario = self.user_model.objects.create_user(
+            username="logout.user",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(usuario)
+        headers = self._csrf_headers()
+
+        response = self.client.post(reverse("auth-logout"), **headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_activate_exige_csrf(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.csrf",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            self._activation_payload(usuario),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_activate_define_senha_e_ativa_usuario(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.user",
+            email="activate.user@example.com",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            self._activation_payload(usuario),
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.is_active)
+        self.assertTrue(usuario.check_password("Senha-forte-123"))
+
+    def test_activate_nao_faz_login_automatico(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.no.login",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        headers = self._csrf_headers()
+
+        self.client.post(
+            reverse("auth-activate"),
+            self._activation_payload(usuario),
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_activate_rejeita_token_invalido(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.invalid",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        payload = self._activation_payload(usuario)
+        payload["token"] = "invalid-token"
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("token", response.json())
+        usuario.refresh_from_db()
+        self.assertFalse(usuario.is_active)
+
+    def test_activate_rejeita_conta_ja_ativa(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.already",
+            password="Senha-forte-123",
+            is_active=True,
+        )
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            self._activation_payload(usuario),
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("token", response.json())
+
+    def test_activate_rejeita_senhas_diferentes(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.mismatch",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        payload = self._activation_payload(usuario)
+        payload["password_confirm"] = "Outra-senha-123"
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("password_confirm", response.json())
+
+    def test_activate_usa_validadores_de_senha_do_django(self):
+        usuario = self.user_model.objects.create_user(
+            username="activate.weak",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-activate"),
+            self._activation_payload(usuario, password="123"),
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("password", response.json())
+        usuario.refresh_from_db()
+        self.assertFalse(usuario.is_active)
+
+
 class AdminAccessRequestApiTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()
@@ -465,6 +730,8 @@ class AdminAccessRequestApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn("/ativar-conta/", response.json()["created_user"]["activation_url"])
+        self.assertFalse(response.json()["created_user"]["is_active"])
         self.access_request.refresh_from_db()
         self.assertEqual(self.access_request.person, person)
         self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)

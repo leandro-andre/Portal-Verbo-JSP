@@ -63,6 +63,15 @@ export type ApproveAccessRequestInput =
   | { person_id: number; create_new_person?: false }
   | { create_new_person: true; person_id?: never }
 
+export type ApproveAccessRequestResponse = AccessRequest & {
+  created_user: {
+    id: number
+    username: string
+    is_active: boolean
+    activation_url: string
+  }
+}
+
 export type RejectAccessRequestInput = {
   rejection_reason?: string
 }

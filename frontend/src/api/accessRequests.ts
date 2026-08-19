@@ -5,10 +5,12 @@ import type {
   AccessRequestStatus,
   AccessRequestValidationErrors,
   ApproveAccessRequestInput,
+  ApproveAccessRequestResponse,
   CreateAccessRequestInput,
   PendingAccessRequestExistsResponse,
   RejectAccessRequestInput,
 } from '../types/accessRequest'
+import { csrfJsonHeaders } from './http'
 
 export class AccessRequestValidationError extends Error {
   fieldErrors: AccessRequestValidationErrors
@@ -106,11 +108,11 @@ function isAccessRequestBusinessErrorResponse(
 export async function createAccessRequest(
   payload: CreateAccessRequestInput,
 ): Promise<AccessRequestResponse> {
+  const headers = await csrfJsonHeaders()
   const response = await fetch('/api/access-requests/', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify(payload),
   })
 
@@ -162,38 +164,42 @@ async function handleAdminResponse(response: Response): Promise<unknown> {
 }
 
 export async function getAccessRequests(status: AccessRequestStatus): Promise<AccessRequest[]> {
-  const response = await fetch(`/api/access-requests/admin/?status=${status}`)
+  const response = await fetch(`/api/access-requests/admin/?status=${status}`, {
+    credentials: 'same-origin',
+  })
   return await handleAdminResponse(response) as AccessRequest[]
 }
 
 export async function getAccessRequest(id: number): Promise<AccessRequest> {
-  const response = await fetch(`/api/access-requests/admin/${id}/`)
+  const response = await fetch(`/api/access-requests/admin/${id}/`, {
+    credentials: 'same-origin',
+  })
   return await handleAdminResponse(response) as AccessRequest
 }
 
 export async function approveAccessRequest(
   id: number,
   payload: ApproveAccessRequestInput,
-): Promise<AccessRequest> {
+): Promise<ApproveAccessRequestResponse> {
+  const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/access-requests/admin/${id}/approve/`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify(payload),
   })
-  return await handleAdminResponse(response) as AccessRequest
+  return await handleAdminResponse(response) as ApproveAccessRequestResponse
 }
 
 export async function rejectAccessRequest(
   id: number,
   payload: RejectAccessRequestInput,
 ): Promise<AccessRequest> {
+  const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/access-requests/admin/${id}/reject/`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify(payload),
   })
   return await handleAdminResponse(response) as AccessRequest

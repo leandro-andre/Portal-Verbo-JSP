@@ -2,7 +2,10 @@ import re
 import unicodedata
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 
 from pessoas.models import Person
@@ -61,6 +64,12 @@ def split_legacy_name(full_name):
     if len(parts) == 1:
         return parts[0], ""
     return parts[0], " ".join(parts[1:])
+
+
+def build_account_activation_path(usuario):
+    uid = urlsafe_base64_encode(force_bytes(usuario.pk))
+    token = default_token_generator.make_token(usuario)
+    return f"/ativar-conta/{uid}/{token}"
 
 
 def _ensure_pending(access_request):

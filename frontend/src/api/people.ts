@@ -5,6 +5,7 @@ import type {
   PossibleDuplicateResponse,
   UpdatePersonInput,
 } from '../types/person'
+import { csrfJsonHeaders } from './http'
 
 export class ApiValidationError extends Error {
   fieldErrors: ApiValidationErrors
@@ -37,17 +38,21 @@ export class ApiHttpError extends Error {
 }
 
 export async function getPeople(): Promise<Person[]> {
-  const response = await fetch('/api/people/')
+  const response = await fetch('/api/people/', {
+    credentials: 'same-origin',
+  })
 
   if (!response.ok) {
-    throw new Error('Nao foi possivel carregar as pessoas.')
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar as pessoas.')
   }
 
   return response.json() as Promise<Person[]>
 }
 
 export async function getPerson(id: number): Promise<Person> {
-  const response = await fetch(`/api/people/${id}/`)
+  const response = await fetch(`/api/people/${id}/`, {
+    credentials: 'same-origin',
+  })
 
   if (response.status === 404) {
     throw new ApiHttpError(404, 'Pessoa nao encontrada.')
@@ -104,11 +109,11 @@ function isPossibleDuplicateResponse(value: unknown): value is PossibleDuplicate
 }
 
 export async function createPerson(payload: CreatePersonInput): Promise<Person> {
+  const headers = await csrfJsonHeaders()
   const response = await fetch('/api/people/', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify(payload),
   })
 
@@ -130,11 +135,11 @@ export async function createPerson(payload: CreatePersonInput): Promise<Person> 
 }
 
 export async function updatePerson(id: number, payload: UpdatePersonInput): Promise<Person> {
+  const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/people/${id}/`, {
     method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    credentials: 'same-origin',
+    headers,
     body: JSON.stringify(payload),
   })
 

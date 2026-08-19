@@ -1,4 +1,5 @@
 from rest_framework import mixins, status, viewsets
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import Person
@@ -15,6 +16,7 @@ class PersonViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
+    permission_classes = [IsAuthenticated]
     serializer_class = PersonSerializer
     queryset = Person.objects.all()
     http_method_names = ["get", "post", "patch", "head", "options"]

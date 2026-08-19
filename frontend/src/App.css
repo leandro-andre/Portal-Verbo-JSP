@@ -227,6 +227,11 @@
   outline: none;
 }
 
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .app-main {
   padding: 32px;
 }
@@ -741,6 +746,13 @@
   color: #166534;
 }
 
+.activation-link {
+  color: #14532d;
+  display: block;
+  margin-top: 8px;
+  text-decoration: underline;
+}
+
 .textarea-control {
   background: #ffffff;
   border: 1px solid var(--color-border);
@@ -1029,6 +1041,10 @@
   width: 100%;
 }
 
+.auth-shell {
+  max-width: 460px;
+}
+
 .access-request-brand {
   align-items: center;
   display: flex;
@@ -1089,6 +1105,20 @@
 .access-request-form .button {
   margin-top: 4px;
   width: 100%;
+}
+
+.public-link {
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+
+.public-link:hover,
+.public-link:focus-visible {
+  color: var(--color-primary-strong);
+  text-decoration: underline;
 }
 
 .access-request-success {
