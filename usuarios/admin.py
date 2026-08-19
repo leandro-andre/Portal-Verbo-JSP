@@ -12,6 +12,7 @@ class UsuarioAdmin(UserAdmin):
             "Informacoes adicionais",
             {
                 "fields": (
+                    "person",
                     "telefone",
                     "foto",
                     "data_nascimento",
@@ -28,6 +29,7 @@ class UsuarioAdmin(UserAdmin):
     readonly_fields = ("qualificado_em",)
     list_display = (
         "username",
+        "person",
         "email",
         "first_name",
         "last_name",
@@ -42,3 +44,4 @@ class UsuarioAdmin(UserAdmin):
         "is_superuser",
         "is_active",
     )
+    autocomplete_fields = ("person", "qualificado_por")

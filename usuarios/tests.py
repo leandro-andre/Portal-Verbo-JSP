@@ -1,13 +1,20 @@
+from datetime import date
+from io import StringIO
+from os import environ
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
+from django.urls import reverse
 
 from departamentos.models import Departamento, DepartamentoMembro
 from departamentos.permissions import usuario_pode_acessar_departamentos
 from escalas.permissions import usuario_pode_acessar_escalas
 from ministros.models import Ministro
+from pessoas.models import Person
 from usuarios.context_processors import internal_permissions
 
 from .permissions import (
@@ -103,6 +110,52 @@ class UsuarioQualificacaoTests(TestCase):
         self.assertFalse(pastor.is_staff)
         self.assertTrue(usuario_eh_pastor(pastor))
         self.assertTrue(usuario_tem_acesso_total_pastoral(pastor))
+
+    def test_login_continua_funcionando_com_usuario_sem_person(self):
+        self.user_model.objects.create_user(
+            username="login.sem.person",
+            password="senha-forte-123",
+        )
+
+        response = self.client.post(
+            reverse("usuarios:login"),
+            {"username": "login.sem.person", "password": "senha-forte-123"},
+        )
+
+        self.assertRedirects(response, reverse("usuarios:dashboard"))
+
+    def test_registro_aceita_person_existente_sem_expor_onboarding_completo(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.post(
+            reverse("usuarios:registro"),
+            {
+                "username": "maria.person",
+                "person": person.pk,
+                "first_name": "Maria",
+                "last_name": "Silva",
+                "email": "maria@example.com",
+                "telefone": "81999999999",
+                "password1": "senha-forte-123",
+                "password2": "senha-forte-123",
+            },
+        )
+
+        self.assertRedirects(response, reverse("usuarios:dashboard"))
+        usuario = self.user_model.objects.get(username="maria.person")
+        self.assertEqual(usuario.person, person)
+
+    def test_admin_continua_acessivel(self):
+        admin = self.user_model.objects.create_superuser(
+            username="admin.identity",
+            password="senha-forte-123",
+            email="admin@example.com",
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
 
 
 class PermissoesPorPerfilTests(TestCase):
@@ -272,3 +325,37 @@ class InternalPermissionsContextProcessorTests(TestCase):
         pode_criar.assert_called_once_with(user)
         self.assertFalse(first_result["can_view_departamentos"])
         self.assertFalse(first_result["can_manage_escalas"])
+
+
+class ResetTestDataCommandTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+
+    def test_reset_test_data_bloqueia_producao(self):
+        with patch.dict(environ, {"DJANGO_ENV": "prod"}):
+            with self.assertRaises(CommandError):
+                call_command("reset_test_data", "--yes", stdout=StringIO())
+
+    def test_reset_test_data_preserva_superuser_por_padrao(self):
+        superuser = self.user_model.objects.create_superuser(
+            username="admin.reset",
+            password="senha-forte-123",
+            email="admin.reset@example.com",
+        )
+        usuario = self.user_model.objects.create_user(
+            username="usuario.reset",
+            password="senha-forte-123",
+        )
+        Person.objects.create(full_name="Pessoa Reset", birth_date=date(1990, 5, 10))
+
+        call_command("reset_test_data", "--yes", stdout=StringIO())
+
+        self.assertTrue(self.user_model.objects.filter(pk=superuser.pk).exists())
+        self.assertFalse(self.user_model.objects.filter(pk=usuario.pk).exists())
+        self.assertFalse(Person.objects.exists())
+
+    def test_reset_test_data_usa_transaction_atomic(self):
+        with patch("pessoas.management.commands.reset_test_data.atomic") as atomic:
+            call_command("reset_test_data", "--yes", stdout=StringIO())
+
+        atomic.assert_called_once()

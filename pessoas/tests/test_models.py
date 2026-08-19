@@ -1,6 +1,7 @@
 from datetime import date
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.test import TestCase
 
 from pessoas.models import Person
@@ -68,7 +69,7 @@ class PersonModelTests(TestCase):
     def test_person_pode_existir_sem_usuario(self):
         person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
 
-        self.assertFalse(hasattr(person, "usuario"))
+        self.assertFalse(hasattr(person, "user_account"))
 
     def test_detecta_possivel_duplicidade_por_mesmo_nome_e_mesma_data(self):
         birth_date = date(1990, 5, 10)
@@ -118,3 +119,99 @@ class PersonModelTests(TestCase):
         person = Person.objects.create(full_name="  Maria Silva  ", birth_date=date(1990, 5, 10))
 
         self.assertEqual(person.full_name, "Maria Silva")
+
+    def test_usuario_pode_se_relacionar_a_person(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        usuario = get_user_model().objects.create_user(
+            username="maria",
+            password="senha-forte-123",
+            person=person,
+        )
+
+        self.assertEqual(usuario.person, person)
+        self.assertEqual(person.user_account, usuario)
+
+    def test_person_nao_pode_estar_associada_a_dois_usuarios(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        get_user_model().objects.create_user(username="maria", password="senha-forte-123", person=person)
+
+        with self.assertRaises(IntegrityError):
+            get_user_model().objects.create_user(username="maria2", password="senha-forte-123", person=person)
+
+    def test_usuario_pode_existir_sem_person_nesta_fase(self):
+        from django.contrib.auth import get_user_model
+
+        usuario = get_user_model().objects.create_user(username="visitante", password="senha-forte-123")
+
+        self.assertIsNone(usuario.person)
+
+    def test_dados_de_person_independem_da_autenticacao(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Mari",
+            birth_date=date(1990, 5, 10),
+            email="maria.person@example.com",
+            phone="81999999999",
+        )
+        usuario = get_user_model().objects.create_user(
+            username="maria",
+            password="senha-forte-123",
+            first_name="Maria Usuario",
+            email="maria.user@example.com",
+            person=person,
+        )
+
+        self.assertEqual(usuario.email, "maria.user@example.com")
+        self.assertEqual(usuario.person.email, "maria.person@example.com")
+
+    def test_deletar_usuario_nao_apaga_person(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        usuario = get_user_model().objects.create_user(
+            username="maria",
+            password="senha-forte-123",
+            person=person,
+        )
+
+        usuario.delete()
+
+        self.assertTrue(Person.objects.filter(pk=person.pk).exists())
+
+    def test_deletar_person_desvincula_usuario_com_set_null(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        usuario = get_user_model().objects.create_user(
+            username="maria",
+            password="senha-forte-123",
+            person=person,
+        )
+
+        person.delete()
+        usuario.refresh_from_db()
+
+        self.assertIsNone(usuario.person)
+
+    def test_usuario_display_name_usa_person_quando_vinculada(self):
+        from django.contrib.auth import get_user_model
+
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Mari",
+            birth_date=date(1990, 5, 10),
+        )
+        usuario = get_user_model().objects.create_user(
+            username="maria",
+            password="senha-forte-123",
+            first_name="Legado",
+            person=person,
+        )
+
+        self.assertEqual(usuario.display_name, "Mari")

@@ -11,6 +11,14 @@ class Usuario(AbstractUser):
     telefone = models.CharField("Telefone", max_length=20, blank=True)
     foto = models.ImageField("Foto de Perfil", upload_to="perfil/", blank=True, null=True)
     data_nascimento = models.DateField("Data de Nascimento", blank=True, null=True)
+    person = models.OneToOneField(
+        "pessoas.Person",
+        verbose_name="Pessoa vinculada",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="user_account",
+    )
     status_eclesiastico = models.CharField(
         "Status eclesiastico",
         max_length=20,
@@ -45,6 +53,12 @@ class Usuario(AbstractUser):
     @property
     def is_visitante(self):
         return self.status_eclesiastico == self.StatusEclesiastico.VISITANTE
+
+    @property
+    def display_name(self):
+        if self.person_id:
+            return self.person.display_name
+        return self.get_full_name() or self.username
 
     def qualificar_como_membro(self, qualificado_por, discipulado_concluido_em=None):
         self.status_eclesiastico = self.StatusEclesiastico.MEMBRO
