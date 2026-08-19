@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Usuario
+from .models import AccessRequest, Usuario
 
 
 @admin.register(Usuario)
@@ -45,3 +45,37 @@ class UsuarioAdmin(UserAdmin):
         "is_active",
     )
     autocomplete_fields = ("person", "qualificado_por")
+
+
+@admin.register(AccessRequest)
+class AccessRequestAdmin(admin.ModelAdmin):
+    list_display = ("full_name", "email", "phone", "birth_date", "status", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("full_name", "email", "phone")
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        (
+            "Solicitacao",
+            {
+                "fields": (
+                    "full_name",
+                    "birth_date",
+                    "email",
+                    "phone",
+                    "status",
+                )
+            },
+        ),
+        (
+            "Revisao futura",
+            {
+                "fields": (
+                    "person",
+                    "reviewed_by",
+                    "reviewed_at",
+                    "rejection_reason",
+                )
+            },
+        ),
+        ("Auditoria", {"fields": ("created_at", "updated_at")}),
+    )

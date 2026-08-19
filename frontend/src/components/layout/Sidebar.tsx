@@ -1,5 +1,5 @@
-import { UsersRound } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { ClipboardList, UsersRound } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
 
 type SidebarProps = {
   isCollapsed: boolean
@@ -22,10 +22,22 @@ function Sidebar({ isCollapsed }: SidebarProps) {
 
       <nav className="sidebar__nav" aria-label="Modulos do portal">
         {!isCollapsed ? <p className="sidebar__section-label">Pessoas</p> : null}
-        <Link className="sidebar__link sidebar__link--active" to="/pessoas" aria-current="page">
+        <NavLink
+          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          to="/pessoas"
+        >
           <UsersRound size={18} aria-hidden="true" />
           {!isCollapsed ? <span>Pessoas</span> : null}
-        </Link>
+        </NavLink>
+
+        {!isCollapsed ? <p className="sidebar__section-label sidebar__section-label--spaced">Acessos</p> : null}
+        <NavLink
+          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          to="/solicitacoes-acesso"
+        >
+          <ClipboardList size={18} aria-hidden="true" />
+          {!isCollapsed ? <span>Solicitacoes</span> : null}
+        </NavLink>
       </nav>
 
       <div className="sidebar__user">

@@ -17,6 +17,7 @@ from ministros.models import Ministro
 from pessoas.models import Person
 from usuarios.context_processors import internal_permissions
 
+from .models import AccessRequest
 from .permissions import (
     usuario_eh_lider_departamento,
     usuario_eh_lider_em_algum_departamento,
@@ -156,6 +157,545 @@ class UsuarioQualificacaoTests(TestCase):
         response = self.client.get(reverse("admin:index"))
 
         self.assertEqual(response.status_code, 200)
+
+
+class AccessRequestApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.url = reverse("access-request-create")
+
+    def valid_payload(self):
+        return {
+            "full_name": "Maria Silva",
+            "birth_date": "1990-05-10",
+            "email": "maria@example.com",
+            "phone": "(81) 99999-9999",
+        }
+
+    def test_criacao_valida_retorna_sucesso(self):
+        response = self.client.post(self.url, self.valid_payload(), content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(AccessRequest.objects.filter(email="maria@example.com").exists())
+
+    def test_status_padrao_pending(self):
+        self.client.post(self.url, self.valid_payload(), content_type="application/json")
+
+        access_request = AccessRequest.objects.get()
+        self.assertEqual(access_request.status, AccessRequest.Status.PENDING)
+
+    def test_criacao_nao_cria_person(self):
+        self.client.post(self.url, self.valid_payload(), content_type="application/json")
+
+        self.assertFalse(Person.objects.exists())
+
+    def test_criacao_nao_cria_usuario(self):
+        self.client.post(self.url, self.valid_payload(), content_type="application/json")
+
+        self.assertFalse(self.user_model.objects.exists())
+
+    def test_full_name_obrigatorio(self):
+        payload = self.valid_payload()
+        payload["full_name"] = "   "
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full_name", response.json())
+
+    def test_birth_date_obrigatoria(self):
+        payload = self.valid_payload()
+        payload.pop("birth_date")
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("birth_date", response.json())
+
+    def test_email_obrigatorio(self):
+        payload = self.valid_payload()
+        payload["email"] = ""
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json())
+
+    def test_phone_obrigatorio(self):
+        payload = self.valid_payload()
+        payload["phone"] = "   "
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone", response.json())
+
+    def test_data_futura_rejeitada(self):
+        payload = self.valid_payload()
+        payload["birth_date"] = "2999-01-01"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("birth_date", response.json())
+
+    def test_email_invalido_rejeitado(self):
+        payload = self.valid_payload()
+        payload["email"] = "email-invalido"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json())
+
+    def test_solicitacao_pendente_com_mesmo_email_e_bloqueada(self):
+        AccessRequest.objects.create(**self.valid_payload())
+        payload = self.valid_payload()
+        payload["phone"] = "(81) 98888-8888"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "PENDING_ACCESS_REQUEST_EXISTS")
+        self.assertEqual(AccessRequest.objects.count(), 1)
+
+    def test_solicitacao_pendente_com_mesmo_telefone_e_bloqueada(self):
+        AccessRequest.objects.create(**self.valid_payload())
+        payload = self.valid_payload()
+        payload["email"] = "outra@example.com"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "PENDING_ACCESS_REQUEST_EXISTS")
+        self.assertEqual(AccessRequest.objects.count(), 1)
+
+    def test_comparacao_de_email_e_case_insensitive(self):
+        AccessRequest.objects.create(**self.valid_payload())
+        payload = self.valid_payload()
+        payload["email"] = "MARIA@EXAMPLE.COM"
+        payload["phone"] = "(81) 97777-7777"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_solicitacao_approved_nao_bloqueia_nova_solicitacao(self):
+        payload = self.valid_payload()
+        AccessRequest.objects.create(**payload, status=AccessRequest.Status.APPROVED)
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(AccessRequest.objects.count(), 2)
+
+    def test_solicitacao_rejected_nao_bloqueia_nova_solicitacao(self):
+        payload = self.valid_payload()
+        AccessRequest.objects.create(**payload, status=AccessRequest.Status.REJECTED)
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(AccessRequest.objects.count(), 2)
+
+    def test_cliente_nao_consegue_enviar_status_arbitrario(self):
+        payload = {**self.valid_payload(), "status": AccessRequest.Status.APPROVED}
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(AccessRequest.objects.get().status, AccessRequest.Status.PENDING)
+
+    def test_cliente_nao_consegue_enviar_person(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        payload = {**self.valid_payload(), "person": person.pk}
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(AccessRequest.objects.get().person)
+
+    def test_cliente_nao_consegue_enviar_reviewed_by(self):
+        reviewer = self.user_model.objects.create_user(username="secretaria")
+        payload = {**self.valid_payload(), "reviewed_by": reviewer.pk}
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIsNone(AccessRequest.objects.get().reviewed_by)
+
+    def test_endpoint_nao_expoe_listagem_publica(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_endpoint_nao_permite_delete_publico(self):
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 405)
+
+
+class AdminAccessRequestApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.superuser = self.user_model.objects.create_superuser(
+            username="admin.access",
+            password="senha-forte-123",
+            email="admin.access@example.com",
+        )
+        self.regular_user = self.user_model.objects.create_user(
+            username="regular.access",
+            password="senha-forte-123",
+        )
+        self.access_request = AccessRequest.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria@example.com",
+            phone="81999999999",
+        )
+
+    def make_secretaria(self):
+        secretaria = self.user_model.objects.create_user(
+            username="secretaria.access",
+            password="senha-forte-123",
+        )
+        departamento = Departamento.objects.create(nome="Secretaria", codigo=Departamento.CodigoSistema.SECRETARIA)
+        DepartamentoMembro.objects.create(
+            membro=secretaria,
+            departamento=departamento,
+            papel=DepartamentoMembro.Papel.LIDER,
+            ativo=True,
+        )
+        return secretaria
+
+    def test_endpoint_administrativo_exige_autenticacao_ou_autorizacao(self):
+        response = self.client.get(reverse("access-request-admin-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_usuario_nao_autorizado_recebe_403(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("access-request-admin-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_usuario_autorizado_lista_solicitacoes(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("access-request-admin-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["id"], self.access_request.id)
+
+    def test_secretaria_atual_pode_listar_solicitacoes(self):
+        self.client.force_login(self.make_secretaria())
+
+        response = self.client.get(reverse("access-request-admin-list"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_filtro_pending(self):
+        AccessRequest.objects.create(
+            full_name="Aprovada",
+            birth_date=date(1980, 1, 1),
+            email="aprovada@example.com",
+            phone="81111111111",
+            status=AccessRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("access-request-admin-list"), {"status": "PENDING"})
+
+        self.assertEqual([item["status"] for item in response.json()], ["PENDING"])
+
+    def test_filtro_approved(self):
+        approved = AccessRequest.objects.create(
+            full_name="Aprovada",
+            birth_date=date(1980, 1, 1),
+            email="aprovada@example.com",
+            phone="81111111111",
+            status=AccessRequest.Status.APPROVED,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("access-request-admin-list"), {"status": "APPROVED"})
+
+        self.assertEqual(response.json()[0]["id"], approved.id)
+        self.assertEqual(response.json()[0]["status"], "APPROVED")
+
+    def test_filtro_rejected(self):
+        rejected = AccessRequest.objects.create(
+            full_name="Rejeitada",
+            birth_date=date(1980, 1, 1),
+            email="rejeitada@example.com",
+            phone="81222222222",
+            status=AccessRequest.Status.REJECTED,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("access-request-admin-list"), {"status": "REJECTED"})
+
+        self.assertEqual(response.json()[0]["id"], rejected.id)
+        self.assertEqual(response.json()[0]["status"], "REJECTED")
+
+    def test_detalhe_funciona_e_retorna_candidatos(self):
+        Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.person@example.com",
+            phone="81888888888",
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("access-request-admin-detail", args=[self.access_request.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], self.access_request.id)
+        self.assertEqual(response.json()["candidates"][0]["full_name"], "Maria Silva")
+
+    def test_aprovar_pending_com_person_existente(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"person_id": person.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.person, person)
+        self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
+
+    def test_aprovar_cria_usuario_relacionado_a_person(self):
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.person@example.com",
+            phone="81888888888",
+        )
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"person_id": person.pk},
+            content_type="application/json",
+        )
+
+        usuario = self.user_model.objects.get(person=person)
+        self.assertEqual(usuario.email, "maria.person@example.com")
+        self.assertEqual(usuario.telefone, "81888888888")
+
+    def test_aprovar_com_person_existente_nao_cria_segunda_person(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"person_id": person.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(Person.objects.count(), 1)
+
+    def test_aprovar_criando_nova_person(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        person = Person.objects.get()
+        self.assertEqual(person.full_name, "Maria Silva")
+        self.assertEqual(person.birth_date, date(1990, 5, 10))
+        self.assertEqual(person.email, "maria@example.com")
+        self.assertEqual(person.phone, "81999999999")
+
+    def test_usuario_recebe_person_criada(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        person = Person.objects.get()
+        usuario = self.user_model.objects.get(person=person)
+        self.assertEqual(usuario.person, person)
+
+    def test_usuario_usa_senha_inutilizavel(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        usuario = self.user_model.objects.get(person=Person.objects.get())
+        self.assertFalse(usuario.has_usable_password())
+
+    def test_usuario_nasce_inativo(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        usuario = self.user_model.objects.get(person=Person.objects.get())
+        self.assertFalse(usuario.is_active)
+
+    def test_username_e_criado_corretamente(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertTrue(self.user_model.objects.filter(username="maria.silva").exists())
+
+    def test_colisao_de_username_gera_alternativa(self):
+        self.user_model.objects.create_user(username="maria.silva")
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertTrue(self.user_model.objects.filter(username="maria.silva2").exists())
+
+    def test_person_que_ja_possui_usuario_retorna_erro_de_negocio(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.user_model.objects.create_user(username="maria.existente", person=person)
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"person_id": person.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "PERSON_ALREADY_HAS_USER")
+
+    def test_aprovacao_preenche_reviewed_by_e_reviewed_at(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.reviewed_by, self.superuser)
+        self.assertIsNotNone(self.access_request.reviewed_at)
+
+    def test_approved_nao_pode_ser_aprovado_novamente(self):
+        self.access_request.status = AccessRequest.Status.APPROVED
+        self.access_request.save(update_fields=["status"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "ACCESS_REQUEST_NOT_PENDING")
+
+    def test_aprovacao_e_atomica(self):
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.services.generate_username", side_effect=RuntimeError("falha")):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                    {"create_new_person": True},
+                    content_type="application/json",
+                )
+
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.PENDING)
+        self.assertFalse(Person.objects.exists())
+        self.assertEqual(self.user_model.objects.count(), 2)
+
+    def test_rejeitar_pending(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-reject", args=[self.access_request.pk]),
+            {},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.REJECTED)
+
+    def test_rejeicao_salva_motivo_opcional(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-reject", args=[self.access_request.pk]),
+            {"rejection_reason": "Dados nao conferem."},
+            content_type="application/json",
+        )
+
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.rejection_reason, "Dados nao conferem.")
+
+    def test_rejeicao_preenche_reviewed_by_e_reviewed_at(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-reject", args=[self.access_request.pk]),
+            {},
+            content_type="application/json",
+        )
+
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.reviewed_by, self.superuser)
+        self.assertIsNotNone(self.access_request.reviewed_at)
+
+    def test_rejeicao_nao_cria_person_ou_usuario(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("access-request-admin-reject", args=[self.access_request.pk]),
+            {},
+            content_type="application/json",
+        )
+
+        self.assertFalse(Person.objects.exists())
+        self.assertEqual(self.user_model.objects.count(), 2)
+
+    def test_rejected_nao_pode_ser_rejeitada_novamente(self):
+        self.access_request.status = AccessRequest.Status.REJECTED
+        self.access_request.save(update_fields=["status"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-reject", args=[self.access_request.pk]),
+            {},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "ACCESS_REQUEST_NOT_PENDING")
 
 
 class PermissoesPorPerfilTests(TestCase):
