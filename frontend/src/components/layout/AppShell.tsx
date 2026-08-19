@@ -10,9 +10,11 @@ type AppShellProps = {
 function AppShell({ children }: AppShellProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const location = useLocation()
-  const topbarTitle = location.pathname.startsWith('/solicitacoes-acesso')
-    ? 'Solicitacoes'
-    : 'Pessoas'
+  const topbarTitle = location.pathname.startsWith('/usuarios') || location.pathname.endsWith('/acesso')
+    ? 'Usuarios'
+    : location.pathname.startsWith('/solicitacoes-acesso')
+      ? 'Solicitacoes'
+      : 'Pessoas'
 
   return (
     <div className={`app-shell${isSidebarCollapsed ? ' app-shell--collapsed' : ''}`}>

@@ -1,5 +1,5 @@
 from rest_framework import mixins, status, viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
 from .models import Person
@@ -9,6 +9,11 @@ from .serializers import PersonSerializer
 POSSIBLE_DUPLICATE_CODE = "POSSIBLE_DUPLICATE"
 
 
+class IsActiveAuthenticated(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user.is_authenticated and request.user.is_active)
+
+
 class PersonViewSet(
     mixins.CreateModelMixin,
     mixins.ListModelMixin,
@@ -16,7 +21,7 @@ class PersonViewSet(
     mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsActiveAuthenticated]
     serializer_class = PersonSerializer
     queryset = Person.objects.all()
     http_method_names = ["get", "post", "patch", "head", "options"]

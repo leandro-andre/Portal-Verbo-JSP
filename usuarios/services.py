@@ -33,6 +33,45 @@ class PersonNotFoundError(AccessRequestError):
     message = "A pessoa selecionada nao foi encontrada."
 
 
+class UserAccessError(Exception):
+    code = "USER_ACCESS_ERROR"
+    message = "Nao foi possivel alterar o acesso do usuario."
+
+
+class CannotDisableOwnAccountError(UserAccessError):
+    code = "CANNOT_DISABLE_OWN_ACCOUNT"
+    message = "Voce nao pode bloquear sua propria conta por este fluxo."
+
+
+class CannotDisableSuperuserError(UserAccessError):
+    code = "CANNOT_DISABLE_SUPERUSER"
+    message = "Contas superuser nao podem ser bloqueadas por este fluxo."
+
+
+class UserAccessNotActiveError(UserAccessError):
+    code = "USER_ACCESS_NOT_ACTIVE"
+    message = "Somente acessos ativos podem ser bloqueados."
+
+
+class UserAccessNotBlockedError(UserAccessError):
+    code = "USER_ACCESS_NOT_BLOCKED"
+    message = "Somente acessos bloqueados podem ser reativados."
+
+
+class AccessStatus:
+    PENDING_ACTIVATION = "PENDING_ACTIVATION"
+    ACTIVE = "ACTIVE"
+    BLOCKED = "BLOCKED"
+
+
+def get_access_status(usuario):
+    if usuario.is_active:
+        return AccessStatus.ACTIVE
+    if not usuario.has_usable_password():
+        return AccessStatus.PENDING_ACTIVATION
+    return AccessStatus.BLOCKED
+
+
 def normalize_username_part(value):
     normalized = unicodedata.normalize("NFKD", value or "")
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
@@ -156,3 +195,33 @@ def reject_access_request(access_request, *, reviewed_by, rejection_reason=""):
         ]
     )
     return access_request
+
+
+@transaction.atomic
+def disable_user_access(usuario, *, acting_user):
+    user_model = get_user_model()
+    usuario = user_model.objects.select_for_update().get(pk=usuario.pk)
+
+    if usuario.pk == acting_user.pk:
+        raise CannotDisableOwnAccountError
+    if usuario.is_superuser:
+        raise CannotDisableSuperuserError
+    if get_access_status(usuario) != AccessStatus.ACTIVE:
+        raise UserAccessNotActiveError
+
+    usuario.is_active = False
+    usuario.save(update_fields=["is_active"])
+    return usuario
+
+
+@transaction.atomic
+def enable_user_access(usuario):
+    user_model = get_user_model()
+    usuario = user_model.objects.select_for_update().get(pk=usuario.pk)
+
+    if get_access_status(usuario) != AccessStatus.BLOCKED:
+        raise UserAccessNotBlockedError
+
+    usuario.is_active = True
+    usuario.save(update_fields=["is_active"])
+    return usuario

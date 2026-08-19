@@ -1,7 +1,18 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from usuarios.services import get_access_status
+
 from .models import Person
+
+
+class PersonPortalUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    access_status = serializers.SerializerMethodField()
+
+    def get_access_status(self, obj):
+        return get_access_status(obj)
 
 
 class PersonSerializer(serializers.ModelSerializer):
@@ -11,6 +22,7 @@ class PersonSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     display_name = serializers.CharField(read_only=True)
+    portal_user = PersonPortalUserSerializer(source="user_account", read_only=True)
 
     class Meta:
         model = Person
@@ -23,6 +35,7 @@ class PersonSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "status",
+            "portal_user",
             "allow_possible_duplicate",
             "created_at",
             "updated_at",

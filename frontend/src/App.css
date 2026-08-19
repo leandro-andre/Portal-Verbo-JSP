@@ -570,6 +570,39 @@
   background: #ef4444;
 }
 
+.user-status-badge--pending-activation {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.user-status-badge--pending-activation .status-badge__dot {
+  background: #f59e0b;
+}
+
+.user-status-badge--active {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.user-status-badge--active .status-badge__dot {
+  background: #22c55e;
+}
+
+.user-status-badge--blocked {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.user-status-badge--blocked .status-badge__dot {
+  background: #ef4444;
+}
+
+.table-muted {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .icon-button--table {
   border-color: transparent;
   margin-left: auto;
@@ -920,6 +953,15 @@
   font-weight: 700;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.portal-access-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.portal-access-summary .button {
+  justify-self: flex-start;
 }
 
 .identity-resolution {

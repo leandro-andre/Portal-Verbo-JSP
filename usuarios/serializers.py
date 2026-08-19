@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from .services import get_access_status
 from .models import AccessRequest
 
 
@@ -102,3 +103,23 @@ class ApproveAccessRequestSerializer(serializers.Serializer):
 
 class RejectAccessRequestSerializer(serializers.Serializer):
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class PortalUserPersonSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    display_name = serializers.CharField()
+    status = serializers.CharField()
+
+
+class PortalUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    username = serializers.CharField()
+    is_active = serializers.BooleanField()
+    access_status = serializers.SerializerMethodField()
+    last_login = serializers.DateTimeField(allow_null=True)
+    date_joined = serializers.DateTimeField()
+    person = PortalUserPersonSerializer(allow_null=True)
+    is_superuser = serializers.BooleanField()
+
+    def get_access_status(self, obj):
+        return get_access_status(obj)

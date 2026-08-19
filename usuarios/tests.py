@@ -965,6 +965,224 @@ class AdminAccessRequestApiTests(TestCase):
         self.assertEqual(response.json()["code"], "ACCESS_REQUEST_NOT_PENDING")
 
 
+class AdminUserAccessLifecycleApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.superuser = self.user_model.objects.create_superuser(
+            username="admin.users",
+            password="Senha-forte-123",
+            email="admin.users@example.com",
+        )
+        self.regular_user = self.user_model.objects.create_user(
+            username="regular.users",
+            password="Senha-forte-123",
+        )
+        self.person = Person.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            status=Person.Status.ACTIVE,
+        )
+        self.portal_user = self.user_model.objects.create_user(
+            username="maria.silva",
+            password="Senha-forte-123",
+            person=self.person,
+        )
+
+    def test_lista_usuarios_exige_autenticacao(self):
+        response = self.client.get(reverse("admin-user-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_usuario_comum_recebe_403_na_lista(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("admin-user-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_superuser_lista_usuarios(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-list"))
+
+        self.assertEqual(response.status_code, 200)
+        usernames = {item["username"] for item in response.json()}
+        self.assertIn("maria.silva", usernames)
+
+    def test_serializer_nao_retorna_password(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-detail", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("password", response.json())
+
+    def test_access_status_pending_activation(self):
+        pending = self.user_model.objects.create_user(
+            username="pending.activation",
+            person=Person.objects.create(full_name="Ana Pessoa", birth_date=date(1991, 1, 1)),
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-detail", args=[pending.pk]))
+
+        self.assertEqual(response.json()["access_status"], "PENDING_ACTIVATION")
+
+    def test_access_status_active(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-detail", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.json()["access_status"], "ACTIVE")
+
+    def test_access_status_blocked(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-detail", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.json()["access_status"], "BLOCKED")
+
+    def test_bloquear_active_vira_blocked(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["access_status"], "BLOCKED")
+        self.portal_user.refresh_from_db()
+        self.assertFalse(self.portal_user.is_active)
+
+    def test_person_nao_e_alterada_ao_bloquear(self):
+        self.client.force_login(self.superuser)
+
+        self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.status, Person.Status.ACTIVE)
+
+    def test_usuario_bloqueado_nao_faz_login(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": "maria.silva", "password": "Senha-forte-123"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "INVALID_CREDENTIALS")
+
+    def test_sessao_antiga_de_usuario_bloqueado_perde_current_user(self):
+        self.client.force_login(self.portal_user)
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+
+        response = self.client.get(reverse("auth-current-user"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["is_authenticated"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_sessao_antiga_de_usuario_bloqueado_perde_acesso_api(self):
+        self.client.force_login(self.portal_user)
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+
+        response = self.client.get(reverse("person-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_reativar_blocked_vira_active(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-enable", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["access_status"], "ACTIVE")
+        self.portal_user.refresh_from_db()
+        self.assertTrue(self.portal_user.is_active)
+
+    def test_person_nao_e_alterada_ao_reativar(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        self.client.post(reverse("admin-user-enable", args=[self.portal_user.pk]))
+
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.status, Person.Status.ACTIVE)
+
+    def test_senha_continua_a_mesma_apos_reativacao(self):
+        original_password = self.portal_user.password
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        self.client.post(reverse("admin-user-enable", args=[self.portal_user.pk]))
+
+        self.portal_user.refresh_from_db()
+        self.assertEqual(self.portal_user.password, original_password)
+        self.assertTrue(self.portal_user.check_password("Senha-forte-123"))
+
+    def test_pending_activation_nao_pode_ser_reativado_como_blocked(self):
+        pending = self.user_model.objects.create_user(
+            username="pending.enable",
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-enable", args=[pending.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_ACCESS_NOT_BLOCKED")
+
+    def test_usuario_nao_pode_bloquear_propria_conta(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-disable", args=[self.superuser.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "CANNOT_DISABLE_OWN_ACCOUNT")
+        self.superuser.refresh_from_db()
+        self.assertTrue(self.superuser.is_active)
+
+    def test_superuser_nao_pode_ser_bloqueado_pelo_fluxo_funcional(self):
+        other_superuser = self.user_model.objects.create_superuser(
+            username="admin.other",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-disable", args=[other_superuser.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "CANNOT_DISABLE_SUPERUSER")
+        other_superuser.refresh_from_db()
+        self.assertTrue(other_superuser.is_active)
+
+    def test_usuario_comum_nao_pode_bloquear(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_detalhe_protegido(self):
+        response = self.client.get(reverse("admin-user-detail", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+
 class PermissoesPorPerfilTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()

@@ -1,4 +1,4 @@
-import { ClipboardList, UsersRound } from 'lucide-react'
+import { ClipboardList, UserCog, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 type SidebarProps = {
@@ -37,6 +37,13 @@ function Sidebar({ isCollapsed }: SidebarProps) {
         >
           <ClipboardList size={18} aria-hidden="true" />
           {!isCollapsed ? <span>Solicitacoes</span> : null}
+        </NavLink>
+        <NavLink
+          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          to="/usuarios"
+        >
+          <UserCog size={18} aria-hidden="true" />
+          {!isCollapsed ? <span>Usuarios</span> : null}
         </NavLink>
       </nav>
 

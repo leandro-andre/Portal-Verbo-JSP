@@ -1,4 +1,12 @@
+import type { AccessStatus } from './user'
+
 export type PersonStatus = 'ACTIVE' | 'INACTIVE'
+
+export type PersonPortalUser = {
+  id: number
+  username: string
+  access_status: AccessStatus
+}
 
 export type Person = {
   id: number
@@ -9,6 +17,7 @@ export type Person = {
   email: string
   phone: string
   status: PersonStatus
+  portal_user: PersonPortalUser | null
   created_at: string
   updated_at: string
 }

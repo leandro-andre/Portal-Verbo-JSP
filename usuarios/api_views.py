@@ -1,6 +1,6 @@
 import json
 
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import SESSION_KEY, authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -22,13 +22,17 @@ from .models import AccessRequest
 from .serializers import (
     AdminAccessRequestSerializer,
     ApproveAccessRequestSerializer,
+    PortalUserSerializer,
     PublicAccessRequestCreateSerializer,
     RejectAccessRequestSerializer,
 )
 from .services import (
     AccessRequestError,
+    UserAccessError,
     approve_access_request,
     build_account_activation_path,
+    disable_user_access,
+    enable_user_access,
     reject_access_request,
 )
 
@@ -69,6 +73,13 @@ def csrf_view(request):
 
 @require_GET
 def current_user_view(request):
+    if request.user.is_authenticated and not request.user.is_active:
+        logout(request)
+        request.session.flush()
+        return JsonResponse({"is_authenticated": False, "user": None})
+    if not request.user.is_authenticated and request.session.get(SESSION_KEY):
+        request.session.flush()
+
     return JsonResponse(_current_user_payload(request.user))
 
 
@@ -178,7 +189,16 @@ def activate_account_view(request):
 
 class CanReviewAccessRequests(BasePermission):
     def has_permission(self, request, view):
-        return bool(usuario_tem_acesso_secretaria(request.user))
+        return bool(request.user.is_active and usuario_tem_acesso_secretaria(request.user))
+
+
+class CanManageUsers(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.is_superuser
+        )
 
 
 class PublicAccessRequestCreateView(APIView):
@@ -303,3 +323,53 @@ class AdminAccessRequestRejectView(APIView):
             )
 
         return Response(AdminAccessRequestSerializer(rejected_request).data)
+
+
+class AdminUserListView(APIView):
+    permission_classes = [CanManageUsers]
+
+    def get(self, request):
+        user_model = get_user_model()
+        queryset = user_model.objects.select_related("person").order_by("person__full_name", "username")
+        serializer = PortalUserSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class AdminUserDetailView(APIView):
+    permission_classes = [CanManageUsers]
+
+    def get_object(self, pk):
+        user_model = get_user_model()
+        return get_object_or_404(user_model.objects.select_related("person"), pk=pk)
+
+    def get(self, request, pk):
+        usuario = self.get_object(pk)
+        return Response(PortalUserSerializer(usuario).data)
+
+
+class AdminUserDisableView(AdminUserDetailView):
+    def post(self, request, pk):
+        usuario = self.get_object(pk)
+        try:
+            usuario = disable_user_access(usuario, acting_user=request.user)
+        except UserAccessError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(PortalUserSerializer(usuario).data)
+
+
+class AdminUserEnableView(AdminUserDetailView):
+    def post(self, request, pk):
+        usuario = self.get_object(pk)
+        try:
+            usuario = enable_user_access(usuario)
+        except UserAccessError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(PortalUserSerializer(usuario).data)

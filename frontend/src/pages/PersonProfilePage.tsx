@@ -5,6 +5,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiHttpError } from '../api/people'
 import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
+import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { usePerson, useUpdatePerson } from '../hooks/usePeople'
 import type { Person, PersonStatus } from '../types/person'
 
@@ -183,6 +184,26 @@ function PersonProfile({
           <DetailItem label="Criado em" value={formatDate(person.created_at)} />
           <DetailItem label="Atualizado em" value={formatDate(person.updated_at)} />
         </ProfileSection>
+
+        <section className="profile-section">
+          <h2>Acesso ao Portal</h2>
+          {person.portal_user ? (
+            <div className="portal-access-summary">
+              <dl className="profile-details">
+                <DetailItem label="Usuario" value={person.portal_user.username} />
+                <DetailItem
+                  label="Status do acesso"
+                  value={<AccessStatusBadge status={person.portal_user.access_status} />}
+                />
+              </dl>
+              <Link className="button button--secondary" to={`/pessoas/${person.id}/acesso`}>
+                Gerenciar acesso
+              </Link>
+            </div>
+          ) : (
+            <p className="page-heading__description">Sem acesso ao Portal</p>
+          )}
+        </section>
       </div>
     </>
   )

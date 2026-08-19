@@ -10,6 +10,8 @@ import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
+import UserAccessPage from './pages/UserAccessPage'
+import UsersPage from './pages/UsersPage'
 import { useCurrentUser } from './hooks/useAuth'
 
 function AdminRoutes() {
@@ -39,10 +41,12 @@ function AdminRoutes() {
         <Route path="/" element={<Navigate to="/pessoas" replace />} />
         <Route path="/pessoas" element={<PeoplePage />} />
         <Route path="/pessoas/nova" element={<PersonCreatePage />} />
+        <Route path="/pessoas/:id/acesso" element={<UserAccessPage />} />
         <Route path="/pessoas/:id/editar" element={<PersonEditPage />} />
         <Route path="/pessoas/:id" element={<PersonProfilePage />} />
         <Route path="/solicitacoes-acesso" element={<AccessRequestsPage />} />
         <Route path="/solicitacoes-acesso/:id" element={<AccessRequestDetailPage />} />
+        <Route path="/usuarios" element={<UsersPage />} />
         <Route path="*" element={<Navigate to="/pessoas" replace />} />
       </Routes>
     </AppShell>

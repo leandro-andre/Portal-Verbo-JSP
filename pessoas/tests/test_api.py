@@ -57,6 +57,7 @@ class PersonApiTests(APITestCase):
                 "email",
                 "phone",
                 "status",
+                "portal_user",
                 "created_at",
                 "updated_at",
             },
