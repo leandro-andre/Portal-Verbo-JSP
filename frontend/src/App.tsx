@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import AppShell from './components/layout/AppShell'
 import PersonCreatePage from './pages/PersonCreatePage'
+import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
           <Route path="/" element={<Navigate to="/pessoas" replace />} />
           <Route path="/pessoas" element={<PeoplePage />} />
           <Route path="/pessoas/nova" element={<PersonCreatePage />} />
+          <Route path="/pessoas/:id" element={<PersonProfilePage />} />
           <Route path="*" element={<Navigate to="/pessoas" replace />} />
         </Routes>
       </AppShell>

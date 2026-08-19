@@ -1,4 +1,5 @@
-import { MoreVertical } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { Person } from '../../types/person'
 import PersonAvatar from './PersonAvatar'
 import PersonStatusBadge from './PersonStatusBadge'
@@ -31,7 +32,7 @@ function PeopleTable({ people }: PeopleTableProps) {
             <th scope="col">Nascimento</th>
             <th scope="col">Status</th>
             <th scope="col" className="people-table__actions-header">
-              Acoes
+              Perfil
             </th>
           </tr>
         </thead>
@@ -45,7 +46,9 @@ function PeopleTable({ people }: PeopleTableProps) {
                   <div className="person-cell">
                     <PersonAvatar name={person.display_name} />
                     <div>
-                      <strong>{person.display_name}</strong>
+                      <Link className="person-name-link" to={`/pessoas/${person.id}`}>
+                        {person.display_name}
+                      </Link>
                       {hasDifferentFullName ? <span>{person.full_name}</span> : null}
                     </div>
                   </div>
@@ -61,9 +64,13 @@ function PeopleTable({ people }: PeopleTableProps) {
                   <PersonStatusBadge status={person.status} />
                 </td>
                 <td>
-                  <button className="icon-button icon-button--table" type="button" aria-label={`Acoes de ${person.display_name}`}>
-                    <MoreVertical size={18} aria-hidden="true" />
-                  </button>
+                  <Link
+                    className="icon-button icon-button--table"
+                    to={`/pessoas/${person.id}`}
+                    aria-label={`Abrir perfil de ${person.display_name}`}
+                  >
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </Link>
                 </td>
               </tr>
             )

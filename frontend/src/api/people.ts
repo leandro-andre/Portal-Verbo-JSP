@@ -25,6 +25,16 @@ export class PossibleDuplicateError extends Error {
   }
 }
 
+export class ApiHttpError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiHttpError'
+    this.status = status
+  }
+}
+
 export async function getPeople(): Promise<Person[]> {
   const response = await fetch('/api/people/')
 
@@ -33,6 +43,20 @@ export async function getPeople(): Promise<Person[]> {
   }
 
   return response.json() as Promise<Person[]>
+}
+
+export async function getPerson(id: number): Promise<Person> {
+  const response = await fetch(`/api/people/${id}/`)
+
+  if (response.status === 404) {
+    throw new ApiHttpError(404, 'Pessoa nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar os dados da pessoa.')
+  }
+
+  return response.json() as Promise<Person>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
