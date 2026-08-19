@@ -1,15 +1,12 @@
 import './App.css'
-import PortalHeader from './components/PortalHeader'
+import AppShell from './components/layout/AppShell'
 import PeoplePage from './pages/PeoplePage'
 
 function App() {
   return (
-    <div className="app-shell">
-      <PortalHeader />
-      <main className="app-main">
-        <PeoplePage />
-      </main>
-    </div>
+    <AppShell>
+      <PeoplePage />
+    </AppShell>
   )
 }
 

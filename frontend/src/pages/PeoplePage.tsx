@@ -1,90 +1,113 @@
 import { useState } from 'react'
-import PersonCard from '../components/PersonCard'
+import { Plus, Search } from 'lucide-react'
+import PeopleTable from '../components/people/PeopleTable'
+import { usePeople } from '../hooks/usePeople'
 
-type Person = {
-  id: number
-  name: string
-  department: string
-  role: string
-}
-
-const people: Person[] = [
-  {
-    id: 1,
-    name: 'Geysika',
-    department: 'Juniores',
-    role: 'Professora',
-  },
-  {
-    id: 2,
-    name: 'Gledson',
-    department: 'Juniores',
-    role: 'Professor',
-  },
-  {
-    id: 3,
-    name: 'Vânia',
-    department: 'Juniores',
-    role: 'Professora',
-  },
-]
+type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE'
 
 function PeoplePage() {
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const { data: people = [], isError, isLoading, refetch } = usePeople()
+  const normalizedSearch = search.trim().toLowerCase()
 
-  const filteredPeople = people.filter((person) =>
-    person.name.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filteredPeople = people.filter((person) => {
+    const matchesStatus = statusFilter === 'ALL' || person.status === statusFilter
+    const matchesSearch =
+      !normalizedSearch ||
+      person.display_name.toLowerCase().includes(normalizedSearch) ||
+      person.full_name.toLowerCase().includes(normalizedSearch) ||
+      person.email.toLowerCase().includes(normalizedSearch) ||
+      person.phone.toLowerCase().includes(normalizedSearch)
+
+    return matchesStatus && matchesSearch
+  })
+
+  const hasPeople = people.length > 0
+  const countLabel = `${filteredPeople.length} ${filteredPeople.length === 1 ? 'pessoa' : 'pessoas'}`
 
   return (
     <section className="people-page" id="pessoas">
       <div className="page-heading">
         <div>
-          <p className="page-heading__eyebrow">Gestão de pessoas</p>
           <h1>Pessoas</h1>
           <p className="page-heading__description">
-            Gerencie pessoas, vínculos e participação nos departamentos da igreja.
+            Gerencie as pessoas cadastradas na igreja.
           </p>
         </div>
 
-        <button className="button button--primary" type="button">
+        <button
+          className="button button--primary"
+          type="button"
+          disabled
+          title="Cadastro de pessoa sera implementado na PVV-006"
+        >
+          <Plus size={17} aria-hidden="true" />
           Nova pessoa
         </button>
       </div>
 
-      <div className="people-toolbar">
+      <div className="people-toolbar" aria-label="Filtros de pessoas">
         <label className="search-field" htmlFor="people-search">
-          <span>Buscar pessoa</span>
+          <span className="search-field__icon" aria-hidden="true">
+            <Search size={18} />
+          </span>
+          <span className="sr-only">Buscar por nome, e-mail ou telefone</span>
           <input
             id="people-search"
             type="search"
-            placeholder="Buscar por nome"
+            placeholder="Buscar por nome, e-mail ou telefone..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
 
-        <p className="people-count">
-          {filteredPeople.length}{' '}
-          {filteredPeople.length === 1 ? 'pessoa encontrada' : 'pessoas encontradas'}
-        </p>
+        <label className="status-filter" htmlFor="people-status-filter">
+          <span>Status</span>
+          <select
+            id="people-status-filter"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+          >
+            <option value="ALL">Todos</option>
+            <option value="ACTIVE">Ativos</option>
+            <option value="INACTIVE">Inativos</option>
+          </select>
+        </label>
       </div>
 
-      {filteredPeople.length > 0 ? (
-        <div className="people-list">
-          {filteredPeople.map((person) => (
-            <PersonCard
-              key={person.id}
-              name={person.name}
-              department={person.department}
-              role={person.role}
-            />
-          ))}
+      <div className="people-summary" aria-live="polite">
+        {countLabel}
+      </div>
+
+      {isLoading ? (
+        <div className="state-panel">
+          <h2>Carregando pessoas...</h2>
+          <p>Aguarde enquanto os dados sao carregados.</p>
         </div>
+      ) : isError ? (
+        <div className="state-panel state-panel--error">
+          <h2>Nao foi possivel carregar as pessoas.</h2>
+          <p>Verifique a conexao com o backend e tente novamente.</p>
+          <button className="button button--secondary" type="button" onClick={() => void refetch()}>
+            Tentar novamente
+          </button>
+        </div>
+      ) : filteredPeople.length > 0 ? (
+        <PeopleTable people={filteredPeople} />
       ) : (
-        <div className="empty-state">
-          <h2>Nenhuma pessoa encontrada</h2>
-          <p>Tente buscar por outro nome.</p>
+        <div className="state-panel">
+          {hasPeople ? (
+            <>
+              <h2>Nenhuma pessoa encontrada para os filtros atuais.</h2>
+              <p>Ajuste a busca ou o filtro de status.</p>
+            </>
+          ) : (
+            <>
+              <h2>Nenhuma pessoa cadastrada.</h2>
+              <p>Quando houver pessoas cadastradas, elas aparecerao aqui.</p>
+            </>
+          )}
         </div>
       )}
     </section>
