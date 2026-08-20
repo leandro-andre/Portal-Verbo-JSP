@@ -2,7 +2,7 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -19,7 +19,7 @@ from usuarios.roles import (
 
 from .enums import ChurchStatus
 from .models import ChurchJourney
-from .models import DiscipleshipClass, DiscipleshipEnrollment
+from .models import DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
 from .selectors import (
     get_church_status,
     get_discipleship_completed_at,
@@ -32,17 +32,23 @@ from .services import (
     CHURCH_JOURNEY_ALREADY_EXISTS,
     DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS,
     DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT,
+    DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS,
     DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS,
+    DISCIPLESHIP_LESSON_DATE_CONFLICT,
     INVALID_DISCIPLESHIP_CLASS_TRANSITION,
     INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION,
+    INVALID_DISCIPLESHIP_LESSON_TRANSITION,
     PERSON_NOT_IN_CHURCH_JOURNEY,
     ChurchJourneyError,
     cancel_discipleship_class,
+    cancel_discipleship_lesson,
     complete_discipleship_class,
     create_discipleship_class,
+    create_discipleship_lesson,
     enroll_person_in_discipleship_class,
     start_church_journey,
     start_discipleship_class,
+    update_discipleship_lesson,
     withdraw_discipleship_enrollment,
 )
 
@@ -1169,3 +1175,434 @@ class DiscipleshipEnrollmentRolePermissionsTests(TestCase):
         self.assertFalse(pastor.has_perm("church_journey.add_discipleshipenrollment"))
         self.assertFalse(pastor.has_perm("church_journey.withdraw_discipleshipenrollment"))
         self.assertFalse(comum.has_perm("church_journey.view_discipleshipenrollment"))
+
+
+class DiscipleshipLessonModelTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(full_name="Professor Aula", birth_date=date(1980, 1, 1))
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Aulas",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=2,
+        )
+
+    def make_class(self, name, start_date):
+        return DiscipleshipClass.objects.create(
+            name=name,
+            teacher=self.teacher,
+            start_date=start_date,
+            expected_end_date=date(start_date.year, 11, 28),
+            planned_sessions=1,
+        )
+
+    def test_criacao_valida_e_default_scheduled(self):
+        lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Identidade em Cristo",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        self.assertEqual(lesson.discipleship_class, self.discipleship_class)
+        self.assertEqual(lesson.status, DiscipleshipLesson.Status.SCHEDULED)
+
+    def test_title_obrigatorio(self):
+        lesson = DiscipleshipLesson(
+            discipleship_class=self.discipleship_class,
+            title="   ",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        with self.assertRaisesMessage(Exception, "Informe o titulo da aula."):
+            lesson.full_clean()
+
+    def test_turma_fk_obrigatoria(self):
+        with self.assertRaises(IntegrityError):
+            DiscipleshipLesson.objects.create(
+                discipleship_class=None,
+                title="Sem turma",
+                lesson_date=date(2026, 9, 5),
+            )
+
+    def test_mesma_turma_mesma_data_bloqueada(self):
+        DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula 1",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DiscipleshipLesson.objects.create(
+                discipleship_class=self.discipleship_class,
+                title="Aula duplicada",
+                lesson_date=date(2026, 9, 5),
+            )
+
+    def test_turmas_diferentes_mesma_data_permitido(self):
+        other_class = self.make_class("Outra turma", date(2026, 9, 6))
+
+        DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula Turma A",
+            lesson_date=date(2026, 9, 5),
+        )
+        DiscipleshipLesson.objects.create(
+            discipleship_class=other_class,
+            title="Aula Turma B",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        self.assertEqual(DiscipleshipLesson.objects.count(), 2)
+
+    def test_planned_sessions_nao_limita_quantidade(self):
+        for day in (5, 12, 19):
+            DiscipleshipLesson.objects.create(
+                discipleship_class=self.discipleship_class,
+                title=f"Aula {day}",
+                lesson_date=date(2026, 9, day),
+            )
+
+        self.assertEqual(self.discipleship_class.planned_sessions, 2)
+        self.assertEqual(DiscipleshipLesson.objects.count(), 3)
+
+    def test_aula_cancelada_permanece_no_historico_e_ocupa_data(self):
+        lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula cancelada",
+            lesson_date=date(2026, 9, 5),
+            status=DiscipleshipLesson.Status.CANCELLED,
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DiscipleshipLesson.objects.create(
+                discipleship_class=self.discipleship_class,
+                title="Nova aula",
+                lesson_date=lesson.lesson_date,
+            )
+
+        self.assertTrue(DiscipleshipLesson.objects.filter(pk=lesson.pk).exists())
+
+
+class DiscipleshipLessonDomainTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(full_name="Professor Dominio Aula", birth_date=date(1980, 1, 1))
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Dominio Aula",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=1,
+        )
+
+    def make_class(self, **kwargs):
+        data = {
+            "name": "Discipulado Aula Extra",
+            "teacher": self.teacher,
+            "start_date": date(2027, 2, 1),
+            "expected_end_date": date(2027, 4, 30),
+            "planned_sessions": 1,
+        }
+        data.update(kwargs)
+        return DiscipleshipClass.objects.create(**data)
+
+    def test_criar_em_planned_e_in_progress(self):
+        in_progress = self.make_class(name="Aulas em andamento", status=DiscipleshipClass.Status.IN_PROGRESS)
+
+        planned_lesson = create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Identidade em Cristo",
+            lesson_date=date(2026, 9, 5),
+        )
+        progress_lesson = create_discipleship_lesson(
+            discipleship_class=in_progress,
+            title="Palavra de Deus",
+            lesson_date=date(2027, 2, 1),
+        )
+
+        self.assertEqual(planned_lesson.status, DiscipleshipLesson.Status.SCHEDULED)
+        self.assertEqual(progress_lesson.status, DiscipleshipLesson.Status.SCHEDULED)
+
+    def test_bloquear_em_completed_e_cancelled(self):
+        for closed_status in (DiscipleshipClass.Status.COMPLETED, DiscipleshipClass.Status.CANCELLED):
+            closed_class = self.make_class(name=f"Aula fechada {closed_status}", status=closed_status)
+
+            with self.assertRaises(ChurchJourneyError) as context:
+                create_discipleship_lesson(
+                    discipleship_class=closed_class,
+                    title="Aula fechada",
+                    lesson_date=date(2027, 2, 1),
+                )
+
+            self.assertEqual(context.exception.code, DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS)
+
+    def test_editar_titulo_e_data(self):
+        lesson = create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Titulo antigo",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        update_discipleship_lesson(
+            lesson,
+            title="Titulo novo",
+            lesson_date=date(2026, 9, 12),
+        )
+
+        lesson.refresh_from_db()
+        self.assertEqual(lesson.title, "Titulo novo")
+        self.assertEqual(lesson.lesson_date, date(2026, 9, 12))
+
+    def test_conflito_apos_edicao_de_data(self):
+        create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Aula 1",
+            lesson_date=date(2026, 9, 5),
+        )
+        lesson = create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Aula 2",
+            lesson_date=date(2026, 9, 12),
+        )
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            update_discipleship_lesson(lesson, lesson_date=date(2026, 9, 5))
+
+        self.assertEqual(context.exception.code, DISCIPLESHIP_LESSON_DATE_CONFLICT)
+
+    def test_cancelar_scheduled_e_preservar_aula(self):
+        lesson = create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Aula para cancelar",
+            lesson_date=date(2026, 9, 5),
+        )
+
+        cancel_discipleship_lesson(lesson)
+
+        lesson.refresh_from_db()
+        self.assertEqual(lesson.status, DiscipleshipLesson.Status.CANCELLED)
+        self.assertTrue(DiscipleshipLesson.objects.filter(pk=lesson.pk).exists())
+
+    def test_segundo_cancelamento_bloqueado(self):
+        lesson = create_discipleship_lesson(
+            discipleship_class=self.discipleship_class,
+            title="Aula cancelada",
+            lesson_date=date(2026, 9, 5),
+        )
+        cancel_discipleship_lesson(lesson)
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            cancel_discipleship_lesson(lesson)
+
+        self.assertEqual(context.exception.code, INVALID_DISCIPLESHIP_LESSON_TRANSITION)
+
+
+class DiscipleshipLessonApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(full_name="Professor API Aula", birth_date=date(1980, 1, 1))
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado API Aula",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=1,
+        )
+
+    def authenticate_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        self.client.force_authenticate(usuario)
+        return usuario
+
+    def list_url(self, discipleship_class=None):
+        return reverse("discipleship-lesson-list", args=[(discipleship_class or self.discipleship_class).pk])
+
+    def detail_url(self, lesson, discipleship_class=None):
+        return reverse(
+            "discipleship-lesson-detail",
+            args=[(discipleship_class or self.discipleship_class).pk, lesson.pk],
+        )
+
+    def cancel_url(self, lesson, discipleship_class=None):
+        return reverse(
+            "discipleship-lesson-cancel",
+            args=[(discipleship_class or self.discipleship_class).pk, lesson.pk],
+        )
+
+    def test_get_list_detail_post_patch_cancel(self):
+        self.authenticate_role("secretaria.lesson.api", SECRETARY_GROUP)
+
+        create_response = self.client.post(
+            self.list_url(),
+            {
+                "title": "  Identidade em Cristo  ",
+                "lesson_date": "2026-09-05",
+                "status": DiscipleshipLesson.Status.CANCELLED,
+            },
+            format="json",
+        )
+        lesson = DiscipleshipLesson.objects.get()
+        list_response = self.client.get(self.list_url())
+        detail_response = self.client.get(self.detail_url(lesson))
+        patch_response = self.client.patch(
+            self.detail_url(lesson),
+            {"title": "Palavra de Deus", "lesson_date": "2026-09-12", "status": DiscipleshipLesson.Status.CANCELLED},
+            format="json",
+        )
+        cancel_response = self.client.post(self.cancel_url(lesson))
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.json()["title"], "Identidade em Cristo")
+        self.assertEqual(create_response.json()["status"], DiscipleshipLesson.Status.SCHEDULED)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_response.json()["status"], DiscipleshipLesson.Status.SCHEDULED)
+        self.assertEqual(cancel_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(cancel_response.json()["status"], DiscipleshipLesson.Status.CANCELLED)
+
+    def test_class_id_da_url_e_respeitado(self):
+        self.authenticate_role("secretaria.lesson.url", SECRETARY_GROUP)
+        other_class = DiscipleshipClass.objects.create(
+            name="Outra turma API Aula",
+            teacher=self.teacher,
+            start_date=date(2027, 2, 1),
+            expected_end_date=date(2027, 4, 30),
+            planned_sessions=1,
+        )
+
+        response = self.client.post(
+            self.list_url(other_class),
+            {
+                "title": "Aula outra turma",
+                "lesson_date": "2027-02-01",
+                "discipleship_class_id": self.discipleship_class.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["discipleship_class_id"], other_class.pk)
+
+    def test_conflito_de_data_e_status_fechado_retorna_erro_estruturado(self):
+        self.authenticate_role("secretaria.lesson.errors", SECRETARY_GROUP)
+        DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula 1",
+            lesson_date=date(2026, 9, 5),
+        )
+        completed = DiscipleshipClass.objects.create(
+            name="Turma concluida aula",
+            teacher=self.teacher,
+            start_date=date(2025, 2, 1),
+            expected_end_date=date(2025, 4, 30),
+            planned_sessions=1,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+
+        conflict = self.client.post(
+            self.list_url(),
+            {"title": "Aula duplicada", "lesson_date": "2026-09-05"},
+            format="json",
+        )
+        closed = self.client.post(
+            self.list_url(completed),
+            {"title": "Aula fechada", "lesson_date": "2025-02-01"},
+            format="json",
+        )
+
+        self.assertEqual(conflict.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(conflict.json()["code"], DISCIPLESHIP_LESSON_DATE_CONFLICT)
+        self.assertEqual(closed.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(closed.json()["code"], DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS)
+
+    def test_patch_conflito_cancelamento_invalido_e_delete_405(self):
+        self.authenticate_role("secretaria.lesson.more", SECRETARY_GROUP)
+        DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula 1",
+            lesson_date=date(2026, 9, 5),
+        )
+        lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula 2",
+            lesson_date=date(2026, 9, 12),
+        )
+
+        conflict = self.client.patch(self.detail_url(lesson), {"lesson_date": "2026-09-05"}, format="json")
+        first_cancel = self.client.post(self.cancel_url(lesson))
+        second_cancel = self.client.post(self.cancel_url(lesson))
+        delete_response = self.client.delete(self.detail_url(lesson))
+
+        self.assertEqual(conflict.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(conflict.json()["code"], DISCIPLESHIP_LESSON_DATE_CONFLICT)
+        self.assertEqual(first_cancel.status_code, status.HTTP_200_OK)
+        self.assertEqual(second_cancel.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(second_cancel.json()["code"], INVALID_DISCIPLESHIP_LESSON_TRANSITION)
+        self.assertEqual(delete_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_permissions_pastor_view_comum_403_professor_sem_bypass(self):
+        lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula permissionada",
+            lesson_date=date(2026, 9, 5),
+        )
+        pastor = self.authenticate_role("pastor.lesson.view", PASTOR_GROUP)
+
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.client.post(self.list_url(), {"title": "Nova", "lesson_date": "2026-09-12"}, format="json").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.patch(self.detail_url(lesson), {"title": "Editada"}, format="json").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(self.client.post(self.cancel_url(lesson)).status_code, status.HTTP_403_FORBIDDEN)
+
+        professor_user = self.user_model.objects.create_user(
+            username="professor.lesson.no.bypass",
+            password="senha-forte-123",
+            person=self.teacher,
+        )
+        self.client.force_authenticate(professor_user)
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_403_FORBIDDEN)
+
+        comum = self.user_model.objects.create_user(username="comum.lesson", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+        self.assertEqual(self.client.get(self.detail_url(lesson)).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshiplesson"))
+
+
+class DiscipleshipLessonRolePermissionsTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def assert_can_manage_lessons(self, usuario):
+        self.assertTrue(usuario.has_perm("church_journey.view_discipleshiplesson"))
+        self.assertTrue(usuario.has_perm("church_journey.add_discipleshiplesson"))
+        self.assertTrue(usuario.has_perm("church_journey.change_discipleshiplesson"))
+        self.assertTrue(usuario.has_perm("church_journey.cancel_discipleshiplesson"))
+
+    def test_admin_e_secretaria_gerenciam_aulas(self):
+        for group_name in (PORTAL_ADMIN_GROUP, SECRETARY_GROUP):
+            usuario = self.make_user_with_role(f"{group_name}.lesson", group_name)
+            self.assert_can_manage_lessons(usuario)
+
+    def test_pastor_apenas_visualiza_e_comum_nao_tem_acesso(self):
+        pastor = self.make_user_with_role("pastor.lesson.perms", PASTOR_GROUP)
+        comum = self.user_model.objects.create_user(username="comum.lesson.perms", password="senha-forte-123")
+
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshiplesson"))
+        self.assertFalse(pastor.has_perm("church_journey.add_discipleshiplesson"))
+        self.assertFalse(pastor.has_perm("church_journey.change_discipleshiplesson"))
+        self.assertFalse(pastor.has_perm("church_journey.cancel_discipleshiplesson"))
+        self.assertFalse(comum.has_perm("church_journey.view_discipleshiplesson"))

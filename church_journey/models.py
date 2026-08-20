@@ -140,3 +140,49 @@ class DiscipleshipEnrollment(models.Model):
 
     def __str__(self):
         return f"{self.person} - {self.discipleship_class}"
+
+
+class DiscipleshipLesson(models.Model):
+    class Status(models.TextChoices):
+        SCHEDULED = "SCHEDULED", "Agendada"
+        CANCELLED = "CANCELLED", "Cancelada"
+
+    discipleship_class = models.ForeignKey(
+        DiscipleshipClass,
+        verbose_name="Turma de discipulado",
+        on_delete=models.PROTECT,
+        related_name="lessons",
+    )
+    title = models.CharField("Titulo", max_length=150)
+    lesson_date = models.DateField("Data da aula")
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["lesson_date", "id"]
+        verbose_name = "Aula de discipulado"
+        verbose_name_plural = "Aulas de discipulado"
+        permissions = [
+            ("cancel_discipleshiplesson", "Can cancel discipleship lesson"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["discipleship_class", "lesson_date"],
+                name="unique_discipleship_class_lesson_date",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.discipleship_class} - {self.title}"
+
+    def clean(self):
+        super().clean()
+        self.title = (self.title or "").strip()
+        if not self.title:
+            raise ValidationError({"title": "Informe o titulo da aula."})

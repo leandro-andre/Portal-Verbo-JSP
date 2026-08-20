@@ -1,21 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   cancelDiscipleshipClass,
+  cancelDiscipleshipLesson,
   completeDiscipleshipClass,
   createDiscipleshipEnrollment,
   createDiscipleshipClass,
+  createDiscipleshipLesson,
   getDiscipleshipClass,
   getDiscipleshipClasses,
   getDiscipleshipEnrollment,
   getDiscipleshipEnrollments,
+  getDiscipleshipLesson,
+  getDiscipleshipLessons,
   startDiscipleshipClass,
   updateDiscipleshipClass,
+  updateDiscipleshipLesson,
   withdrawDiscipleshipEnrollment,
 } from '../api/discipleship'
 import type {
   CreateDiscipleshipClassInput,
   CreateDiscipleshipEnrollmentInput,
+  CreateDiscipleshipLessonInput,
   UpdateDiscipleshipClassInput,
+  UpdateDiscipleshipLessonInput,
 } from '../types/discipleship'
 
 export const discipleshipClassesQueryKey = ['discipleship', 'classes'] as const
@@ -30,6 +37,14 @@ export function discipleshipEnrollmentsQueryKey(classId: number) {
 
 export function discipleshipEnrollmentQueryKey(classId: number, enrollmentId: number) {
   return ['discipleship', 'classes', classId, 'enrollments', enrollmentId] as const
+}
+
+export function discipleshipLessonsQueryKey(classId: number) {
+  return ['discipleship', 'classes', classId, 'lessons'] as const
+}
+
+export function discipleshipLessonQueryKey(classId: number, lessonId: number) {
+  return ['discipleship', 'classes', classId, 'lessons', lessonId] as const
 }
 
 export function useDiscipleshipClasses() {
@@ -121,6 +136,60 @@ export function useWithdrawDiscipleshipEnrollment(classId: number) {
     mutationFn: (enrollmentId: number) => withdrawDiscipleshipEnrollment(classId, enrollmentId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: discipleshipEnrollmentsQueryKey(classId) })
+      await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
+    },
+  })
+}
+
+export function useDiscipleshipLessons(classId: number) {
+  return useQuery({
+    queryKey: discipleshipLessonsQueryKey(classId),
+    queryFn: () => getDiscipleshipLessons(classId),
+    enabled: Number.isFinite(classId),
+  })
+}
+
+export function useDiscipleshipLesson(classId: number, lessonId: number) {
+  return useQuery({
+    queryKey: discipleshipLessonQueryKey(classId, lessonId),
+    queryFn: () => getDiscipleshipLesson(classId, lessonId),
+    enabled: Number.isFinite(classId) && Number.isFinite(lessonId),
+  })
+}
+
+export function useCreateDiscipleshipLesson(classId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateDiscipleshipLessonInput) => createDiscipleshipLesson(classId, payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
+      await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
+    },
+  })
+}
+
+export function useUpdateDiscipleshipLesson(classId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: UpdateDiscipleshipLessonInput }) =>
+      updateDiscipleshipLesson(classId, id, payload),
+    onSuccess: async (lesson) => {
+      queryClient.setQueryData(discipleshipLessonQueryKey(classId, lesson.id), lesson)
+      await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
+      await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
+    },
+  })
+}
+
+export function useCancelDiscipleshipLesson(classId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (lessonId: number) => cancelDiscipleshipLesson(classId, lessonId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
       await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
     },
   })

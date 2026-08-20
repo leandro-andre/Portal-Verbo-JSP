@@ -662,6 +662,24 @@
   background: #f59e0b;
 }
 
+.lesson-status-badge--scheduled {
+  background: #eef4ff;
+  color: #1e40af;
+}
+
+.lesson-status-badge--scheduled .status-badge__dot {
+  background: #2563eb;
+}
+
+.lesson-status-badge--cancelled {
+  background: #f8fafc;
+  color: #475467;
+}
+
+.lesson-status-badge--cancelled .status-badge__dot {
+  background: #98a2b3;
+}
+
 .table-muted {
   color: var(--color-text-muted);
   font-size: 13px;
@@ -677,6 +695,13 @@
 .table-shell--section {
   box-shadow: none;
   margin-top: 16px;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .state-panel {
@@ -1049,6 +1074,12 @@
   background: #eef4ff;
   border-color: var(--color-primary);
   outline: none;
+}
+
+.lesson-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .profile-details {

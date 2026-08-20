@@ -160,3 +160,112 @@ nao cria `Usuario` e nao escreve em `Usuario.discipulado_concluido` ou
 
 Esta feature tambem nao cria aulas reais, presenca, frequencia percentual,
 completion individual, elegibilidade para Membership ou Membership.
+
+## Lessons
+
+`DiscipleshipLesson` representa uma Aula real dentro de uma
+`DiscipleshipClass`.
+
+A nomenclatura tecnica usa `DiscipleshipLesson`; na interface em portugues a
+linguagem de negocio e "Aula" ou "Aulas", evitando "Session".
+
+Campos:
+
+- `discipleship_class`
+- `title`
+- `lesson_date`
+- `status`
+- `created_at`
+- `updated_at`
+
+Cada aula possui titulo e data. O titulo e obrigatorio, recebe normalizacao
+simples com `strip` e nao pode conter apenas espacos.
+
+## Unicidade De Aulas
+
+Dentro da mesma turma, so pode existir uma aula por `lesson_date`.
+
+A regra e protegida por servico de dominio e pela constraint de banco
+`unique_discipleship_class_lesson_date`.
+
+Essa unicidade tambem vale para aulas `CANCELLED`. Aula cancelada permanece no
+historico e continua ocupando a data na turma. Turmas diferentes podem ter aula
+na mesma data.
+
+## Planned Sessions Como Previsao
+
+`planned_sessions` continua sendo apenas previsao administrativa.
+
+A quantidade real de aulas pode ser menor, igual ou maior que a previsao. Criar
+uma aula nao altera `planned_sessions` e nao e bloqueado quando a quantidade
+cadastrada ultrapassa esse valor.
+
+## Lifecycle Da Aula
+
+Estados:
+
+- `SCHEDULED`
+- `CANCELLED`
+
+`SCHEDULED` significa aula valida/agendada.
+
+`CANCELLED` significa aula cancelada e preservada para historico.
+
+Nao existem `COMPLETED`, `HELD` ou `FINISHED` nesta etapa.
+
+## Gerenciamento De Aulas
+
+Aulas podem ser criadas e editadas somente em turmas `PLANNED` ou
+`IN_PROGRESS`.
+
+Turmas `COMPLETED` e `CANCELLED` preservam o historico e nao aceitam criacao ou
+edicao de aulas nesta versao.
+
+A edicao permite apenas `title` e `lesson_date`. Alterar a data valida
+novamente a unicidade por turma/data, mas preserva a identidade da aula. Isso e
+importante para a futura modelagem de presenca, que devera apontar para
+`DiscipleshipLesson.id` em vez de apontar para uma data.
+
+O cancelamento usa acao explicita `SCHEDULED -> CANCELLED`, sem exclusao fisica
+e sem motivo de cancelamento nesta feature. Uma segunda tentativa de
+cancelamento retorna erro de transicao invalida.
+
+Nao ha reativacao `CANCELLED -> SCHEDULED` nesta etapa.
+
+## Frequencia Futura
+
+Quando Attendance for implementada, a presenca devera relacionar:
+
+- `DiscipleshipLesson`
+- `DiscipleshipEnrollment`
+
+Exemplo futuro: Maria, Aula 1, `PRESENT`; Maria, Aula 2, `ABSENT`.
+
+Aula `CANCELLED` nao devera entrar no denominador de frequencia futura. Esse
+calculo ainda nao existe nesta feature.
+
+## Permissoes De Aula
+
+Administrador do Portal e Secretaria podem visualizar, criar, editar e cancelar
+aulas.
+
+Pastor pode visualizar.
+
+Usuario comum nao possui acesso administrativo.
+
+Professor nao ganha permissao automaticamente por ser professor da turma. Essa
+autorizacao contextual fica para evolucao futura.
+
+Capabilities:
+
+- `DISCIPLESHIP_LESSON_VIEW`
+- `DISCIPLESHIP_LESSON_CREATE`
+- `DISCIPLESHIP_LESSON_CHANGE`
+- `DISCIPLESHIP_LESSON_CANCEL`
+
+## Ausencias Intencionais De Aula
+
+Esta feature nao cria presenca, falta, frequencia, conclusao individual,
+Completion de Enrollment, Membership, elegibilidade para Membership, professor
+por aula, numero persistido da aula, reativacao de aula cancelada, exclusao de
+aula ou dual-write em campos legados de `Usuario`.

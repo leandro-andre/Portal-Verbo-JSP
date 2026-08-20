@@ -56,3 +56,26 @@ export type DiscipleshipEnrollment = {
 export type CreateDiscipleshipEnrollmentInput = {
   person_id: number
 }
+
+export type DiscipleshipLessonStatus = 'SCHEDULED' | 'CANCELLED'
+
+export type DiscipleshipLesson = {
+  id: number
+  discipleship_class_id: number
+  title: string
+  lesson_date: string
+  status: DiscipleshipLessonStatus
+  created_at: string
+  updated_at: string
+}
+
+export type CreateDiscipleshipLessonInput = {
+  title: string
+  lesson_date: string
+}
+
+export type UpdateDiscipleshipLessonInput = Partial<CreateDiscipleshipLessonInput>
+
+export type DiscipleshipLessonValidationErrors = Partial<
+  Record<keyof CreateDiscipleshipLessonInput, string[]>
+>

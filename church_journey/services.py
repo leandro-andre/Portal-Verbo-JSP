@@ -2,7 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
@@ -12,6 +12,9 @@ PERSON_NOT_IN_CHURCH_JOURNEY = "PERSON_NOT_IN_CHURCH_JOURNEY"
 DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT = "DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT"
 DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS = "DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS"
 INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION = "INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION"
+DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS = "DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS"
+DISCIPLESHIP_LESSON_DATE_CONFLICT = "DISCIPLESHIP_LESSON_DATE_CONFLICT"
+INVALID_DISCIPLESHIP_LESSON_TRANSITION = "INVALID_DISCIPLESHIP_LESSON_TRANSITION"
 
 
 class ChurchJourneyError(Exception):
@@ -181,3 +184,99 @@ def withdraw_discipleship_enrollment(enrollment):
     enrollment.withdrawn_at = timezone.localdate()
     enrollment.save(update_fields=["status", "withdrawn_at", "updated_at"])
     return enrollment
+
+
+def ensure_class_open_for_lessons(discipleship_class):
+    if discipleship_class.status not in (
+        DiscipleshipClass.Status.PLANNED,
+        DiscipleshipClass.Status.IN_PROGRESS,
+    ):
+        raise ChurchJourneyError(
+            DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS,
+            "Esta turma nao esta aberta para gerenciamento de aulas.",
+        )
+
+
+def ensure_lesson_date_available(*, discipleship_class, lesson_date, lesson=None):
+    conflicting_lessons = DiscipleshipLesson.objects.filter(
+        discipleship_class=discipleship_class,
+        lesson_date=lesson_date,
+    )
+    if lesson is not None:
+        conflicting_lessons = conflicting_lessons.exclude(pk=lesson.pk)
+
+    if conflicting_lessons.exists():
+        raise ChurchJourneyError(
+            DISCIPLESHIP_LESSON_DATE_CONFLICT,
+            "Ja existe uma aula cadastrada para esta turma nesta data.",
+        )
+
+
+def create_discipleship_lesson(*, discipleship_class, title, lesson_date):
+    ensure_class_open_for_lessons(discipleship_class)
+    title = (title or "").strip()
+    ensure_lesson_date_available(
+        discipleship_class=discipleship_class,
+        lesson_date=lesson_date,
+    )
+
+    lesson = DiscipleshipLesson(
+        discipleship_class=discipleship_class,
+        title=title,
+        lesson_date=lesson_date,
+    )
+    lesson.full_clean(validate_unique=False)
+
+    try:
+        lesson.save()
+        return lesson
+    except IntegrityError as exc:
+        raise ChurchJourneyError(
+            DISCIPLESHIP_LESSON_DATE_CONFLICT,
+            "Ja existe uma aula cadastrada para esta turma nesta data.",
+        ) from exc
+
+
+def update_discipleship_lesson(lesson, *, title=None, lesson_date=None):
+    ensure_class_open_for_lessons(lesson.discipleship_class)
+
+    if lesson.status == DiscipleshipLesson.Status.CANCELLED:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_LESSON_TRANSITION,
+            "Aulas canceladas nao podem ser editadas.",
+        )
+
+    if title is not None:
+        lesson.title = (title or "").strip()
+    if lesson_date is not None:
+        ensure_lesson_date_available(
+            discipleship_class=lesson.discipleship_class,
+            lesson_date=lesson_date,
+            lesson=lesson,
+        )
+        lesson.lesson_date = lesson_date
+
+    try:
+        lesson.full_clean()
+        lesson.save(update_fields=["title", "lesson_date", "updated_at"])
+    except IntegrityError as exc:
+        raise ChurchJourneyError(
+            DISCIPLESHIP_LESSON_DATE_CONFLICT,
+            "Ja existe uma aula cadastrada para esta turma nesta data.",
+        ) from exc
+
+    return lesson
+
+
+def cancel_discipleship_lesson(lesson):
+    ensure_class_open_for_lessons(lesson.discipleship_class)
+
+    if lesson.status != DiscipleshipLesson.Status.SCHEDULED:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_LESSON_TRANSITION,
+            "Somente aulas agendadas podem ser canceladas.",
+        )
+
+    lesson.status = DiscipleshipLesson.Status.CANCELLED
+    lesson.save(update_fields=["status", "updated_at"])
+    return lesson

@@ -1,4 +1,8 @@
-import type { DiscipleshipClassStatus, DiscipleshipEnrollmentStatus } from '../types/discipleship'
+import type {
+  DiscipleshipClassStatus,
+  DiscipleshipEnrollmentStatus,
+  DiscipleshipLessonStatus,
+} from '../types/discipleship'
 
 export function discipleshipStatusLabel(status: DiscipleshipClassStatus) {
   if (status === 'PLANNED') return 'Planejada'
@@ -15,4 +19,9 @@ export function formatDate(value: string) {
 export function enrollmentStatusLabel(status: DiscipleshipEnrollmentStatus) {
   if (status === 'ENROLLED') return 'Matriculado'
   return 'Desistente'
+}
+
+export function lessonStatusLabel(status: DiscipleshipLessonStatus) {
+  if (status === 'SCHEDULED') return 'Agendada'
+  return 'Cancelada'
 }

@@ -1,18 +1,22 @@
 import type {
   CreateDiscipleshipClassInput,
   CreateDiscipleshipEnrollmentInput,
+  CreateDiscipleshipLessonInput,
   DiscipleshipClass,
   DiscipleshipEnrollment,
+  DiscipleshipLesson,
+  DiscipleshipLessonValidationErrors,
   DiscipleshipValidationErrors,
   UpdateDiscipleshipClassInput,
+  UpdateDiscipleshipLessonInput,
 } from '../types/discipleship'
 import { csrfJsonHeaders } from './http'
 
 export class DiscipleshipApiValidationError extends Error {
-  fieldErrors: DiscipleshipValidationErrors
+  fieldErrors: DiscipleshipValidationErrors | DiscipleshipLessonValidationErrors
 
-  constructor(fieldErrors: DiscipleshipValidationErrors) {
-    super('Nao foi possivel validar os dados da turma.')
+  constructor(fieldErrors: DiscipleshipValidationErrors | DiscipleshipLessonValidationErrors) {
+    super('Nao foi possivel validar os dados informados.')
     this.name = 'DiscipleshipApiValidationError'
     this.fieldErrors = fieldErrors
   }
@@ -73,6 +77,27 @@ function parseValidationErrors(value: unknown): DiscipleshipValidationErrors {
   return errors
 }
 
+function parseLessonValidationErrors(value: unknown): DiscipleshipLessonValidationErrors {
+  if (!isRecord(value)) {
+    return {}
+  }
+
+  const errors: DiscipleshipLessonValidationErrors = {}
+  const fields: Array<keyof CreateDiscipleshipLessonInput> = ['title', 'lesson_date']
+
+  fields.forEach((field) => {
+    const fieldValue = value[field]
+
+    if (isStringArray(fieldValue)) {
+      errors[field] = fieldValue
+    } else if (typeof fieldValue === 'string') {
+      errors[field] = [fieldValue]
+    }
+  })
+
+  return errors
+}
+
 async function parseResponse(response: Response) {
   return response.json().catch(() => null) as Promise<unknown>
 }
@@ -95,6 +120,15 @@ function businessMessage(code: string) {
   }
   if (code === 'INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION') {
     return 'Esta matricula nao permite esta acao.'
+  }
+  if (code === 'DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS') {
+    return 'Esta turma nao esta aberta para gerenciamento de aulas.'
+  }
+  if (code === 'DISCIPLESHIP_LESSON_DATE_CONFLICT') {
+    return 'Ja existe uma aula cadastrada para esta turma nesta data.'
+  }
+  if (code === 'INVALID_DISCIPLESHIP_LESSON_TRANSITION') {
+    return 'Esta aula nao permite esta acao.'
   }
   return 'Nao foi possivel concluir a acao solicitada.'
 }
@@ -296,4 +330,107 @@ export async function withdrawDiscipleshipEnrollment(
   }
 
   return data as DiscipleshipEnrollment
+}
+
+export async function getDiscipleshipLessons(classId: number): Promise<DiscipleshipLesson[]> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar as aulas.')
+  }
+
+  return response.json() as Promise<DiscipleshipLesson[]>
+}
+
+export async function getDiscipleshipLesson(
+  classId: number,
+  lessonId: number,
+): Promise<DiscipleshipLesson> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/${lessonId}/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    throw new DiscipleshipHttpError(404, 'Aula nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar a aula.')
+  }
+
+  return response.json() as Promise<DiscipleshipLesson>
+}
+
+export async function createDiscipleshipLesson(
+  classId: number,
+  payload: CreateDiscipleshipLessonInput,
+): Promise<DiscipleshipLesson> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DiscipleshipApiValidationError(parseLessonValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipLesson
+}
+
+export async function updateDiscipleshipLesson(
+  classId: number,
+  lessonId: number,
+  payload: UpdateDiscipleshipLessonInput,
+): Promise<DiscipleshipLesson> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/${lessonId}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DiscipleshipApiValidationError(parseLessonValidationErrors(data))
+  }
+
+  if (response.status === 404) {
+    throw new DiscipleshipHttpError(404, 'Aula nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipLesson
+}
+
+export async function cancelDiscipleshipLesson(
+  classId: number,
+  lessonId: number,
+): Promise<DiscipleshipLesson> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/${lessonId}/cancel/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipLesson
 }

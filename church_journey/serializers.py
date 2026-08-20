@@ -3,7 +3,7 @@ from rest_framework import serializers
 from pessoas.models import Person
 
 from .enums import ChurchStatus
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
 
 
 class ChurchJourneySerializer(serializers.ModelSerializer):
@@ -129,3 +129,32 @@ class DiscipleshipEnrollmentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class DiscipleshipLessonSerializer(serializers.ModelSerializer):
+    discipleship_class_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = DiscipleshipLesson
+        fields = [
+            "id",
+            "discipleship_class_id",
+            "title",
+            "lesson_date",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = (
+            "id",
+            "discipleship_class_id",
+            "status",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_title(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Informe o titulo da aula.")
+        return value

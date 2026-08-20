@@ -1,19 +1,31 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Ban, CheckCircle2, Edit3, Play, UserPlus } from 'lucide-react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { ArrowLeft, Ban, CalendarPlus, CheckCircle2, Edit3, Play, Save, UserPlus } from 'lucide-react'
+import { useForm, type UseFormSetError } from 'react-hook-form'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { DiscipleshipBusinessError, DiscipleshipHttpError } from '../api/discipleship'
+import { DiscipleshipApiValidationError, DiscipleshipBusinessError, DiscipleshipHttpError } from '../api/discipleship'
 import DiscipleshipStatusBadge from '../components/discipleship/DiscipleshipStatusBadge'
 import { useCan } from '../hooks/useAuth'
 import {
+  useCancelDiscipleshipLesson,
+  useCreateDiscipleshipLesson,
   useDiscipleshipClass,
   useDiscipleshipClassLifecycle,
   useCreateDiscipleshipEnrollment,
   useDiscipleshipEnrollments,
+  useDiscipleshipLessons,
+  useUpdateDiscipleshipLesson,
   useWithdrawDiscipleshipEnrollment,
 } from '../hooks/useDiscipleshipClasses'
 import { usePeople } from '../hooks/usePeople'
-import type { DiscipleshipClass, DiscipleshipEnrollment } from '../types/discipleship'
-import { discipleshipStatusLabel, enrollmentStatusLabel, formatDate } from '../utils/discipleship'
+import {
+  discipleshipLessonDefaultValues,
+  discipleshipLessonSchema,
+  type DiscipleshipLessonFormData,
+  type DiscipleshipLessonFormValues,
+} from '../schemas/discipleshipLesson'
+import type { DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson } from '../types/discipleship'
+import { discipleshipStatusLabel, enrollmentStatusLabel, formatDate, lessonStatusLabel } from '../utils/discipleship'
 
 type LifecycleAction = 'start' | 'complete' | 'cancel'
 
@@ -112,9 +124,32 @@ function businessErrorMessage(error: unknown) {
     if (error.code === 'INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION') {
       return 'Esta matricula nao permite esta acao.'
     }
+    if (error.code === 'DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS') {
+      return 'Esta turma nao esta aberta para gerenciamento de aulas.'
+    }
+    if (error.code === 'DISCIPLESHIP_LESSON_DATE_CONFLICT') {
+      return 'Ja existe uma aula cadastrada para esta turma nesta data.'
+    }
+    if (error.code === 'INVALID_DISCIPLESHIP_LESSON_TRANSITION') {
+      return 'Esta aula nao permite esta acao.'
+    }
   }
 
   return 'Nao foi possivel executar esta acao.'
+}
+
+function applyLessonApiErrors(
+  error: DiscipleshipApiValidationError,
+  setError: UseFormSetError<DiscipleshipLessonFormValues>,
+) {
+  const fieldErrors = error.fieldErrors
+
+  if ('title' in fieldErrors && fieldErrors.title?.[0]) {
+    setError('title', { message: fieldErrors.title[0] })
+  }
+  if ('lesson_date' in fieldErrors && fieldErrors.lesson_date?.[0]) {
+    setError('lesson_date', { message: fieldErrors.lesson_date[0] })
+  }
 }
 
 function EnrollmentStatusBadge({ status }: { status: DiscipleshipEnrollment['status'] }) {
@@ -122,6 +157,15 @@ function EnrollmentStatusBadge({ status }: { status: DiscipleshipEnrollment['sta
     <span className={`status-badge enrollment-status-badge--${status.toLowerCase()}`}>
       <span className="status-badge__dot" aria-hidden="true" />
       {enrollmentStatusLabel(status)}
+    </span>
+  )
+}
+
+function LessonStatusBadge({ status }: { status: DiscipleshipLesson['status'] }) {
+  return (
+    <span className={`status-badge lesson-status-badge--${status.toLowerCase()}`}>
+      <span className="status-badge__dot" aria-hidden="true" />
+      {lessonStatusLabel(status)}
     </span>
   )
 }
@@ -246,6 +290,128 @@ function WithdrawEnrollmentDialog({
   )
 }
 
+function LessonFormDialog({
+  error,
+  initialLesson,
+  isPending,
+  onClose,
+  onSubmit,
+}: {
+  error: string | null
+  initialLesson: DiscipleshipLesson | null
+  isPending: boolean
+  onClose: () => void
+  onSubmit: (values: DiscipleshipLessonFormData, setError: UseFormSetError<DiscipleshipLessonFormValues>) => void
+}) {
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+    setError,
+  } = useForm<DiscipleshipLessonFormValues, unknown, DiscipleshipLessonFormData>({
+    defaultValues: initialLesson
+      ? {
+          title: initialLesson.title,
+          lesson_date: initialLesson.lesson_date,
+        }
+      : discipleshipLessonDefaultValues,
+    resolver: zodResolver(discipleshipLessonSchema),
+  })
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="lesson-dialog-title">
+        <h2 id="lesson-dialog-title">{initialLesson ? 'Editar aula' : 'Nova aula'}</h2>
+
+        <form className="lesson-form" onSubmit={(event) => void handleSubmit((values) => onSubmit(values, setError))(event)}>
+          <fieldset className="form-section" disabled={isPending}>
+            <div className="form-grid">
+              <div className="field-group field-group--wide">
+                <label htmlFor="lesson-title">Titulo *</label>
+                <input
+                  id="lesson-title"
+                  type="text"
+                  aria-invalid={Boolean(errors.title)}
+                  aria-describedby={errors.title ? 'lesson-title-error' : undefined}
+                  {...register('title')}
+                />
+                {errors.title ? (
+                  <span className="field-error" id="lesson-title-error">
+                    {errors.title.message}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="field-group field-group--wide">
+                <label htmlFor="lesson-date">Data *</label>
+                <input
+                  id="lesson-date"
+                  type="date"
+                  aria-invalid={Boolean(errors.lesson_date)}
+                  aria-describedby={errors.lesson_date ? 'lesson-date-error' : undefined}
+                  {...register('lesson_date')}
+                />
+                {errors.lesson_date ? (
+                  <span className="field-error" id="lesson-date-error">
+                    {errors.lesson_date.message}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </fieldset>
+
+          {error ? <div className="form-alert form-alert--error" role="alert">{error}</div> : null}
+
+          <div className="form-actions">
+            <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+              Cancelar
+            </button>
+            <button className="button button--primary" type="submit" disabled={isPending}>
+              <Save size={17} aria-hidden="true" />
+              {isPending ? 'Salvando...' : initialLesson ? 'Salvar aula' : 'Criar aula'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CancelLessonDialog({
+  error,
+  isPending,
+  lesson,
+  onClose,
+  onConfirm,
+}: {
+  error: string | null
+  isPending: boolean
+  lesson: DiscipleshipLesson
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-lesson-dialog-title">
+        <h2 id="cancel-lesson-dialog-title">Cancelar a aula "{lesson.title}"?</h2>
+        <p>A aula sera preservada no historico e nao sera considerada no calculo futuro de frequencia.</p>
+
+        {error ? <div className="form-alert form-alert--error" role="alert">{error}</div> : null}
+
+        <div className="form-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Voltar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            <Ban size={17} aria-hidden="true" />
+            {isPending ? 'Cancelando...' : 'Cancelar aula'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DiscipleshipClassDetailPage() {
   const { id } = useParams()
   const location = useLocation()
@@ -254,20 +420,31 @@ function DiscipleshipClassDetailPage() {
   const isValidId = Number.isInteger(classId) && classId > 0
   const { data: discipleshipClass, error, isError, isLoading, refetch } = useDiscipleshipClass(classId)
   const { data: enrollments = [], isError: isEnrollmentsError, isLoading: isEnrollmentsLoading } = useDiscipleshipEnrollments(classId)
+  const { data: lessons = [], isError: isLessonsError, isLoading: isLessonsLoading } = useDiscipleshipLessons(classId)
   const lifecycle = useDiscipleshipClassLifecycle(classId)
   const createEnrollment = useCreateDiscipleshipEnrollment(classId)
   const withdrawEnrollment = useWithdrawDiscipleshipEnrollment(classId)
+  const createLesson = useCreateDiscipleshipLesson(classId)
+  const updateLesson = useUpdateDiscipleshipLesson(classId)
+  const cancelLesson = useCancelDiscipleshipLesson(classId)
   const canChange = useCan('DISCIPLESHIP_CLASS_CHANGE')
   const canStart = useCan('DISCIPLESHIP_CLASS_START')
   const canComplete = useCan('DISCIPLESHIP_CLASS_COMPLETE')
   const canCancel = useCan('DISCIPLESHIP_CLASS_CANCEL')
   const canCreateEnrollment = useCan('DISCIPLESHIP_ENROLLMENT_CREATE')
   const canWithdrawEnrollment = useCan('DISCIPLESHIP_ENROLLMENT_WITHDRAW')
+  const canCreateLesson = useCan('DISCIPLESHIP_LESSON_CREATE')
+  const canChangeLesson = useCan('DISCIPLESHIP_LESSON_CHANGE')
+  const canCancelLesson = useCan('DISCIPLESHIP_LESSON_CANCEL')
   const [dialogAction, setDialogAction] = useState<LifecycleAction | null>(null)
   const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false)
   const [withdrawTarget, setWithdrawTarget] = useState<DiscipleshipEnrollment | null>(null)
+  const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false)
+  const [lessonEditTarget, setLessonEditTarget] = useState<DiscipleshipLesson | null>(null)
+  const [lessonCancelTarget, setLessonCancelTarget] = useState<DiscipleshipLesson | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null)
+  const [lessonError, setLessonError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState(() => {
     const state = location.state as { successMessage?: string } | null
     return state?.successMessage ?? null
@@ -313,6 +490,8 @@ function DiscipleshipClassDetailPage() {
   const enrolledCount = enrollments.filter((enrollment) => enrollment.status === 'ENROLLED').length
   const withdrawnCount = enrollments.filter((enrollment) => enrollment.status === 'WITHDRAWN').length
   const canEnrollInClass = discipleshipClass ? ['PLANNED', 'IN_PROGRESS'].includes(discipleshipClass.status) : false
+  const cancelledLessonsCount = lessons.filter((lesson) => lesson.status === 'CANCELLED').length
+  const canManageLessonsInClass = discipleshipClass ? ['PLANNED', 'IN_PROGRESS'].includes(discipleshipClass.status) : false
 
   const handleEnroll = async (personId: number) => {
     setEnrollmentError(null)
@@ -339,6 +518,48 @@ function DiscipleshipClassDetailPage() {
       setSuccessMessage('Matricula marcada como desistente.')
     } catch (error) {
       setEnrollmentError(businessErrorMessage(error))
+    }
+  }
+
+  const handleSubmitLesson = async (
+    values: DiscipleshipLessonFormData,
+    setError: UseFormSetError<DiscipleshipLessonFormValues>,
+  ) => {
+    setLessonError(null)
+
+    try {
+      if (lessonEditTarget) {
+        await updateLesson.mutateAsync({ id: lessonEditTarget.id, payload: values })
+        setSuccessMessage('Aula atualizada com sucesso.')
+      } else {
+        await createLesson.mutateAsync(values)
+        setSuccessMessage('Aula criada com sucesso.')
+      }
+      setLessonEditTarget(null)
+      setIsLessonDialogOpen(false)
+    } catch (error) {
+      if (error instanceof DiscipleshipApiValidationError) {
+        applyLessonApiErrors(error, setError)
+        return
+      }
+
+      setLessonError(businessErrorMessage(error))
+    }
+  }
+
+  const handleCancelLesson = async () => {
+    if (!lessonCancelTarget) {
+      return
+    }
+
+    setLessonError(null)
+
+    try {
+      await cancelLesson.mutateAsync(lessonCancelTarget.id)
+      setLessonCancelTarget(null)
+      setSuccessMessage('Aula cancelada com sucesso.')
+    } catch (error) {
+      setLessonError(businessErrorMessage(error))
     }
   }
 
@@ -411,6 +632,98 @@ function DiscipleshipClassDetailPage() {
                 <DetailItem label="Periodo" value={`${formatDate(discipleshipClass.start_date)} - ${formatDate(discipleshipClass.expected_end_date)}`} />
                 <DetailItem label="Aulas previstas" value={discipleshipClass.planned_sessions} />
               </dl>
+            </section>
+            <section className="profile-section">
+              <div className="section-heading-row">
+                <div>
+                  <h2>Aulas</h2>
+                  <p className="page-heading__description">
+                    {discipleshipClass.planned_sessions} previstas | {lessons.length} cadastradas
+                    {cancelledLessonsCount > 0 ? ` | ${cancelledLessonsCount} canceladas` : ''}
+                  </p>
+                </div>
+                {canCreateLesson && canManageLessonsInClass ? (
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => {
+                      setLessonError(null)
+                      setLessonEditTarget(null)
+                      setIsLessonDialogOpen(true)
+                    }}
+                  >
+                    <CalendarPlus size={17} aria-hidden="true" />
+                    Nova aula
+                  </button>
+                ) : null}
+              </div>
+
+              {isLessonsLoading ? (
+                <p className="page-heading__description">Carregando aulas...</p>
+              ) : isLessonsError ? (
+                <p className="page-heading__description">Nao foi possivel carregar as aulas.</p>
+              ) : lessons.length > 0 ? (
+                <div className="table-shell table-shell--section">
+                  <table className="people-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Aula</th>
+                        <th scope="col">Titulo</th>
+                        <th scope="col">Data</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" className="people-table__actions-header">Acao</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lessons.map((lesson, index) => {
+                        const canActOnLesson = canManageLessonsInClass && lesson.status === 'SCHEDULED'
+
+                        return (
+                          <tr key={lesson.id}>
+                            <td>Aula {index + 1}</td>
+                            <td><strong>{lesson.title}</strong></td>
+                            <td>{formatDate(lesson.lesson_date)}</td>
+                            <td><LessonStatusBadge status={lesson.status} /></td>
+                            <td>
+                              <div className="table-actions">
+                                {canChangeLesson && canActOnLesson ? (
+                                  <button
+                                    className="button button--secondary"
+                                    type="button"
+                                    onClick={() => {
+                                      setLessonError(null)
+                                      setLessonEditTarget(lesson)
+                                      setIsLessonDialogOpen(true)
+                                    }}
+                                  >
+                                    <Edit3 size={17} aria-hidden="true" />
+                                    Editar
+                                  </button>
+                                ) : null}
+                                {canCancelLesson && canActOnLesson ? (
+                                  <button
+                                    className="button button--secondary"
+                                    type="button"
+                                    onClick={() => {
+                                      setLessonError(null)
+                                      setLessonCancelTarget(lesson)
+                                    }}
+                                  >
+                                    <Ban size={17} aria-hidden="true" />
+                                    Cancelar aula
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="page-heading__description">Nenhuma aula cadastrada nesta turma.</p>
+              )}
             </section>
             <section className="profile-section">
               <div className="section-heading-row">
@@ -522,6 +835,28 @@ function DiscipleshipClassDetailPage() {
               isPending={withdrawEnrollment.isPending}
               onClose={() => setWithdrawTarget(null)}
               onConfirm={() => void handleWithdraw()}
+            />
+          ) : null}
+          {isLessonDialogOpen ? (
+            <LessonFormDialog
+              error={lessonError}
+              initialLesson={lessonEditTarget}
+              isPending={createLesson.isPending || updateLesson.isPending}
+              onClose={() => {
+                setLessonError(null)
+                setLessonEditTarget(null)
+                setIsLessonDialogOpen(false)
+              }}
+              onSubmit={(values, setError) => void handleSubmitLesson(values, setError)}
+            />
+          ) : null}
+          {lessonCancelTarget ? (
+            <CancelLessonDialog
+              error={lessonError}
+              isPending={cancelLesson.isPending}
+              lesson={lessonCancelTarget}
+              onClose={() => setLessonCancelTarget(null)}
+              onConfirm={() => void handleCancelLesson()}
             />
           ) : null}
         </>

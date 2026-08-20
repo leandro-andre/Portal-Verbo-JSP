@@ -6,21 +6,25 @@ from rest_framework.views import APIView
 
 from pessoas.models import Person
 
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
 from .serializers import (
     ChurchJourneySerializer,
     DiscipleshipClassSerializer,
     DiscipleshipEnrollmentSerializer,
+    DiscipleshipLessonSerializer,
 )
 from .services import (
     ChurchJourneyError,
     cancel_discipleship_class,
+    cancel_discipleship_lesson,
     complete_discipleship_class,
     create_discipleship_class,
+    create_discipleship_lesson,
     enroll_person_in_discipleship_class,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_class,
+    update_discipleship_lesson,
     withdraw_discipleship_enrollment,
 )
 
@@ -273,3 +277,104 @@ class DiscipleshipEnrollmentWithdrawView(APIView):
             )
 
         return Response(DiscipleshipEnrollmentSerializer(enrollment).data)
+
+
+class DiscipleshipLessonListCreateView(APIView):
+    permission_classes = [HasDjangoPermission]
+    method_permissions = {
+        "GET": "church_journey.view_discipleshiplesson",
+        "POST": "church_journey.add_discipleshiplesson",
+    }
+
+    def get_class(self, class_id):
+        return get_object_or_404(DiscipleshipClass, pk=class_id)
+
+    def get_queryset(self, class_id):
+        return DiscipleshipLesson.objects.filter(discipleship_class_id=class_id).order_by(
+            "lesson_date",
+            "id",
+        )
+
+    def get(self, request, class_id):
+        self.get_class(class_id)
+        serializer = DiscipleshipLessonSerializer(self.get_queryset(class_id), many=True)
+        return Response(serializer.data)
+
+    def post(self, request, class_id):
+        discipleship_class = self.get_class(class_id)
+        serializer = DiscipleshipLessonSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            lesson = create_discipleship_lesson(
+                discipleship_class=discipleship_class,
+                title=serializer.validated_data["title"],
+                lesson_date=serializer.validated_data["lesson_date"],
+            )
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            DiscipleshipLessonSerializer(lesson).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DiscipleshipLessonDetailView(APIView):
+    permission_classes = [HasDjangoPermission]
+    method_permissions = {
+        "GET": "church_journey.view_discipleshiplesson",
+        "PATCH": "church_journey.change_discipleshiplesson",
+        "DELETE": "church_journey.view_discipleshiplesson",
+    }
+
+    def get_object(self, class_id, pk):
+        return get_object_or_404(
+            DiscipleshipLesson,
+            pk=pk,
+            discipleship_class_id=class_id,
+        )
+
+    def get(self, request, class_id, pk):
+        return Response(DiscipleshipLessonSerializer(self.get_object(class_id, pk)).data)
+
+    def patch(self, request, class_id, pk):
+        lesson = self.get_object(class_id, pk)
+        serializer = DiscipleshipLessonSerializer(lesson, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            lesson = update_discipleship_lesson(lesson, **serializer.validated_data)
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(DiscipleshipLessonSerializer(lesson).data)
+
+
+class DiscipleshipLessonCancelView(APIView):
+    permission_classes = [HasDjangoPermission]
+    permission_required = "church_journey.cancel_discipleshiplesson"
+
+    def get_object(self, class_id, pk):
+        return get_object_or_404(
+            DiscipleshipLesson,
+            pk=pk,
+            discipleship_class_id=class_id,
+        )
+
+    def post(self, request, class_id, pk):
+        try:
+            lesson = cancel_discipleship_lesson(self.get_object(class_id, pk))
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(DiscipleshipLessonSerializer(lesson).data)
