@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -19,7 +19,13 @@ from usuarios.roles import (
 
 from .enums import ChurchStatus
 from .models import ChurchJourney
-from .models import DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import (
+    DiscipleshipAttendance,
+    DiscipleshipClass,
+    DiscipleshipClassAssistant,
+    DiscipleshipEnrollment,
+    DiscipleshipLesson,
+)
 from .selectors import (
     get_church_status,
     get_discipleship_completed_at,
@@ -35,6 +41,11 @@ from .services import (
     DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS,
     DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS,
     DISCIPLESHIP_LESSON_DATE_CONFLICT,
+    CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE,
+    DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH,
+    DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON,
+    DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE,
+    INVALID_DISCIPLESHIP_ATTENDANCE_STATUS,
     INVALID_DISCIPLESHIP_CLASS_TRANSITION,
     INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION,
     INVALID_DISCIPLESHIP_LESSON_TRANSITION,
@@ -46,6 +57,9 @@ from .services import (
     create_discipleship_class,
     create_discipleship_lesson,
     enroll_person_in_discipleship_class,
+    get_eligible_enrollments_for_lesson,
+    record_discipleship_attendance,
+    record_discipleship_attendance_batch,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_lesson,
@@ -1606,3 +1620,511 @@ class DiscipleshipLessonRolePermissionsTests(TestCase):
         self.assertFalse(pastor.has_perm("church_journey.change_discipleshiplesson"))
         self.assertFalse(pastor.has_perm("church_journey.cancel_discipleshiplesson"))
         self.assertFalse(comum.has_perm("church_journey.view_discipleshiplesson"))
+
+
+class DiscipleshipAttendanceModelTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(full_name="Professor Presenca", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Aluno Presenca", birth_date=date(1990, 1, 1))
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Presenca",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 10, 1),
+            planned_sessions=8,
+        )
+        self.enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=date(2026, 8, 1),
+        )
+        self.lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Vida de oracao",
+            lesson_date=timezone.localdate(),
+        )
+        self.user = get_user_model().objects.create_user(username="recorded.by", password="senha-forte-123")
+
+    def test_criacao_present_absent_justified_recorded_by_e_timestamps(self):
+        for attendance_status in (
+            DiscipleshipAttendance.Status.PRESENT,
+            DiscipleshipAttendance.Status.ABSENT,
+            DiscipleshipAttendance.Status.JUSTIFIED,
+        ):
+            lesson = DiscipleshipLesson.objects.create(
+                discipleship_class=self.discipleship_class,
+                title=f"Aula {attendance_status}",
+                lesson_date=timezone.localdate() - timedelta(days=len(attendance_status)),
+            )
+            attendance = DiscipleshipAttendance.objects.create(
+                enrollment=self.enrollment,
+                lesson=lesson,
+                status=attendance_status,
+                recorded_by=self.user,
+            )
+
+            self.assertEqual(attendance.enrollment, self.enrollment)
+            self.assertEqual(attendance.lesson, lesson)
+            self.assertEqual(attendance.status, attendance_status)
+            self.assertEqual(attendance.recorded_by, self.user)
+            self.assertIsNotNone(attendance.created_at)
+            self.assertIsNotNone(attendance.updated_at)
+
+    def test_unicidade_enrollment_lesson(self):
+        DiscipleshipAttendance.objects.create(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.PRESENT,
+        )
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DiscipleshipAttendance.objects.create(
+                enrollment=self.enrollment,
+                lesson=self.lesson,
+                status=DiscipleshipAttendance.Status.ABSENT,
+            )
+
+
+class DiscipleshipAttendanceDomainTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(full_name="Professor Chamada", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Maria Chamada", birth_date=date(1990, 1, 1))
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Chamada",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 10, 1),
+            planned_sessions=8,
+        )
+        self.enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=date(2026, 8, 1),
+        )
+        self.lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula hoje",
+            lesson_date=timezone.localdate(),
+        )
+        self.actor = self.user_model.objects.create_user(username="attendance.actor", password="senha-forte-123")
+
+    def make_lesson(self, lesson_date, **kwargs):
+        data = {
+            "discipleship_class": self.discipleship_class,
+            "title": f"Aula {lesson_date}",
+            "lesson_date": lesson_date,
+        }
+        data.update(kwargs)
+        return DiscipleshipLesson.objects.create(**data)
+
+    def test_registra_present_absent_justified_validos(self):
+        for index, attendance_status in enumerate(
+            (
+                DiscipleshipAttendance.Status.PRESENT,
+                DiscipleshipAttendance.Status.ABSENT,
+                DiscipleshipAttendance.Status.JUSTIFIED,
+            )
+        ):
+            lesson = self.make_lesson(timezone.localdate() - timedelta(days=index + 1))
+            attendance = record_discipleship_attendance(
+                enrollment=self.enrollment,
+                lesson=lesson,
+                status=attendance_status,
+                recorded_by=self.actor,
+            )
+            self.assertEqual(attendance.status, attendance_status)
+            self.assertEqual(attendance.recorded_by, self.actor)
+
+    def test_aula_futura_bloqueada_e_aula_hoje_passada_permitidas(self):
+        future = self.make_lesson(timezone.localdate() + timedelta(days=1))
+        past = self.make_lesson(timezone.localdate() - timedelta(days=1))
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            record_discipleship_attendance(
+                enrollment=self.enrollment,
+                lesson=future,
+                status=DiscipleshipAttendance.Status.PRESENT,
+            )
+
+        today_attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.PRESENT,
+        )
+        past_attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=past,
+            status=DiscipleshipAttendance.Status.ABSENT,
+        )
+
+        self.assertEqual(context.exception.code, DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE)
+        self.assertEqual(today_attendance.status, DiscipleshipAttendance.Status.PRESENT)
+        self.assertEqual(past_attendance.status, DiscipleshipAttendance.Status.ABSENT)
+
+    def test_aula_cancelada_turma_diferente_status_invalido_bloqueados(self):
+        cancelled = self.make_lesson(
+            timezone.localdate() - timedelta(days=1),
+            status=DiscipleshipLesson.Status.CANCELLED,
+        )
+        other_class = DiscipleshipClass.objects.create(
+            name="Outra turma chamada",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 10, 1),
+            planned_sessions=8,
+        )
+        other_lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=other_class,
+            title="Outra aula",
+            lesson_date=timezone.localdate(),
+        )
+
+        with self.assertRaises(ChurchJourneyError) as cancelled_context:
+            record_discipleship_attendance(
+                enrollment=self.enrollment,
+                lesson=cancelled,
+                status=DiscipleshipAttendance.Status.PRESENT,
+            )
+        with self.assertRaises(ChurchJourneyError) as mismatch_context:
+            record_discipleship_attendance(
+                enrollment=self.enrollment,
+                lesson=other_lesson,
+                status=DiscipleshipAttendance.Status.PRESENT,
+            )
+        with self.assertRaises(ChurchJourneyError) as invalid_context:
+            record_discipleship_attendance(enrollment=self.enrollment, lesson=self.lesson, status="PENDING")
+
+        self.assertEqual(
+            cancelled_context.exception.code,
+            CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE,
+        )
+        self.assertEqual(mismatch_context.exception.code, DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH)
+        self.assertEqual(invalid_context.exception.code, INVALID_DISCIPLESHIP_ATTENDANCE_STATUS)
+
+    def test_matricula_tardia_e_desistencia_definem_elegibilidade(self):
+        late_person = Person.objects.create(full_name="Maria Tardia", birth_date=date(1991, 1, 1))
+        withdrawn_person = Person.objects.create(full_name="Joao Desistente", birth_date=date(1992, 1, 1))
+        ChurchJourney.objects.create(person=late_person)
+        ChurchJourney.objects.create(person=withdrawn_person)
+        base_date = timezone.localdate() - timedelta(days=40)
+        late_enrollment = DiscipleshipEnrollment.objects.create(
+            person=late_person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=base_date + timedelta(days=14),
+        )
+        withdrawn_enrollment = DiscipleshipEnrollment.objects.create(
+            person=withdrawn_person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=base_date,
+            status=DiscipleshipEnrollment.Status.WITHDRAWN,
+            withdrawn_at=base_date + timedelta(days=14),
+        )
+        lessons = {
+            offset: self.make_lesson(base_date + timedelta(days=offset))
+            for offset in (0, 7, 14, 21)
+        }
+
+        self.assertNotIn(late_enrollment, get_eligible_enrollments_for_lesson(lessons[0]))
+        self.assertNotIn(late_enrollment, get_eligible_enrollments_for_lesson(lessons[7]))
+        self.assertIn(late_enrollment, get_eligible_enrollments_for_lesson(lessons[14]))
+        self.assertIn(late_enrollment, get_eligible_enrollments_for_lesson(lessons[21]))
+        self.assertIn(withdrawn_enrollment, get_eligible_enrollments_for_lesson(lessons[0]))
+        self.assertIn(withdrawn_enrollment, get_eligible_enrollments_for_lesson(lessons[7]))
+        self.assertIn(withdrawn_enrollment, get_eligible_enrollments_for_lesson(lessons[14]))
+        self.assertNotIn(withdrawn_enrollment, get_eligible_enrollments_for_lesson(lessons[21]))
+
+        with self.assertRaises(ChurchJourneyError) as early_context:
+            record_discipleship_attendance(
+                enrollment=late_enrollment,
+                lesson=lessons[7],
+                status=DiscipleshipAttendance.Status.PRESENT,
+            )
+        with self.assertRaises(ChurchJourneyError) as after_withdraw_context:
+            record_discipleship_attendance(
+                enrollment=withdrawn_enrollment,
+                lesson=lessons[21],
+                status=DiscipleshipAttendance.Status.ABSENT,
+            )
+
+        self.assertEqual(early_context.exception.code, DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON)
+        self.assertEqual(after_withdraw_context.exception.code, DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON)
+
+    def test_correcao_mantem_mesma_linha_e_nao_cria_absent_automatico(self):
+        attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.PRESENT,
+        )
+        attendance_id = attendance.pk
+
+        attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.ABSENT,
+        )
+        attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.JUSTIFIED,
+        )
+        attendance = record_discipleship_attendance(
+            enrollment=self.enrollment,
+            lesson=self.lesson,
+            status=DiscipleshipAttendance.Status.PRESENT,
+        )
+        empty_lesson = self.make_lesson(timezone.localdate() - timedelta(days=2))
+
+        self.assertEqual(attendance.pk, attendance_id)
+        self.assertEqual(DiscipleshipAttendance.objects.filter(enrollment=self.enrollment, lesson=self.lesson).count(), 1)
+        self.assertFalse(DiscipleshipAttendance.objects.filter(enrollment=self.enrollment, lesson=empty_lesson).exists())
+
+
+class DiscipleshipAttendanceApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(full_name="Professor API Chamada", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Aluno API Chamada", birth_date=date(1990, 1, 1))
+        self.assistant_person = Person.objects.create(full_name="Auxiliar API Chamada", birth_date=date(1991, 1, 1))
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado API Chamada",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 10, 1),
+            planned_sessions=8,
+        )
+        self.enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=date(2026, 8, 1),
+        )
+        self.lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Aula API Chamada",
+            lesson_date=timezone.localdate(),
+        )
+
+    def authenticate_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        self.client.force_authenticate(usuario)
+        return usuario
+
+    def url(self, lesson=None, discipleship_class=None):
+        return reverse(
+            "discipleship-lesson-attendance",
+            args=[(discipleship_class or self.discipleship_class).pk, (lesson or self.lesson).pk],
+        )
+
+    def test_get_chamada_e_salvar_corrigir_status(self):
+        secretaria = self.authenticate_role("secretaria.attendance.api", SECRETARY_GROUP)
+
+        get_response = self.client.get(self.url())
+        first = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT}]},
+            format="json",
+        )
+        second = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.ABSENT}]},
+            format="json",
+        )
+        third = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.JUSTIFIED}]},
+            format="json",
+        )
+
+        attendance = DiscipleshipAttendance.objects.get()
+        self.assertEqual(get_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(get_response.json()["summary"]["eligible"], 1)
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(third.status_code, status.HTTP_200_OK)
+        self.assertEqual(attendance.status, DiscipleshipAttendance.Status.JUSTIFIED)
+        self.assertEqual(attendance.recorded_by, secretaria)
+        self.assertEqual(DiscipleshipAttendance.objects.count(), 1)
+
+    def test_batch_parcial_e_batch_invalido_rollback(self):
+        self.authenticate_role("secretaria.attendance.batch", SECRETARY_GROUP)
+        other_person = Person.objects.create(full_name="Outro Aluno API", birth_date=date(1992, 1, 1))
+        ChurchJourney.objects.create(person=other_person)
+        other_enrollment = DiscipleshipEnrollment.objects.create(
+            person=other_person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=date(2026, 8, 1),
+        )
+        other_class = DiscipleshipClass.objects.create(
+            name="Outra turma API Chamada",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 10, 1),
+            planned_sessions=8,
+        )
+        outside_person = Person.objects.create(full_name="Fora Turma API", birth_date=date(1993, 1, 1))
+        ChurchJourney.objects.create(person=outside_person)
+        outside_enrollment = DiscipleshipEnrollment.objects.create(
+            person=outside_person,
+            discipleship_class=other_class,
+            enrolled_at=date(2026, 8, 1),
+        )
+
+        partial = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT}]},
+            format="json",
+        )
+        invalid = self.client.post(
+            self.url(),
+            {
+                "records": [
+                    {"enrollment_id": other_enrollment.pk, "status": DiscipleshipAttendance.Status.ABSENT},
+                    {"enrollment_id": outside_enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT},
+                ]
+            },
+            format="json",
+        )
+
+        self.assertEqual(partial.status_code, status.HTTP_200_OK)
+        self.assertEqual(partial.json()["summary"]["recorded"], 1)
+        self.assertEqual(invalid.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(invalid.json()["code"], DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH)
+        self.assertFalse(DiscipleshipAttendance.objects.filter(enrollment=other_enrollment).exists())
+
+    def test_erros_aula_futura_cancelada_matricula_inelegivel_status_invalido_e_delete(self):
+        self.authenticate_role("secretaria.attendance.errors", SECRETARY_GROUP)
+        future = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Futura",
+            lesson_date=timezone.localdate() + timedelta(days=1),
+        )
+        cancelled = DiscipleshipLesson.objects.create(
+            discipleship_class=self.discipleship_class,
+            title="Cancelada",
+            lesson_date=timezone.localdate() - timedelta(days=1),
+            status=DiscipleshipLesson.Status.CANCELLED,
+        )
+        late_person = Person.objects.create(full_name="Tardio API", birth_date=date(1995, 1, 1))
+        ChurchJourney.objects.create(person=late_person)
+        late_enrollment = DiscipleshipEnrollment.objects.create(
+            person=late_person,
+            discipleship_class=self.discipleship_class,
+            enrolled_at=timezone.localdate() + timedelta(days=1),
+        )
+
+        future_response = self.client.post(
+            self.url(future),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT}]},
+            format="json",
+        )
+        cancelled_response = self.client.post(
+            self.url(cancelled),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT}]},
+            format="json",
+        )
+        ineligible_response = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": late_enrollment.pk, "status": DiscipleshipAttendance.Status.PRESENT}]},
+            format="json",
+        )
+        invalid_status = self.client.post(
+            self.url(),
+            {"records": [{"enrollment_id": self.enrollment.pk, "status": "PENDING"}]},
+            format="json",
+        )
+        delete_response = self.client.delete(self.url())
+
+        self.assertEqual(future_response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(future_response.json()["code"], DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE)
+        self.assertEqual(cancelled_response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(cancelled_response.json()["code"], CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE)
+        self.assertEqual(ineligible_response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(ineligible_response.json()["code"], DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON)
+        self.assertEqual(invalid_status.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(invalid_status.json()["code"], INVALID_DISCIPLESHIP_ATTENDANCE_STATUS)
+        self.assertEqual(delete_response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_permissions_globais_contextuais_professor_e_auxiliar(self):
+        admin = self.authenticate_role("admin.attendance", PORTAL_ADMIN_GROUP)
+        self.assertEqual(self.client.post(self.url(), {"records": []}, format="json").status_code, status.HTTP_200_OK)
+
+        pastor = self.authenticate_role("pastor.attendance", PASTOR_GROUP)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.post(self.url(), {"records": []}, format="json").status_code, status.HTTP_403_FORBIDDEN)
+
+        teacher_user = self.user_model.objects.create_user(
+            username="teacher.contextual",
+            password="senha-forte-123",
+            person=self.teacher,
+        )
+        self.client.force_authenticate(teacher_user)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.post(self.url(), {"records": []}, format="json").status_code, status.HTTP_200_OK)
+
+        other_teacher_person = Person.objects.create(full_name="Outro Professor", birth_date=date(1981, 1, 1))
+        other_teacher = self.user_model.objects.create_user(
+            username="teacher.other",
+            password="senha-forte-123",
+            person=other_teacher_person,
+        )
+        self.client.force_authenticate(other_teacher)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_403_FORBIDDEN)
+
+        assistant_user = self.user_model.objects.create_user(
+            username="assistant.contextual",
+            password="senha-forte-123",
+            person=self.assistant_person,
+        )
+        DiscipleshipClassAssistant.objects.create(
+            discipleship_class=self.discipleship_class,
+            person=self.assistant_person,
+        )
+        self.client.force_authenticate(assistant_user)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.post(self.url(), {"records": []}, format="json").status_code, status.HTTP_200_OK)
+
+        unrelated_assistant_person = Person.objects.create(full_name="Auxiliar Nao Relacionado", birth_date=date(1988, 1, 1))
+        unrelated_assistant = self.user_model.objects.create_user(
+            username="assistant.unrelated",
+            password="senha-forte-123",
+            person=unrelated_assistant_person,
+        )
+        self.client.force_authenticate(unrelated_assistant)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_403_FORBIDDEN)
+
+        comum = self.user_model.objects.create_user(username="comum.attendance", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+        self.assertEqual(self.client.get(self.url()).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(admin.has_perm("church_journey.change_discipleshipattendance"))
+
+
+class DiscipleshipAttendanceRolePermissionsTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def test_admin_e_secretaria_gerenciam_presencas(self):
+        for group_name in (PORTAL_ADMIN_GROUP, SECRETARY_GROUP):
+            usuario = self.make_user_with_role(f"{group_name}.attendance", group_name)
+            self.assertTrue(usuario.has_perm("church_journey.view_discipleshipattendance"))
+            self.assertTrue(usuario.has_perm("church_journey.add_discipleshipattendance"))
+            self.assertTrue(usuario.has_perm("church_journey.change_discipleshipattendance"))
+
+    def test_pastor_apenas_visualiza_e_comum_nao_tem_acesso(self):
+        pastor = self.make_user_with_role("pastor.attendance.perms", PASTOR_GROUP)
+        comum = self.user_model.objects.create_user(username="comum.attendance.perms", password="senha-forte-123")
+
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshipattendance"))
+        self.assertFalse(pastor.has_perm("church_journey.add_discipleshipattendance"))
+        self.assertFalse(pastor.has_perm("church_journey.change_discipleshipattendance"))
+        self.assertFalse(comum.has_perm("church_journey.view_discipleshipattendance"))

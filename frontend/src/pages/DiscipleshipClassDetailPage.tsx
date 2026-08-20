@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, Ban, CalendarPlus, CheckCircle2, Edit3, Play, Save, UserPlus } from 'lucide-react'
+import { ArrowLeft, Ban, CalendarPlus, CheckCircle2, ClipboardCheck, Edit3, Play, Save, UserPlus } from 'lucide-react'
 import { useForm, type UseFormSetError } from 'react-hook-form'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { DiscipleshipApiValidationError, DiscipleshipBusinessError, DiscipleshipHttpError } from '../api/discipleship'
@@ -492,6 +492,7 @@ function DiscipleshipClassDetailPage() {
   const canEnrollInClass = discipleshipClass ? ['PLANNED', 'IN_PROGRESS'].includes(discipleshipClass.status) : false
   const cancelledLessonsCount = lessons.filter((lesson) => lesson.status === 'CANCELLED').length
   const canManageLessonsInClass = discipleshipClass ? ['PLANNED', 'IN_PROGRESS'].includes(discipleshipClass.status) : false
+  const today = new Date().toISOString().slice(0, 10)
 
   const handleEnroll = async (personId: number) => {
     setEnrollmentError(null)
@@ -677,6 +678,7 @@ function DiscipleshipClassDetailPage() {
                     <tbody>
                       {lessons.map((lesson, index) => {
                         const canActOnLesson = canManageLessonsInClass && lesson.status === 'SCHEDULED'
+                        const isFutureLesson = lesson.lesson_date > today
 
                         return (
                           <tr key={lesson.id}>
@@ -713,6 +715,19 @@ function DiscipleshipClassDetailPage() {
                                     Cancelar aula
                                   </button>
                                 ) : null}
+                                {lesson.status === 'CANCELLED' ? (
+                                  <span className="table-muted">Sem chamada - aula cancelada</span>
+                                ) : isFutureLesson ? (
+                                  <span className="table-muted">Chamada disponivel em {formatDate(lesson.lesson_date)}</span>
+                                ) : (
+                                  <Link
+                                    className="button button--secondary"
+                                    to={`/discipulado/${discipleshipClass.id}/aulas/${lesson.id}/chamada`}
+                                  >
+                                    <ClipboardCheck size={17} aria-hidden="true" />
+                                    Fazer chamada
+                                  </Link>
+                                )}
                               </div>
                             </td>
                           </tr>

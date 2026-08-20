@@ -8,10 +8,12 @@ import {
   createDiscipleshipLesson,
   getDiscipleshipClass,
   getDiscipleshipClasses,
+  getDiscipleshipAttendance,
   getDiscipleshipEnrollment,
   getDiscipleshipEnrollments,
   getDiscipleshipLesson,
   getDiscipleshipLessons,
+  saveDiscipleshipAttendance,
   startDiscipleshipClass,
   updateDiscipleshipClass,
   updateDiscipleshipLesson,
@@ -21,6 +23,7 @@ import type {
   CreateDiscipleshipClassInput,
   CreateDiscipleshipEnrollmentInput,
   CreateDiscipleshipLessonInput,
+  SaveDiscipleshipAttendanceInput,
   UpdateDiscipleshipClassInput,
   UpdateDiscipleshipLessonInput,
 } from '../types/discipleship'
@@ -45,6 +48,10 @@ export function discipleshipLessonsQueryKey(classId: number) {
 
 export function discipleshipLessonQueryKey(classId: number, lessonId: number) {
   return ['discipleship', 'classes', classId, 'lessons', lessonId] as const
+}
+
+export function discipleshipAttendanceQueryKey(classId: number, lessonId: number) {
+  return ['discipleship', 'classes', classId, 'lessons', lessonId, 'attendance'] as const
 }
 
 export function useDiscipleshipClasses() {
@@ -189,6 +196,28 @@ export function useCancelDiscipleshipLesson(classId: number) {
   return useMutation({
     mutationFn: (lessonId: number) => cancelDiscipleshipLesson(classId, lessonId),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
+      await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
+    },
+  })
+}
+
+export function useDiscipleshipAttendance(classId: number, lessonId: number) {
+  return useQuery({
+    queryKey: discipleshipAttendanceQueryKey(classId, lessonId),
+    queryFn: () => getDiscipleshipAttendance(classId, lessonId),
+    enabled: Number.isFinite(classId) && Number.isFinite(lessonId),
+  })
+}
+
+export function useSaveDiscipleshipAttendance(classId: number, lessonId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: SaveDiscipleshipAttendanceInput) =>
+      saveDiscipleshipAttendance(classId, lessonId, payload),
+    onSuccess: async (attendance) => {
+      queryClient.setQueryData(discipleshipAttendanceQueryKey(classId, lessonId), attendance)
       await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
       await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
     },

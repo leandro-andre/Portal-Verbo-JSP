@@ -79,3 +79,56 @@ export type UpdateDiscipleshipLessonInput = Partial<CreateDiscipleshipLessonInpu
 export type DiscipleshipLessonValidationErrors = Partial<
   Record<keyof CreateDiscipleshipLessonInput, string[]>
 >
+
+export type DiscipleshipAttendanceStatus = 'PRESENT' | 'ABSENT' | 'JUSTIFIED'
+
+export type DiscipleshipAttendance = {
+  id: number
+  status: DiscipleshipAttendanceStatus
+  recorded_by: {
+    id: number
+    display_name: string
+  } | null
+  created_at: string
+  updated_at: string
+}
+
+export type DiscipleshipAttendanceStudent = {
+  enrollment_id: number
+  person: {
+    id: number
+    display_name: string
+  }
+  attendance: DiscipleshipAttendance | null
+}
+
+export type DiscipleshipAttendanceSummary = {
+  eligible: number
+  recorded: number
+  not_recorded: number
+  present: number
+  absent: number
+  justified: number
+}
+
+export type DiscipleshipAttendancePayload = {
+  lesson: {
+    id: number
+    title: string
+    lesson_date: string
+    status: DiscipleshipLessonStatus
+  }
+  summary: DiscipleshipAttendanceSummary
+  permissions: {
+    can_view_attendance: boolean
+    can_manage_attendance: boolean
+  }
+  students: DiscipleshipAttendanceStudent[]
+}
+
+export type SaveDiscipleshipAttendanceInput = {
+  records: Array<{
+    enrollment_id: number
+    status: DiscipleshipAttendanceStatus
+  }>
+}

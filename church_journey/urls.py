@@ -7,6 +7,7 @@ from .views import (
     DiscipleshipEnrollmentDetailView,
     DiscipleshipEnrollmentListCreateView,
     DiscipleshipEnrollmentWithdrawView,
+    DiscipleshipLessonAttendanceView,
     DiscipleshipLessonCancelView,
     DiscipleshipLessonDetailView,
     DiscipleshipLessonListCreateView,
@@ -83,5 +84,10 @@ urlpatterns = [
         "discipleship/classes/<int:class_id>/lessons/<int:pk>/cancel/",
         DiscipleshipLessonCancelView.as_view(),
         name="discipleship-lesson-cancel",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/lessons/<int:lesson_id>/attendance/",
+        DiscipleshipLessonAttendanceView.as_view(),
+        name="discipleship-lesson-attendance",
     ),
 ]

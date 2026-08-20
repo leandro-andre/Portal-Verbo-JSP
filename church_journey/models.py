@@ -186,3 +186,78 @@ class DiscipleshipLesson(models.Model):
         self.title = (self.title or "").strip()
         if not self.title:
             raise ValidationError({"title": "Informe o titulo da aula."})
+
+
+class DiscipleshipClassAssistant(models.Model):
+    discipleship_class = models.ForeignKey(
+        DiscipleshipClass,
+        verbose_name="Turma de discipulado",
+        on_delete=models.CASCADE,
+        related_name="assistants",
+    )
+    person = models.ForeignKey(
+        "pessoas.Person",
+        verbose_name="Auxiliar",
+        on_delete=models.PROTECT,
+        related_name="discipleship_classes_assisted",
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+
+    class Meta:
+        ordering = ["person__full_name", "id"]
+        verbose_name = "Auxiliar de turma de discipulado"
+        verbose_name_plural = "Auxiliares de turmas de discipulado"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["discipleship_class", "person"],
+                name="unique_discipleship_class_assistant",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.person} - {self.discipleship_class}"
+
+
+class DiscipleshipAttendance(models.Model):
+    class Status(models.TextChoices):
+        PRESENT = "PRESENT", "Presente"
+        ABSENT = "ABSENT", "Ausente"
+        JUSTIFIED = "JUSTIFIED", "Justificada"
+
+    enrollment = models.ForeignKey(
+        DiscipleshipEnrollment,
+        verbose_name="Matricula",
+        on_delete=models.PROTECT,
+        related_name="attendance_records",
+    )
+    lesson = models.ForeignKey(
+        DiscipleshipLesson,
+        verbose_name="Aula",
+        on_delete=models.PROTECT,
+        related_name="attendance_records",
+    )
+    status = models.CharField("Status", max_length=20, choices=Status.choices)
+    recorded_by = models.ForeignKey(
+        "usuarios.Usuario",
+        verbose_name="Registrado por",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="discipleship_attendance_records",
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["lesson__lesson_date", "enrollment__person__full_name", "id"]
+        verbose_name = "Presenca de discipulado"
+        verbose_name_plural = "Presencas de discipulado"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["enrollment", "lesson"],
+                name="unique_discipleship_attendance_enrollment_lesson",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.enrollment} - {self.lesson} ({self.status})"

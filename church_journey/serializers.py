@@ -3,7 +3,13 @@ from rest_framework import serializers
 from pessoas.models import Person
 
 from .enums import ChurchStatus
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import (
+    ChurchJourney,
+    DiscipleshipAttendance,
+    DiscipleshipClass,
+    DiscipleshipEnrollment,
+    DiscipleshipLesson,
+)
 
 
 class ChurchJourneySerializer(serializers.ModelSerializer):
@@ -158,3 +164,43 @@ class DiscipleshipLessonSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Informe o titulo da aula.")
         return value
+
+
+class DiscipleshipAttendanceLessonSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    lesson_date = serializers.DateField()
+    status = serializers.CharField()
+
+
+class DiscipleshipAttendancePersonSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    display_name = serializers.CharField()
+
+
+class DiscipleshipAttendanceRecordSerializer(serializers.ModelSerializer):
+    recorded_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DiscipleshipAttendance
+        fields = ["id", "status", "recorded_by", "created_at", "updated_at"]
+
+    def get_recorded_by(self, obj):
+        if obj.recorded_by_id is None:
+            return None
+        return {
+            "id": obj.recorded_by_id,
+            "display_name": obj.recorded_by.get_full_name() or obj.recorded_by.username,
+        }
+
+
+class DiscipleshipAttendanceRecordInputSerializer(serializers.Serializer):
+    enrollment_id = serializers.PrimaryKeyRelatedField(
+        queryset=DiscipleshipEnrollment.objects.select_related("person", "discipleship_class"),
+        source="enrollment",
+    )
+    status = serializers.CharField()
+
+
+class DiscipleshipAttendanceBatchSerializer(serializers.Serializer):
+    records = DiscipleshipAttendanceRecordInputSerializer(many=True)

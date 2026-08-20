@@ -1240,6 +1240,8 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="add_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="change_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="cancel_discipleshiplesson").exists())
+        self.assertTrue(group.permissions.filter(codename="add_discipleshipattendance").exists())
+        self.assertTrue(group.permissions.filter(codename="change_discipleshipattendance").exists())
 
     def test_secretaria_recebe_permissions_esperadas(self):
         setup_portal_roles()
@@ -1257,6 +1259,8 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="add_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="change_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="cancel_discipleshiplesson").exists())
+        self.assertTrue(group.permissions.filter(codename="add_discipleshipattendance").exists())
+        self.assertTrue(group.permissions.filter(codename="change_discipleshipattendance").exists())
         self.assertFalse(group.permissions.filter(codename="disable_usuario").exists())
 
     def test_pastor_recebe_permissions_esperadas(self):
@@ -1270,10 +1274,12 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="view_discipleshipclass").exists())
         self.assertTrue(group.permissions.filter(codename="view_discipleshipenrollment").exists())
         self.assertTrue(group.permissions.filter(codename="view_discipleshiplesson").exists())
+        self.assertTrue(group.permissions.filter(codename="view_discipleshipattendance").exists())
         self.assertFalse(group.permissions.filter(codename="add_churchjourney").exists())
         self.assertFalse(group.permissions.filter(codename="start_discipleshipclass").exists())
         self.assertFalse(group.permissions.filter(codename="add_discipleshipenrollment").exists())
         self.assertFalse(group.permissions.filter(codename="add_discipleshiplesson").exists())
+        self.assertFalse(group.permissions.filter(codename="add_discipleshipattendance").exists())
         self.assertFalse(group.permissions.filter(codename="approve_accessrequest").exists())
 
     def test_midia_nao_e_criada_como_global_role(self):
@@ -1451,6 +1457,8 @@ class GlobalRolesAuthorizationMatrixTests(TestCase):
         self.assertIn("DISCIPLESHIP_LESSON_CREATE", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_LESSON_CHANGE", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_LESSON_CANCEL", current_user["capabilities"])
+        self.assertIn("DISCIPLESHIP_ATTENDANCE_VIEW", current_user["capabilities"])
+        self.assertIn("DISCIPLESHIP_ATTENDANCE_MANAGE", current_user["capabilities"])
         self.assertIn("ACCESS_REQUEST_APPROVE", current_user["capabilities"])
         self.assertNotIn("USER_DISABLE", current_user["capabilities"])
 

@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import (
+    ChurchJourney,
+    DiscipleshipAttendance,
+    DiscipleshipClass,
+    DiscipleshipClassAssistant,
+    DiscipleshipEnrollment,
+    DiscipleshipLesson,
+)
 
 
 @admin.register(ChurchJourney)
@@ -39,3 +46,18 @@ class DiscipleshipLessonAdmin(admin.ModelAdmin):
     list_filter = ("status", "lesson_date")
     list_select_related = ("discipleship_class",)
     search_fields = ("title", "discipleship_class__name")
+
+
+@admin.register(DiscipleshipClassAssistant)
+class DiscipleshipClassAssistantAdmin(admin.ModelAdmin):
+    list_display = ("person", "discipleship_class", "created_at")
+    list_select_related = ("person", "discipleship_class")
+    search_fields = ("person__full_name", "person__preferred_name", "discipleship_class__name")
+
+
+@admin.register(DiscipleshipAttendance)
+class DiscipleshipAttendanceAdmin(admin.ModelAdmin):
+    list_display = ("enrollment", "lesson", "status", "recorded_by", "updated_at")
+    list_filter = ("status", "lesson__lesson_date")
+    list_select_related = ("enrollment__person", "lesson", "recorded_by")
+    search_fields = ("enrollment__person__full_name", "lesson__title", "recorded_by__username")

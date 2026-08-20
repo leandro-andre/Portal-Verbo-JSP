@@ -2,11 +2,13 @@ import type {
   CreateDiscipleshipClassInput,
   CreateDiscipleshipEnrollmentInput,
   CreateDiscipleshipLessonInput,
+  DiscipleshipAttendancePayload,
   DiscipleshipClass,
   DiscipleshipEnrollment,
   DiscipleshipLesson,
   DiscipleshipLessonValidationErrors,
   DiscipleshipValidationErrors,
+  SaveDiscipleshipAttendanceInput,
   UpdateDiscipleshipClassInput,
   UpdateDiscipleshipLessonInput,
 } from '../types/discipleship'
@@ -129,6 +131,21 @@ function businessMessage(code: string) {
   }
   if (code === 'INVALID_DISCIPLESHIP_LESSON_TRANSITION') {
     return 'Esta aula nao permite esta acao.'
+  }
+  if (code === 'DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH') {
+    return 'Esta matricula nao pertence a turma da aula.'
+  }
+  if (code === 'DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE') {
+    return 'A chamada ainda nao esta disponivel para esta aula.'
+  }
+  if (code === 'CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE') {
+    return 'Aulas canceladas nao aceitam chamada.'
+  }
+  if (code === 'DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON') {
+    return 'Esta matricula nao e elegivel para esta aula.'
+  }
+  if (code === 'INVALID_DISCIPLESHIP_ATTENDANCE_STATUS') {
+    return 'Informe um status de presenca valido.'
   }
   return 'Nao foi possivel concluir a acao solicitada.'
 }
@@ -433,4 +450,44 @@ export async function cancelDiscipleshipLesson(
   }
 
   return data as DiscipleshipLesson
+}
+
+export async function getDiscipleshipAttendance(
+  classId: number,
+  lessonId: number,
+): Promise<DiscipleshipAttendancePayload> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/${lessonId}/attendance/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    throw new DiscipleshipHttpError(404, 'Chamada nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar a chamada.')
+  }
+
+  return response.json() as Promise<DiscipleshipAttendancePayload>
+}
+
+export async function saveDiscipleshipAttendance(
+  classId: number,
+  lessonId: number,
+  payload: SaveDiscipleshipAttendanceInput,
+): Promise<DiscipleshipAttendancePayload> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/lessons/${lessonId}/attendance/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipAttendancePayload
 }

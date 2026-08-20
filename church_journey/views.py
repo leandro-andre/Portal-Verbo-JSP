@@ -6,9 +6,18 @@ from rest_framework.views import APIView
 
 from pessoas.models import Person
 
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import (
+    ChurchJourney,
+    DiscipleshipAttendance,
+    DiscipleshipClass,
+    DiscipleshipClassAssistant,
+    DiscipleshipEnrollment,
+    DiscipleshipLesson,
+)
 from .serializers import (
     ChurchJourneySerializer,
+    DiscipleshipAttendanceBatchSerializer,
+    DiscipleshipAttendanceRecordSerializer,
     DiscipleshipClassSerializer,
     DiscipleshipEnrollmentSerializer,
     DiscipleshipLessonSerializer,
@@ -21,6 +30,8 @@ from .services import (
     create_discipleship_class,
     create_discipleship_lesson,
     enroll_person_in_discipleship_class,
+    get_eligible_enrollments_for_lesson,
+    record_discipleship_attendance_batch,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_class,
@@ -89,6 +100,49 @@ class HasDjangoPermission(BasePermission):
             and permission
             and request.user.has_perm(permission)
         )
+
+
+def user_is_class_teacher(user, discipleship_class):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "person_id", None)
+        and user.person_id == discipleship_class.teacher_id
+    )
+
+
+def user_is_class_assistant(user, discipleship_class):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "person_id", None)
+        and DiscipleshipClassAssistant.objects.filter(
+            discipleship_class=discipleship_class,
+            person_id=user.person_id,
+        ).exists()
+    )
+
+
+def can_view_attendance(user, discipleship_class):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and (
+            user.has_perm("church_journey.view_discipleshipattendance")
+            or user_is_class_teacher(user, discipleship_class)
+            or user_is_class_assistant(user, discipleship_class)
+        )
+    )
+
+
+def can_manage_attendance(user, discipleship_class):
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and (
+            user.has_perm("church_journey.change_discipleshipattendance")
+            or user_is_class_teacher(user, discipleship_class)
+            or user_is_class_assistant(user, discipleship_class)
+        )
+    )
 
 
 class DiscipleshipClassListCreateView(APIView):
@@ -378,3 +432,105 @@ class DiscipleshipLessonCancelView(APIView):
             )
 
         return Response(DiscipleshipLessonSerializer(lesson).data)
+
+
+class DiscipleshipLessonAttendanceView(APIView):
+    def get_lesson(self, class_id, lesson_id):
+        return get_object_or_404(
+            DiscipleshipLesson.objects.select_related("discipleship_class__teacher"),
+            pk=lesson_id,
+            discipleship_class_id=class_id,
+        )
+
+    def get_attendance_payload(self, request, lesson):
+        eligible_enrollments = list(get_eligible_enrollments_for_lesson(lesson))
+        attendance_by_enrollment = {
+            attendance.enrollment_id: attendance
+            for attendance in DiscipleshipAttendance.objects.filter(
+                lesson=lesson,
+                enrollment__in=eligible_enrollments,
+            ).select_related("recorded_by")
+        }
+        students = []
+        recorded_count = 0
+        present_count = 0
+        absent_count = 0
+        justified_count = 0
+
+        for enrollment in eligible_enrollments:
+            attendance = attendance_by_enrollment.get(enrollment.pk)
+            if attendance:
+                recorded_count += 1
+                if attendance.status == DiscipleshipAttendance.Status.PRESENT:
+                    present_count += 1
+                elif attendance.status == DiscipleshipAttendance.Status.ABSENT:
+                    absent_count += 1
+                elif attendance.status == DiscipleshipAttendance.Status.JUSTIFIED:
+                    justified_count += 1
+
+            students.append(
+                {
+                    "enrollment_id": enrollment.pk,
+                    "person": {
+                        "id": enrollment.person_id,
+                        "display_name": enrollment.person.display_name,
+                    },
+                    "attendance": (
+                        DiscipleshipAttendanceRecordSerializer(attendance).data
+                        if attendance
+                        else None
+                    ),
+                }
+            )
+
+        return {
+            "lesson": {
+                "id": lesson.pk,
+                "title": lesson.title,
+                "lesson_date": lesson.lesson_date,
+                "status": lesson.status,
+            },
+            "summary": {
+                "eligible": len(eligible_enrollments),
+                "recorded": recorded_count,
+                "not_recorded": len(eligible_enrollments) - recorded_count,
+                "present": present_count,
+                "absent": absent_count,
+                "justified": justified_count,
+            },
+            "permissions": {
+                "can_view_attendance": can_view_attendance(request.user, lesson.discipleship_class),
+                "can_manage_attendance": can_manage_attendance(request.user, lesson.discipleship_class),
+            },
+            "students": students,
+        }
+
+    def get(self, request, class_id, lesson_id):
+        lesson = self.get_lesson(class_id, lesson_id)
+        if not can_view_attendance(request.user, lesson.discipleship_class):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        return Response(self.get_attendance_payload(request, lesson))
+
+    def post(self, request, class_id, lesson_id):
+        lesson = self.get_lesson(class_id, lesson_id)
+        if not can_manage_attendance(request.user, lesson.discipleship_class):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        serializer = DiscipleshipAttendanceBatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        records = serializer.validated_data["records"]
+
+        try:
+            record_discipleship_attendance_batch(
+                lesson=lesson,
+                records=records,
+                recorded_by=request.user,
+            )
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(self.get_attendance_payload(request, lesson))

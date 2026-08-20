@@ -269,3 +269,121 @@ Esta feature nao cria presenca, falta, frequencia, conclusao individual,
 Completion de Enrollment, Membership, elegibilidade para Membership, professor
 por aula, numero persistido da aula, reativacao de aula cancelada, exclusao de
 aula ou dual-write em campos legados de `Usuario`.
+
+## Attendance
+
+`DiscipleshipAttendance` representa o lancamento de chamada de uma matricula em
+uma aula.
+
+Relacionamentos:
+
+- `DiscipleshipEnrollment`
+- `DiscipleshipLesson`
+- `recorded_by`, apontando para `Usuario`
+
+`recorded_by` registra o ultimo usuario que criou ou corrigiu o lancamento. O
+historico completo de alteracoes nao faz parte desta etapa e podera ser criado
+futuramente se houver necessidade de auditoria detalhada.
+
+## Status De Presenca
+
+Estados:
+
+- `PRESENT`
+- `ABSENT`
+- `JUSTIFIED`
+
+`PRESENT` significa presente.
+
+`ABSENT` significa ausente, registrado explicitamente.
+
+`JUSTIFIED` significa ausencia justificada. Nao significa presenca e nao deve
+ser convertida em `PRESENT`.
+
+Nao existe `PENDING` persistido. A ausencia de `DiscipleshipAttendance`
+significa "Nao lancado", nao falta automatica.
+
+## Unicidade E Correcao
+
+A combinacao `enrollment + lesson` e unica.
+
+Correcoes atualizam a mesma linha de `DiscipleshipAttendance`; nao sao criadas
+linhas duplicadas para representar mudancas entre `PRESENT`, `ABSENT` e
+`JUSTIFIED`.
+
+DELETE funcional nao e disponibilizado. Uma chamada registrada deve ser
+corrigida, nao apagada.
+
+## Integridade Da Chamada
+
+A matricula e a aula precisam pertencer a mesma `DiscipleshipClass`.
+
+Aula futura nao aceita chamada. A regra usa `timezone.localdate()`; aula na data
+local atual aceita chamada, assim como aula passada.
+
+Aula `CANCELLED` nao aceita chamada e tambem sera retirada do denominador da
+frequencia futura.
+
+## Janela Da Matricula
+
+Uma matricula e elegivel para uma aula quando:
+
+- `lesson.lesson_date >= enrollment.enrolled_at`
+- se `withdrawn_at` existir, `lesson.lesson_date <= enrollment.withdrawn_at`
+- a aula nao esta cancelada
+- a aula nao e futura para fins de lancamento
+
+Alunos matriculados depois da aula nao aparecem como faltas pendentes naquela
+aula. Alunos desistentes nao recebem faltas posteriores a `withdrawn_at`.
+
+Na data exata de `enrolled_at` ou `withdrawn_at`, a matricula ainda e elegivel.
+
+## Chamada Parcial
+
+A chamada pode ser salva parcialmente. Se a aula possui 12 alunos elegiveis e o
+usuario envia 8 registros, apenas esses 8 sao criados ou corrigidos; os demais
+continuam como "Nao lancado".
+
+Quando a API recebe um lote com algum registro invalido, o lote inteiro falha
+em transacao atomica. Isso evita persistir metade de um lote enviado com erro.
+
+## Autorizacao Contextual
+
+Administrador do Portal e Secretaria podem visualizar e gerenciar chamadas por
+permissoes globais.
+
+Pastor pode visualizar.
+
+Professor pode visualizar e gerenciar somente a propria turma, quando
+`request.user.person == discipleship_class.teacher`.
+
+O dominio de Departamentos possui papel de auxiliar por departamento, mas nao
+identifica auxiliar de uma turma especifica de discipulado. Por isso a PVV-020
+cria `DiscipleshipClassAssistant`, um vinculo minimo entre turma e `Person`.
+Auxiliar so gerencia chamada quando estiver vinculado aquela turma.
+
+Usuario comum, professor de outra turma e auxiliar nao relacionado nao possuem
+acesso.
+
+Capabilities globais:
+
+- `DISCIPLESHIP_ATTENDANCE_VIEW`
+- `DISCIPLESHIP_ATTENDANCE_MANAGE`
+
+O React nao tenta carregar todas as turmas permitidas no `current-user`; o
+endpoint de chamada retorna permissoes contextualizadas para a aula.
+
+## Frequencia Futura
+
+PVV-021 devera calcular frequencia usando:
+
+- `PRESENT`: numerador e denominador
+- `ABSENT`: denominador
+- `JUSTIFIED`: fora do numerador e fora do denominador
+- aula `CANCELLED`: fora do denominador
+- aulas fora da janela da matricula: fora do denominador
+- ausencia de `DiscipleshipAttendance`: tratar como chamada nao lancada, nao
+  automaticamente como `ABSENT`
+
+Esta feature nao implementa percentual de frequencia, criterio de conclusao,
+Completion, elegibilidade para Membership, Membership ou dual-write legado.

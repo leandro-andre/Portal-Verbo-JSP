@@ -1,8 +1,15 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
-from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import (
+    ChurchJourney,
+    DiscipleshipAttendance,
+    DiscipleshipClass,
+    DiscipleshipEnrollment,
+    DiscipleshipLesson,
+)
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
@@ -15,6 +22,17 @@ INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION = "INVALID_DISCIPLESHIP_ENROLLMENT_TR
 DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS = "DISCIPLESHIP_CLASS_NOT_OPEN_FOR_LESSONS"
 DISCIPLESHIP_LESSON_DATE_CONFLICT = "DISCIPLESHIP_LESSON_DATE_CONFLICT"
 INVALID_DISCIPLESHIP_LESSON_TRANSITION = "INVALID_DISCIPLESHIP_LESSON_TRANSITION"
+DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH = "DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH"
+DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE = (
+    "DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE"
+)
+CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE = (
+    "CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE"
+)
+DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON = (
+    "DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON"
+)
+INVALID_DISCIPLESHIP_ATTENDANCE_STATUS = "INVALID_DISCIPLESHIP_ATTENDANCE_STATUS"
 
 
 class ChurchJourneyError(Exception):
@@ -280,3 +298,112 @@ def cancel_discipleship_lesson(lesson):
     lesson.status = DiscipleshipLesson.Status.CANCELLED
     lesson.save(update_fields=["status", "updated_at"])
     return lesson
+
+
+def validate_attendance_status(status):
+    valid_statuses = {choice[0] for choice in DiscipleshipAttendance.Status.choices}
+    if status not in valid_statuses:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_ATTENDANCE_STATUS,
+            "Informe um status de presenca valido.",
+        )
+
+
+def ensure_lesson_accepts_attendance(lesson):
+    if lesson.status == DiscipleshipLesson.Status.CANCELLED:
+        raise ChurchJourneyError(
+            CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE,
+            "Aulas canceladas nao aceitam chamada.",
+        )
+
+    if lesson.lesson_date > timezone.localdate():
+        raise ChurchJourneyError(
+            DISCIPLESHIP_LESSON_NOT_YET_AVAILABLE_FOR_ATTENDANCE,
+            "A chamada ainda nao esta disponivel para esta aula.",
+        )
+
+
+def is_enrollment_eligible_for_lesson(enrollment, lesson):
+    if enrollment.discipleship_class_id != lesson.discipleship_class_id:
+        return False
+
+    if lesson.lesson_date < enrollment.enrolled_at:
+        return False
+
+    if enrollment.withdrawn_at and lesson.lesson_date > enrollment.withdrawn_at:
+        return False
+
+    return True
+
+
+def ensure_enrollment_eligible_for_lesson(enrollment, lesson):
+    if enrollment.discipleship_class_id != lesson.discipleship_class_id:
+        raise ChurchJourneyError(
+            DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH,
+            "A matricula e a aula pertencem a turmas diferentes.",
+        )
+
+    if not is_enrollment_eligible_for_lesson(enrollment, lesson):
+        raise ChurchJourneyError(
+            DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON,
+            "Esta matricula nao e elegivel para esta aula.",
+        )
+
+
+def get_eligible_enrollments_for_lesson(lesson):
+    return (
+        DiscipleshipEnrollment.objects.filter(
+            Q(withdrawn_at__isnull=True) | Q(withdrawn_at__gte=lesson.lesson_date),
+            discipleship_class=lesson.discipleship_class,
+            enrolled_at__lte=lesson.lesson_date,
+        )
+        .select_related("person", "discipleship_class")
+        .order_by("person__full_name", "id")
+    )
+
+
+def record_discipleship_attendance(*, enrollment, lesson, status, recorded_by=None):
+    validate_attendance_status(status)
+    ensure_lesson_accepts_attendance(lesson)
+    ensure_enrollment_eligible_for_lesson(enrollment, lesson)
+
+    try:
+        attendance, _ = DiscipleshipAttendance.objects.update_or_create(
+            enrollment=enrollment,
+            lesson=lesson,
+            defaults={
+                "status": status,
+                "recorded_by": recorded_by,
+            },
+        )
+    except IntegrityError as exc:
+        raise ChurchJourneyError(
+            DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH,
+            "Nao foi possivel registrar esta chamada.",
+        ) from exc
+
+    return attendance
+
+
+def update_discipleship_attendance(attendance, *, status, recorded_by=None):
+    return record_discipleship_attendance(
+        enrollment=attendance.enrollment,
+        lesson=attendance.lesson,
+        status=status,
+        recorded_by=recorded_by,
+    )
+
+
+def record_discipleship_attendance_batch(*, lesson, records, recorded_by=None):
+    with transaction.atomic():
+        attendances = []
+        for record in records:
+            attendances.append(
+                record_discipleship_attendance(
+                    enrollment=record["enrollment"],
+                    lesson=lesson,
+                    status=record["status"],
+                    recorded_by=recorded_by,
+                )
+            )
+        return attendances

@@ -1,5 +1,6 @@
 import type {
   DiscipleshipClassStatus,
+  DiscipleshipAttendanceStatus,
   DiscipleshipEnrollmentStatus,
   DiscipleshipLessonStatus,
 } from '../types/discipleship'
@@ -24,4 +25,10 @@ export function enrollmentStatusLabel(status: DiscipleshipEnrollmentStatus) {
 export function lessonStatusLabel(status: DiscipleshipLessonStatus) {
   if (status === 'SCHEDULED') return 'Agendada'
   return 'Cancelada'
+}
+
+export function attendanceStatusLabel(status: DiscipleshipAttendanceStatus) {
+  if (status === 'PRESENT') return 'Presente'
+  if (status === 'ABSENT') return 'Ausente'
+  return 'Justificada'
 }
