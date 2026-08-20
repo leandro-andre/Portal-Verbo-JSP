@@ -1,4 +1,4 @@
-import { ClipboardList, UserCog, UsersRound } from 'lucide-react'
+import { BookOpenCheck, ClipboardList, UserCog, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -12,6 +12,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
   const canViewPeople = capabilities.includes('PEOPLE_VIEW')
   const canViewAccessRequests = capabilities.includes('ACCESS_REQUEST_VIEW')
   const canViewUsers = capabilities.includes('USER_VIEW')
+  const canViewDiscipleship = capabilities.includes('DISCIPLESHIP_CLASS_VIEW')
   const hasAccessItems = canViewAccessRequests || canViewUsers
 
   return (
@@ -61,6 +62,19 @@ function Sidebar({ isCollapsed }: SidebarProps) {
           >
             <UserCog size={18} aria-hidden="true" />
             {!isCollapsed ? <span>Usuarios</span> : null}
+          </NavLink>
+        ) : null}
+
+        {canViewDiscipleship && !isCollapsed ? (
+          <p className="sidebar__section-label sidebar__section-label--spaced">Jornada</p>
+        ) : null}
+        {canViewDiscipleship ? (
+          <NavLink
+            className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+            to="/discipulado"
+          >
+            <BookOpenCheck size={18} aria-hidden="true" />
+            {!isCollapsed ? <span>Discipulado</span> : null}
           </NavLink>
         ) : null}
       </nav>

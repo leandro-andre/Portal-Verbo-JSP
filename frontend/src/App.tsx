@@ -6,6 +6,10 @@ import AccessRequestPage from './pages/AccessRequestPage'
 import AccessRequestDetailPage from './pages/AccessRequestDetailPage'
 import AccessRequestsPage from './pages/AccessRequestsPage'
 import ActivateAccountPage from './pages/ActivateAccountPage'
+import DiscipleshipClassCreatePage from './pages/DiscipleshipClassCreatePage'
+import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
+import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
+import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import LoginPage from './pages/LoginPage'
 import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
@@ -72,6 +76,10 @@ function AdminRoutes() {
         <Route path="/solicitacoes-acesso" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestsPage /></AuthorizedRoute>} />
         <Route path="/solicitacoes-acesso/:id" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestDetailPage /></AuthorizedRoute>} />
         <Route path="/usuarios" element={<AuthorizedRoute capability="USER_VIEW"><UsersPage /></AuthorizedRoute>} />
+        <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
+        <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
+        <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
+        <Route path="/discipulado/:id" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassDetailPage /></AuthorizedRoute>} />
         <Route path="*" element={<Navigate to="/pessoas" replace />} />
       </Routes>
     </AppShell>

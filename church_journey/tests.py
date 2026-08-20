@@ -19,6 +19,7 @@ from usuarios.roles import (
 
 from .enums import ChurchStatus
 from .models import ChurchJourney
+from .models import DiscipleshipClass
 from .selectors import (
     get_church_status,
     get_discipleship_completed_at,
@@ -27,7 +28,17 @@ from .selectors import (
     is_member,
     is_visitor,
 )
-from .services import CHURCH_JOURNEY_ALREADY_EXISTS, ChurchJourneyError, start_church_journey
+from .services import (
+    CHURCH_JOURNEY_ALREADY_EXISTS,
+    DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS,
+    INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+    ChurchJourneyError,
+    cancel_discipleship_class,
+    complete_discipleship_class,
+    create_discipleship_class,
+    start_church_journey,
+    start_discipleship_class,
+)
 
 
 class ChurchJourneyCompatibilitySelectorsTests(TestCase):
@@ -436,3 +447,374 @@ class ChurchJourneyRolePermissionsTests(TestCase):
         self.assertFalse(comum.has_perm("church_journey.view_churchjourney"))
         self.assertFalse(comum.has_perm("church_journey.add_churchjourney"))
         self.assertFalse(comum.has_perm("church_journey.change_churchjourney"))
+
+
+class DiscipleshipClassModelTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(
+            full_name="Professor Discipulado",
+            birth_date=date(1980, 1, 1),
+        )
+
+    def make_class(self, **kwargs):
+        data = {
+            "name": "Discipulado 2026.2",
+            "teacher": self.teacher,
+            "start_date": date(2026, 9, 5),
+            "expected_end_date": date(2026, 11, 28),
+            "planned_sessions": 12,
+        }
+        data.update(kwargs)
+        return DiscipleshipClass.objects.create(**data)
+
+    def test_criacao_valida(self):
+        discipleship_class = self.make_class()
+
+        self.assertEqual(discipleship_class.name, "Discipulado 2026.2")
+
+    def test_status_default_e_planned(self):
+        discipleship_class = self.make_class()
+
+        self.assertEqual(discipleship_class.status, DiscipleshipClass.Status.PLANNED)
+
+    def test_teacher_aponta_para_person(self):
+        discipleship_class = self.make_class()
+
+        self.assertEqual(discipleship_class.teacher, self.teacher)
+
+    def test_planned_sessions_deve_ser_positivo(self):
+        with self.assertRaises(Exception):
+            self.make_class(planned_sessions=0)
+
+    def test_expected_end_date_nao_pode_ser_anterior_ao_inicio(self):
+        with self.assertRaises(Exception):
+            self.make_class(expected_end_date=date(2026, 9, 4))
+
+    def test_varias_planned_sao_permitidas(self):
+        self.make_class(name="Discipulado 2026.2")
+        self.make_class(
+            name="Discipulado 2027.1",
+            start_date=date(2027, 2, 1),
+            expected_end_date=date(2027, 4, 30),
+        )
+
+        self.assertEqual(DiscipleshipClass.objects.count(), 2)
+
+    def test_somente_uma_in_progress_e_permitida(self):
+        self.make_class(name="Atual", status=DiscipleshipClass.Status.IN_PROGRESS)
+
+        with self.assertRaises(Exception):
+            self.make_class(name="Outra atual", status=DiscipleshipClass.Status.IN_PROGRESS)
+
+    def test_completed_e_cancelled_historicas_sao_permitidas(self):
+        self.make_class(name="Concluida", status=DiscipleshipClass.Status.COMPLETED)
+        self.make_class(name="Cancelada", status=DiscipleshipClass.Status.CANCELLED)
+
+        self.assertEqual(DiscipleshipClass.objects.count(), 2)
+
+
+class DiscipleshipClassLifecycleTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(
+            full_name="Professor Lifecycle",
+            birth_date=date(1980, 1, 1),
+        )
+
+    def make_class(self, **kwargs):
+        status_value = kwargs.pop("status", None)
+        data = {
+            "name": "Discipulado Lifecycle",
+            "teacher": self.teacher,
+            "start_date": date(2026, 9, 5),
+            "expected_end_date": date(2026, 11, 28),
+            "planned_sessions": 12,
+        }
+        data.update(kwargs)
+        discipleship_class = create_discipleship_class(**data)
+        if status_value is not None:
+            discipleship_class.status = status_value
+            discipleship_class.save(update_fields=["status", "updated_at"])
+        return discipleship_class
+
+    def test_planned_para_in_progress(self):
+        discipleship_class = self.make_class()
+
+        start_discipleship_class(discipleship_class)
+
+        self.assertEqual(discipleship_class.status, DiscipleshipClass.Status.IN_PROGRESS)
+
+    def test_planned_para_cancelled(self):
+        discipleship_class = self.make_class()
+
+        cancel_discipleship_class(discipleship_class)
+
+        self.assertEqual(discipleship_class.status, DiscipleshipClass.Status.CANCELLED)
+
+    def test_in_progress_para_completed(self):
+        discipleship_class = self.make_class()
+        start_discipleship_class(discipleship_class)
+
+        complete_discipleship_class(discipleship_class)
+
+        self.assertEqual(discipleship_class.status, DiscipleshipClass.Status.COMPLETED)
+
+    def test_in_progress_para_cancelled(self):
+        discipleship_class = self.make_class()
+        start_discipleship_class(discipleship_class)
+
+        cancel_discipleship_class(discipleship_class)
+
+        self.assertEqual(discipleship_class.status, DiscipleshipClass.Status.CANCELLED)
+
+    def test_completed_nao_volta_para_in_progress(self):
+        discipleship_class = self.make_class(status=DiscipleshipClass.Status.COMPLETED)
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            start_discipleship_class(discipleship_class)
+
+        self.assertEqual(context.exception.code, INVALID_DISCIPLESHIP_CLASS_TRANSITION)
+
+    def test_cancelled_nao_volta_para_in_progress(self):
+        discipleship_class = self.make_class(status=DiscipleshipClass.Status.CANCELLED)
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            start_discipleship_class(discipleship_class)
+
+        self.assertEqual(context.exception.code, INVALID_DISCIPLESHIP_CLASS_TRANSITION)
+
+    def test_planned_nao_conclui_diretamente(self):
+        discipleship_class = self.make_class()
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            complete_discipleship_class(discipleship_class)
+
+        self.assertEqual(context.exception.code, INVALID_DISCIPLESHIP_CLASS_TRANSITION)
+
+    def test_start_bloqueia_segunda_turma_em_andamento(self):
+        self.make_class(name="Em andamento", status=DiscipleshipClass.Status.IN_PROGRESS)
+        planned = self.make_class(name="Planejada")
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            start_discipleship_class(planned)
+
+        self.assertEqual(context.exception.code, DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS)
+
+    def test_complete_nao_altera_discipulado_legado_do_usuario(self):
+        user_model = get_user_model()
+        usuario = user_model.objects.create_user(
+            username="aluno.legado",
+            password="senha-forte-123",
+            person=Person.objects.create(
+                full_name="Aluno Legado",
+                birth_date=date(1990, 1, 1),
+            ),
+        )
+        discipleship_class = self.make_class()
+        start_discipleship_class(discipleship_class)
+
+        complete_discipleship_class(discipleship_class)
+
+        usuario.refresh_from_db()
+        self.assertFalse(usuario.discipulado_concluido)
+        self.assertIsNone(usuario.discipulado_concluido_em)
+
+
+class DiscipleshipClassApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(
+            full_name="Professor API",
+            birth_date=date(1980, 1, 1),
+        )
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(
+            username=username,
+            password="senha-forte-123",
+        )
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def authenticate_role(self, username, group_name):
+        usuario = self.make_user_with_role(username, group_name)
+        self.client.force_authenticate(usuario)
+        return usuario
+
+    def make_payload(self, **kwargs):
+        payload = {
+            "name": "Discipulado API",
+            "teacher_id": self.teacher.pk,
+            "start_date": "2026-09-05",
+            "expected_end_date": "2026-11-28",
+            "planned_sessions": 12,
+        }
+        payload.update(kwargs)
+        return payload
+
+    def make_class(self, **kwargs):
+        data = {
+            "name": "Discipulado API",
+            "teacher": self.teacher,
+            "start_date": date(2026, 9, 5),
+            "expected_end_date": date(2026, 11, 28),
+            "planned_sessions": 12,
+        }
+        data.update(kwargs)
+        return DiscipleshipClass.objects.create(**data)
+
+    def test_list(self):
+        self.authenticate_role("secretaria.discipleship.list", SECRETARY_GROUP)
+        self.make_class()
+
+        response = self.client.get(reverse("discipleship-class-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()[0]["teacher"]["display_name"], "Professor API")
+
+    def test_detail(self):
+        self.authenticate_role("secretaria.discipleship.detail", SECRETARY_GROUP)
+        discipleship_class = self.make_class()
+
+        response = self.client.get(reverse("discipleship-class-detail", args=[discipleship_class.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["name"], "Discipulado API")
+
+    def test_create(self):
+        self.authenticate_role("secretaria.discipleship.create", SECRETARY_GROUP)
+
+        response = self.client.post(
+            reverse("discipleship-class-list"),
+            self.make_payload(status=DiscipleshipClass.Status.IN_PROGRESS),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["status"], DiscipleshipClass.Status.PLANNED)
+
+    def test_update(self):
+        self.authenticate_role("secretaria.discipleship.update", SECRETARY_GROUP)
+        discipleship_class = self.make_class()
+
+        response = self.client.patch(
+            reverse("discipleship-class-detail", args=[discipleship_class.pk]),
+            {"name": "Discipulado Editado", "planned_sessions": 10},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["name"], "Discipulado Editado")
+        self.assertEqual(response.json()["planned_sessions"], 10)
+
+    def test_start(self):
+        self.authenticate_role("secretaria.discipleship.start", SECRETARY_GROUP)
+        discipleship_class = self.make_class()
+
+        response = self.client.post(reverse("discipleship-class-start", args=[discipleship_class.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], DiscipleshipClass.Status.IN_PROGRESS)
+
+    def test_start_segunda_turma_retorna_erro_estruturado(self):
+        self.authenticate_role("secretaria.discipleship.start.conflict", SECRETARY_GROUP)
+        self.make_class(name="Atual", status=DiscipleshipClass.Status.IN_PROGRESS)
+        planned = self.make_class(name="Planejada")
+
+        response = self.client.post(reverse("discipleship-class-start", args=[planned.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS)
+
+    def test_complete(self):
+        self.authenticate_role("secretaria.discipleship.complete", SECRETARY_GROUP)
+        discipleship_class = self.make_class(status=DiscipleshipClass.Status.IN_PROGRESS)
+
+        response = self.client.post(reverse("discipleship-class-complete", args=[discipleship_class.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], DiscipleshipClass.Status.COMPLETED)
+
+    def test_cancel(self):
+        self.authenticate_role("secretaria.discipleship.cancel", SECRETARY_GROUP)
+        discipleship_class = self.make_class()
+
+        response = self.client.post(reverse("discipleship-class-cancel", args=[discipleship_class.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], DiscipleshipClass.Status.CANCELLED)
+
+    def test_delete_nao_e_permitido(self):
+        self.authenticate_role("secretaria.discipleship.delete", SECRETARY_GROUP)
+        discipleship_class = self.make_class()
+
+        response = self.client.delete(reverse("discipleship-class-detail", args=[discipleship_class.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_usuario_comum_recebe_403(self):
+        comum = self.user_model.objects.create_user(
+            username="comum.discipleship",
+            password="senha-forte-123",
+        )
+        self.client.force_authenticate(comum)
+
+        response = self.client.get(reverse("discipleship-class-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_pastor_visualiza_mas_nao_cria(self):
+        self.authenticate_role("pastor.discipleship", PASTOR_GROUP)
+
+        self.assertEqual(self.client.get(reverse("discipleship-class-list")).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.client.post(reverse("discipleship-class-list"), self.make_payload(), format="json").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+class DiscipleshipClassRolePermissionsTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(
+            username=username,
+            password="senha-forte-123",
+        )
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def assert_can_manage_discipleship(self, usuario):
+        self.assertTrue(usuario.has_perm("church_journey.view_discipleshipclass"))
+        self.assertTrue(usuario.has_perm("church_journey.add_discipleshipclass"))
+        self.assertTrue(usuario.has_perm("church_journey.change_discipleshipclass"))
+        self.assertTrue(usuario.has_perm("church_journey.start_discipleshipclass"))
+        self.assertTrue(usuario.has_perm("church_journey.complete_discipleshipclass"))
+        self.assertTrue(usuario.has_perm("church_journey.cancel_discipleshipclass"))
+
+    def test_administrador_tem_todas_acoes(self):
+        admin = self.make_user_with_role("admin.discipleship.perms", PORTAL_ADMIN_GROUP)
+
+        self.assert_can_manage_discipleship(admin)
+
+    def test_secretaria_tem_todas_acoes(self):
+        secretaria = self.make_user_with_role("secretaria.discipleship.perms", SECRETARY_GROUP)
+
+        self.assert_can_manage_discipleship(secretaria)
+
+    def test_pastor_tem_apenas_view(self):
+        pastor = self.make_user_with_role("pastor.discipleship.perms", PASTOR_GROUP)
+
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshipclass"))
+        self.assertFalse(pastor.has_perm("church_journey.add_discipleshipclass"))
+        self.assertFalse(pastor.has_perm("church_journey.start_discipleshipclass"))
+
+    def test_usuario_comum_nao_tem_permissao(self):
+        comum = self.user_model.objects.create_user(
+            username="comum.discipleship.perms",
+            password="senha-forte-123",
+        )
+
+        self.assertFalse(comum.has_perm("church_journey.view_discipleshipclass"))

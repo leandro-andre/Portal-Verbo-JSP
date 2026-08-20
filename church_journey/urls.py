@@ -1,6 +1,11 @@
 from django.urls import path
 
-from .views import PersonChurchJourneyView
+from .views import (
+    DiscipleshipClassDetailView,
+    DiscipleshipClassLifecycleView,
+    DiscipleshipClassListCreateView,
+    PersonChurchJourneyView,
+)
 
 
 urlpatterns = [
@@ -8,5 +13,39 @@ urlpatterns = [
         "people/<int:person_id>/church-journey/",
         PersonChurchJourneyView.as_view(),
         name="person-church-journey",
+    ),
+    path(
+        "discipleship/classes/",
+        DiscipleshipClassListCreateView.as_view(),
+        name="discipleship-class-list",
+    ),
+    path(
+        "discipleship/classes/<int:pk>/",
+        DiscipleshipClassDetailView.as_view(),
+        name="discipleship-class-detail",
+    ),
+    path(
+        "discipleship/classes/<int:pk>/start/",
+        DiscipleshipClassLifecycleView.as_view(
+            action="start",
+            permission_required="church_journey.start_discipleshipclass",
+        ),
+        name="discipleship-class-start",
+    ),
+    path(
+        "discipleship/classes/<int:pk>/complete/",
+        DiscipleshipClassLifecycleView.as_view(
+            action="complete",
+            permission_required="church_journey.complete_discipleshipclass",
+        ),
+        name="discipleship-class-complete",
+    ),
+    path(
+        "discipleship/classes/<int:pk>/cancel/",
+        DiscipleshipClassLifecycleView.as_view(
+            action="cancel",
+            permission_required="church_journey.cancel_discipleshipclass",
+        ),
+        name="discipleship-class-cancel",
     ),
 ]

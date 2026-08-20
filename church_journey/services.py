@@ -1,10 +1,13 @@
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import ChurchJourney
+from .models import ChurchJourney, DiscipleshipClass
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
+DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS = "DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS"
+INVALID_DISCIPLESHIP_CLASS_TRANSITION = "INVALID_DISCIPLESHIP_CLASS_TRANSITION"
 
 
 class ChurchJourneyError(Exception):
@@ -32,3 +35,104 @@ def start_church_journey(person, *, started_at=None):
         person=person,
         started_at=started_at or timezone.localdate(),
     )
+
+
+def create_discipleship_class(*, name, teacher, start_date, expected_end_date, planned_sessions):
+    return DiscipleshipClass.objects.create(
+        name=name,
+        teacher=teacher,
+        start_date=start_date,
+        expected_end_date=expected_end_date,
+        planned_sessions=planned_sessions,
+    )
+
+
+def update_discipleship_class(
+    discipleship_class,
+    *,
+    name=None,
+    teacher=None,
+    start_date=None,
+    expected_end_date=None,
+    planned_sessions=None,
+):
+    if discipleship_class.status in (
+        DiscipleshipClass.Status.COMPLETED,
+        DiscipleshipClass.Status.CANCELLED,
+    ):
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+            "Turmas concluidas ou canceladas nao podem ser editadas.",
+        )
+
+    if name is not None:
+        discipleship_class.name = name
+    if teacher is not None:
+        discipleship_class.teacher = teacher
+    if start_date is not None:
+        discipleship_class.start_date = start_date
+    if expected_end_date is not None:
+        discipleship_class.expected_end_date = expected_end_date
+    if planned_sessions is not None:
+        discipleship_class.planned_sessions = planned_sessions
+
+    discipleship_class.save()
+    return discipleship_class
+
+
+def start_discipleship_class(discipleship_class):
+    if discipleship_class.status != DiscipleshipClass.Status.PLANNED:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+            "Somente turmas planejadas podem ser iniciadas.",
+        )
+
+    with transaction.atomic():
+        if (
+            DiscipleshipClass.objects.select_for_update()
+            .filter(status=DiscipleshipClass.Status.IN_PROGRESS)
+            .exclude(pk=discipleship_class.pk)
+            .exists()
+        ):
+            raise ChurchJourneyError(
+                DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS,
+                "Ja existe uma turma de discipulado em andamento.",
+            )
+
+        discipleship_class.status = DiscipleshipClass.Status.IN_PROGRESS
+        try:
+            discipleship_class.save(update_fields=["status", "updated_at"])
+        except IntegrityError as exc:
+            raise ChurchJourneyError(
+                DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS,
+                "Ja existe uma turma de discipulado em andamento.",
+            ) from exc
+
+    return discipleship_class
+
+
+def complete_discipleship_class(discipleship_class):
+    if discipleship_class.status != DiscipleshipClass.Status.IN_PROGRESS:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+            "Somente turmas em andamento podem ser concluidas.",
+        )
+
+    discipleship_class.status = DiscipleshipClass.Status.COMPLETED
+    discipleship_class.save(update_fields=["status", "updated_at"])
+    return discipleship_class
+
+
+def cancel_discipleship_class(discipleship_class):
+    if discipleship_class.status not in (
+        DiscipleshipClass.Status.PLANNED,
+        DiscipleshipClass.Status.IN_PROGRESS,
+    ):
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+            "Somente turmas planejadas ou em andamento podem ser canceladas.",
+        )
+
+    discipleship_class.status = DiscipleshipClass.Status.CANCELLED
+    discipleship_class.save(update_fields=["status", "updated_at"])
+    return discipleship_class
