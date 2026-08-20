@@ -29,7 +29,7 @@ export type UpdateDiscipleshipClassInput = Partial<CreateDiscipleshipClassInput>
 
 export type DiscipleshipValidationErrors = Partial<Record<keyof CreateDiscipleshipClassInput, string[]>>
 
-export type DiscipleshipEnrollmentStatus = 'ENROLLED' | 'WITHDRAWN'
+export type DiscipleshipEnrollmentStatus = 'ENROLLED' | 'WITHDRAWN' | 'COMPLETED'
 
 export type DiscipleshipEnrollmentPerson = {
   id: number
@@ -49,6 +49,7 @@ export type DiscipleshipEnrollment = {
   status: DiscipleshipEnrollmentStatus
   enrolled_at: string
   withdrawn_at: string | null
+  completed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -131,4 +132,34 @@ export type SaveDiscipleshipAttendanceInput = {
     enrollment_id: number
     status: DiscipleshipAttendanceStatus
   }>
+}
+
+export type DiscipleshipCompletionReason =
+  | 'CLASS_NOT_COMPLETED'
+  | 'ENROLLMENT_WITHDRAWN'
+  | 'ATTENDANCE_INCOMPLETE'
+  | 'NO_FREQUENCY_DENOMINATOR'
+  | 'MINIMUM_ATTENDANCE_NOT_REACHED'
+  | 'ALREADY_COMPLETED'
+
+export type DiscipleshipCompletionSummary = {
+  enrollment_id: number
+  status: DiscipleshipEnrollmentStatus
+  completed_at: string | null
+  frequency: {
+    eligible_lessons: number
+    present: number
+    absent: number
+    justified: number
+    not_recorded: number
+    denominator: number
+    percentage: number | null
+    attendance_complete: boolean
+  }
+  completion: {
+    can_complete: boolean
+    minimum_percentage: number
+    reason: DiscipleshipCompletionReason | null
+  }
+  membership_eligibility: boolean
 }

@@ -3,11 +3,13 @@ import {
   cancelDiscipleshipClass,
   cancelDiscipleshipLesson,
   completeDiscipleshipClass,
+  completeDiscipleshipEnrollment,
   createDiscipleshipEnrollment,
   createDiscipleshipClass,
   createDiscipleshipLesson,
   getDiscipleshipClass,
   getDiscipleshipClasses,
+  getDiscipleshipCompletion,
   getDiscipleshipAttendance,
   getDiscipleshipEnrollment,
   getDiscipleshipEnrollments,
@@ -52,6 +54,10 @@ export function discipleshipLessonQueryKey(classId: number, lessonId: number) {
 
 export function discipleshipAttendanceQueryKey(classId: number, lessonId: number) {
   return ['discipleship', 'classes', classId, 'lessons', lessonId, 'attendance'] as const
+}
+
+export function discipleshipCompletionQueryKey(classId: number, enrollmentId: number) {
+  return ['discipleship', 'classes', classId, 'enrollments', enrollmentId, 'completion'] as const
 }
 
 export function useDiscipleshipClasses() {
@@ -219,6 +225,30 @@ export function useSaveDiscipleshipAttendance(classId: number, lessonId: number)
     onSuccess: async (attendance) => {
       queryClient.setQueryData(discipleshipAttendanceQueryKey(classId, lessonId), attendance)
       await queryClient.invalidateQueries({ queryKey: discipleshipLessonsQueryKey(classId) })
+      await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
+    },
+  })
+}
+
+export function useDiscipleshipCompletion(classId: number, enrollmentId: number) {
+  return useQuery({
+    queryKey: discipleshipCompletionQueryKey(classId, enrollmentId),
+    queryFn: () => getDiscipleshipCompletion(classId, enrollmentId),
+    enabled: Number.isFinite(classId) && Number.isFinite(enrollmentId),
+  })
+}
+
+export function useCompleteDiscipleshipEnrollment(classId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (enrollmentId: number) => completeDiscipleshipEnrollment(classId, enrollmentId),
+    onSuccess: async (completion) => {
+      queryClient.setQueryData(
+        discipleshipCompletionQueryKey(classId, completion.enrollment_id),
+        completion,
+      )
+      await queryClient.invalidateQueries({ queryKey: discipleshipEnrollmentsQueryKey(classId) })
       await queryClient.invalidateQueries({ queryKey: discipleshipClassQueryKey(classId) })
     },
   })

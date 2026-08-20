@@ -10,6 +10,7 @@ from .models import (
     DiscipleshipEnrollment,
     DiscipleshipLesson,
 )
+from .selectors import get_discipleship_completion_eligibility
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
@@ -33,6 +34,21 @@ DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON = (
     "DISCIPLESHIP_ENROLLMENT_NOT_ELIGIBLE_FOR_LESSON"
 )
 INVALID_DISCIPLESHIP_ATTENDANCE_STATUS = "INVALID_DISCIPLESHIP_ATTENDANCE_STATUS"
+DISCIPLESHIP_CLASS_NOT_COMPLETED = "DISCIPLESHIP_CLASS_NOT_COMPLETED"
+DISCIPLESHIP_ATTENDANCE_INCOMPLETE = "DISCIPLESHIP_ATTENDANCE_INCOMPLETE"
+DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED = "DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED"
+DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR = "DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR"
+DISCIPLESHIP_ENROLLMENT_WITHDRAWN = "DISCIPLESHIP_ENROLLMENT_WITHDRAWN"
+DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED = "DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED"
+
+COMPLETION_REASON_ERROR_CODES = {
+    "CLASS_NOT_COMPLETED": DISCIPLESHIP_CLASS_NOT_COMPLETED,
+    "ENROLLMENT_WITHDRAWN": DISCIPLESHIP_ENROLLMENT_WITHDRAWN,
+    "ATTENDANCE_INCOMPLETE": DISCIPLESHIP_ATTENDANCE_INCOMPLETE,
+    "NO_FREQUENCY_DENOMINATOR": DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR,
+    "MINIMUM_ATTENDANCE_NOT_REACHED": DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED,
+    "ALREADY_COMPLETED": DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED,
+}
 
 
 class ChurchJourneyError(Exception):
@@ -407,3 +423,18 @@ def record_discipleship_attendance_batch(*, lesson, records, recorded_by=None):
                 )
             )
         return attendances
+
+
+def complete_discipleship_enrollment(enrollment):
+    eligibility = get_discipleship_completion_eligibility(enrollment)
+    if not eligibility["can_complete"]:
+        code = COMPLETION_REASON_ERROR_CODES.get(
+            eligibility["reason"],
+            DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED,
+        )
+        raise ChurchJourneyError(code, "Esta matricula nao pode ser concluida.")
+
+    enrollment.status = DiscipleshipEnrollment.Status.COMPLETED
+    enrollment.completed_at = timezone.localdate()
+    enrollment.save(update_fields=["status", "completed_at", "updated_at"])
+    return enrollment

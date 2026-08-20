@@ -2,6 +2,10 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from .enums import ChurchStatus
+from .models import DiscipleshipAttendance, DiscipleshipEnrollment, DiscipleshipLesson
+
+
+MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE = 75
 
 
 LEGACY_VISITOR_STATUS = "visitante"
@@ -53,13 +57,111 @@ def is_visitor(person):
 
 
 def has_completed_discipleship(person):
+    if get_completed_discipleship(person) is not None:
+        return True
+
     usuario = get_legacy_user_account(person)
     return bool(getattr(usuario, "discipulado_concluido", False))
 
 
 def get_discipleship_completed_at(person):
+    completed_enrollment = get_completed_discipleship(person)
+    if completed_enrollment is not None:
+        return completed_enrollment.completed_at
+
     usuario = get_legacy_user_account(person)
     return getattr(usuario, "discipulado_concluido_em", None)
+
+
+def get_completed_discipleship(person):
+    if person is None:
+        return None
+
+    return (
+        DiscipleshipEnrollment.objects.filter(
+            person=person,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+        )
+        .order_by("-completed_at", "-id")
+        .first()
+    )
+
+
+def is_eligible_for_membership(person):
+    return get_completed_discipleship(person) is not None
+
+
+def get_frequency_eligible_lessons(enrollment):
+    filters = Q(
+        discipleship_class=enrollment.discipleship_class,
+        lesson_date__gte=enrollment.enrolled_at,
+    ) & ~Q(status=DiscipleshipLesson.Status.CANCELLED)
+
+    if enrollment.withdrawn_at:
+        filters &= Q(lesson_date__lte=enrollment.withdrawn_at)
+
+    return DiscipleshipLesson.objects.filter(filters).order_by("lesson_date", "id")
+
+
+def get_discipleship_attendance_summary(enrollment):
+    eligible_lessons = list(get_frequency_eligible_lessons(enrollment))
+    attendances = {
+        attendance.lesson_id: attendance
+        for attendance in DiscipleshipAttendance.objects.filter(
+            enrollment=enrollment,
+            lesson__in=eligible_lessons,
+        )
+    }
+    present = 0
+    absent = 0
+    justified = 0
+    not_recorded = 0
+
+    for lesson in eligible_lessons:
+        attendance = attendances.get(lesson.pk)
+        if attendance is None:
+            not_recorded += 1
+        elif attendance.status == DiscipleshipAttendance.Status.PRESENT:
+            present += 1
+        elif attendance.status == DiscipleshipAttendance.Status.ABSENT:
+            absent += 1
+        elif attendance.status == DiscipleshipAttendance.Status.JUSTIFIED:
+            justified += 1
+
+    denominator = present + absent
+    percentage = None
+    if denominator:
+        percentage = (present * 100) / denominator
+
+    return {
+        "eligible_lessons": len(eligible_lessons),
+        "present": present,
+        "absent": absent,
+        "justified": justified,
+        "not_recorded": not_recorded,
+        "denominator": denominator,
+        "percentage": percentage,
+        "attendance_complete": not_recorded == 0,
+    }
+
+
+def get_discipleship_completion_eligibility(enrollment):
+    summary = get_discipleship_attendance_summary(enrollment)
+
+    if enrollment.status == DiscipleshipEnrollment.Status.COMPLETED:
+        return {"can_complete": False, "reason": "ALREADY_COMPLETED", "summary": summary}
+    if enrollment.status == DiscipleshipEnrollment.Status.WITHDRAWN:
+        return {"can_complete": False, "reason": "ENROLLMENT_WITHDRAWN", "summary": summary}
+    if enrollment.discipleship_class.status != "COMPLETED":
+        return {"can_complete": False, "reason": "CLASS_NOT_COMPLETED", "summary": summary}
+    if not summary["attendance_complete"]:
+        return {"can_complete": False, "reason": "ATTENDANCE_INCOMPLETE", "summary": summary}
+    if summary["denominator"] == 0:
+        return {"can_complete": False, "reason": "NO_FREQUENCY_DENOMINATOR", "summary": summary}
+    if summary["present"] * 100 < summary["denominator"] * MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE:
+        return {"can_complete": False, "reason": "MINIMUM_ATTENDANCE_NOT_REACHED", "summary": summary}
+
+    return {"can_complete": True, "reason": None, "summary": summary}
 
 
 def is_legacy_department_eligible(person):

@@ -387,3 +387,131 @@ PVV-021 devera calcular frequencia usando:
 
 Esta feature nao implementa percentual de frequencia, criterio de conclusao,
 Completion, elegibilidade para Membership, Membership ou dual-write legado.
+
+## Completion E Eligibility
+
+PVV-021 introduz conclusao individual do discipulado por matricula.
+
+A conclusao minima aprovada pela regra DSC-002 exige frequencia de 75%.
+
+Formula:
+
+`present / (present + absent) * 100`
+
+`PRESENT` entra no numerador e no denominador.
+
+`ABSENT` entra apenas no denominador.
+
+`JUSTIFIED` nao entra no numerador nem no denominador. Justificada e ausencia
+aceita, nao presenca.
+
+Aulas `CANCELLED` nao entram no calculo. Aulas fora da janela da matricula
+tambem nao entram.
+
+`planned_sessions` nao participa do calculo. A frequencia usa somente
+`DiscipleshipLesson` reais, nao canceladas, elegiveis para aquela matricula.
+
+## Janela E Chamada Completa
+
+Uma aula entra na frequencia da matricula quando:
+
+- `lesson.lesson_date >= enrollment.enrolled_at`
+- se `withdrawn_at` existir, `lesson.lesson_date <= enrollment.withdrawn_at`
+- `lesson.status != CANCELLED`
+
+Ausencia de `DiscipleshipAttendance` nao significa `ABSENT`. Significa chamada
+nao lancada.
+
+Se existir aula elegivel sem Attendance, a frequencia pode ser exibida como
+parcial, mas a matricula nao pode ser concluida.
+
+Se o denominador for zero, por exemplo todas as aulas elegiveis forem
+`JUSTIFIED` ou nao houver aula valida, `frequency_percentage` e nulo e a
+matricula nao pode ser concluida. Nunca se assume 100% automaticamente.
+
+## Enrollment Completed
+
+`DiscipleshipEnrollment` passa a aceitar:
+
+- `ENROLLED`
+- `WITHDRAWN`
+- `COMPLETED`
+
+`COMPLETED` significa que aquela pessoa concluiu individualmente o discipulado
+naquela turma. A conclusao da turma nao conclui automaticamente os alunos.
+
+A conclusao e um caso de uso explicito:
+
+- turma precisa estar `COMPLETED`
+- matricula precisa estar `ENROLLED`
+- chamadas elegiveis precisam estar completas
+- denominador precisa ser valido
+- frequencia precisa ser `>= 75%`
+
+Ao concluir:
+
+- `status = COMPLETED`
+- `completed_at = timezone.localdate()`
+
+`completed_at` e `DateField` porque a regra pastoral/administrativa atual
+trabalha com data de conclusao, nao instante de auditoria detalhada.
+
+Nao ha signal de conclusao. Nao ha conclusao automatica ao fechar turma. Nao ha
+revogacao de conclusao nesta feature.
+
+Matricula `WITHDRAWN` nao pode virar `COMPLETED`, mesmo com frequencia historica
+alta antes da desistencia.
+
+## Membership Eligibility
+
+Elegibilidade para futura Membership e derivada:
+
+uma `Person` e elegivel quando possui ao menos uma `DiscipleshipEnrollment` com
+`status = COMPLETED`.
+
+Nao existe campo persistido de eligibility em `Person` e nao existe tabela
+`MembershipEligibility`.
+
+Elegivel para Membership nao significa membro. A pessoa continua com
+`ChurchStatus.VISITOR` ate uma futura feature de Membership aprovar e registrar
+a membresia.
+
+Nao criar `Membership`, nao promover para `MEMBER`, nao alterar
+`Usuario.status_eclesiastico` e nao fazer dual-write em
+`Usuario.discipulado_concluido`.
+
+## Compatibility Layer Apos Completion
+
+`has_completed_discipleship(person)` prioriza o novo dominio:
+
+1. existe `DiscipleshipEnrollment.COMPLETED`: `True`
+2. caso contrario, usa fallback legado `Usuario.discipulado_concluido`
+
+`get_discipleship_completed_at(person)` segue a mesma prioridade. Quando houver
+mais de uma conclusao no novo dominio, retorna a conclusao mais recente.
+
+## Permissoes De Completion
+
+Administrador do Portal e Secretaria podem visualizar frequencia e concluir
+matriculas.
+
+Pastor pode visualizar frequencia.
+
+Professor da turma e auxiliar contextual podem visualizar acompanhamento da
+propria turma, reutilizando a autorizacao contextual da chamada. Eles nao
+concluem formalmente nesta versao.
+
+Capabilities:
+
+- `DISCIPLESHIP_COMPLETION_VIEW`
+- `DISCIPLESHIP_COMPLETION_MANAGE`
+
+## Checkpoint Apos PVV-021
+
+Apos PVV-021 o desenvolvimento deve parar para o CHECKPOINT 01 de homologacao
+end-to-end:
+
+`Person -> ChurchJourney -> Visitor -> DiscipleshipClass -> Enrollment ->
+Lessons -> Attendance -> Completion -> Membership Eligibility`
+
+Membership so deve ser implementada depois dessa homologacao.

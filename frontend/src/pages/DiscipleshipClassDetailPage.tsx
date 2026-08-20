@@ -8,9 +8,11 @@ import DiscipleshipStatusBadge from '../components/discipleship/DiscipleshipStat
 import { useCan } from '../hooks/useAuth'
 import {
   useCancelDiscipleshipLesson,
+  useCompleteDiscipleshipEnrollment,
   useCreateDiscipleshipLesson,
   useDiscipleshipClass,
   useDiscipleshipClassLifecycle,
+  useDiscipleshipCompletion,
   useCreateDiscipleshipEnrollment,
   useDiscipleshipEnrollments,
   useDiscipleshipLessons,
@@ -24,7 +26,12 @@ import {
   type DiscipleshipLessonFormData,
   type DiscipleshipLessonFormValues,
 } from '../schemas/discipleshipLesson'
-import type { DiscipleshipClass, DiscipleshipEnrollment, DiscipleshipLesson } from '../types/discipleship'
+import type {
+  DiscipleshipClass,
+  DiscipleshipCompletionSummary,
+  DiscipleshipEnrollment,
+  DiscipleshipLesson,
+} from '../types/discipleship'
 import { discipleshipStatusLabel, enrollmentStatusLabel, formatDate, lessonStatusLabel } from '../utils/discipleship'
 
 type LifecycleAction = 'start' | 'complete' | 'cancel'
@@ -133,9 +140,44 @@ function businessErrorMessage(error: unknown) {
     if (error.code === 'INVALID_DISCIPLESHIP_LESSON_TRANSITION') {
       return 'Esta aula nao permite esta acao.'
     }
+    if (error.code === 'DISCIPLESHIP_CLASS_NOT_COMPLETED') {
+      return 'A turma ainda nao foi concluida.'
+    }
+    if (error.code === 'DISCIPLESHIP_ATTENDANCE_INCOMPLETE') {
+      return 'Ainda existem chamadas pendentes para esta matricula.'
+    }
+    if (error.code === 'DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED') {
+      return 'A frequencia minima nao foi atingida.'
+    }
+    if (error.code === 'DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR') {
+      return 'Nao ha aulas validas suficientes para calcular a frequencia.'
+    }
+    if (error.code === 'DISCIPLESHIP_ENROLLMENT_WITHDRAWN') {
+      return 'Matriculas desistentes nao podem ser concluidas.'
+    }
+    if (error.code === 'DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED') {
+      return 'Esta matricula ja foi concluida.'
+    }
   }
 
   return 'Nao foi possivel executar esta acao.'
+}
+
+function formatPercentage(value: number | null) {
+  return value === null ? 'Nao avaliavel' : `${value.toFixed(2).replace('.', ',')}%`
+}
+
+function completionResultLabel(completion?: DiscipleshipCompletionSummary) {
+  if (!completion) return 'Carregando'
+  if (completion.status === 'COMPLETED') return 'Concluido'
+  if (completion.completion.can_complete) return 'Apta a conclusao'
+  if (completion.completion.reason === 'CLASS_NOT_COMPLETED') return 'Em andamento'
+  if (completion.completion.reason === 'ENROLLMENT_WITHDRAWN') return 'Desistente'
+  if (completion.completion.reason === 'ATTENDANCE_INCOMPLETE') return 'Chamada pendente'
+  if (completion.completion.reason === 'NO_FREQUENCY_DENOMINATOR') return 'Sem base avaliavel'
+  if (completion.completion.reason === 'MINIMUM_ATTENDANCE_NOT_REACHED') return 'Frequencia insuficiente'
+  if (completion.completion.reason === 'ALREADY_COMPLETED') return 'Concluido'
+  return 'Nao apta'
 }
 
 function applyLessonApiErrors(
@@ -412,6 +454,134 @@ function CancelLessonDialog({
   )
 }
 
+function CompleteEnrollmentDialog({
+  completion,
+  enrollment,
+  error,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  completion: DiscipleshipCompletionSummary
+  enrollment: DiscipleshipEnrollment
+  error: string | null
+  isPending: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="complete-enrollment-title">
+        <h2 id="complete-enrollment-title">Concluir o discipulado de {enrollment.person.display_name}?</h2>
+        <p>
+          Frequencia final: {formatPercentage(completion.frequency.percentage)}. O minimo exigido e{' '}
+          {completion.completion.minimum_percentage}%.
+        </p>
+        <p>Esta acao registrara a conclusao do discipulado, mas nao tornara a pessoa membro automaticamente.</p>
+
+        {error ? <div className="form-alert form-alert--error" role="alert">{error}</div> : null}
+
+        <div className="form-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            <CheckCircle2 size={17} aria-hidden="true" />
+            {isPending ? 'Concluindo...' : 'Concluir discipulado'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EnrollmentCompletionCells({
+  canCompleteEnrollment,
+  canWithdrawEnrollment,
+  classId,
+  enrollment,
+  onCompleteClick,
+  onWithdrawClick,
+}: {
+  canCompleteEnrollment: boolean
+  canWithdrawEnrollment: boolean
+  classId: number
+  enrollment: DiscipleshipEnrollment
+  onCompleteClick: (enrollment: DiscipleshipEnrollment, completion: DiscipleshipCompletionSummary) => void
+  onWithdrawClick: (enrollment: DiscipleshipEnrollment) => void
+}) {
+  const { data: completion, isError, isLoading } = useDiscipleshipCompletion(classId, enrollment.id)
+
+  if (isLoading) {
+    return (
+      <>
+        <td>Carregando...</td>
+        <td>Carregando...</td>
+        <td />
+      </>
+    )
+  }
+
+  if (isError || !completion) {
+    return (
+      <>
+        <td>Nao disponivel</td>
+        <td>Nao disponivel</td>
+        <td />
+      </>
+    )
+  }
+
+  return (
+    <>
+      <td>
+        <strong>{formatPercentage(completion.frequency.percentage)}</strong>
+        <span className="table-muted">
+          {completion.frequency.present} presentes | {completion.frequency.absent} ausentes |{' '}
+          {completion.frequency.justified} justificadas
+        </span>
+      </td>
+      <td>
+        <strong>{completionResultLabel(completion)}</strong>
+        <span className="table-muted">
+          {completion.frequency.attendance_complete
+            ? 'Chamada completa'
+            : `${completion.frequency.not_recorded} nao lancadas`}
+        </span>
+      </td>
+      <td>
+        <div className="table-actions">
+          <span className="table-muted">
+            Matricula: {formatDate(enrollment.enrolled_at)}
+            {enrollment.withdrawn_at ? ` | Desistencia: ${formatDate(enrollment.withdrawn_at)}` : ''}
+            {enrollment.completed_at ? ` | Conclusao: ${formatDate(enrollment.completed_at)}` : ''}
+          </span>
+          {canCompleteEnrollment && completion.completion.can_complete ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => onCompleteClick(enrollment, completion)}
+            >
+              <CheckCircle2 size={17} aria-hidden="true" />
+              Concluir discipulado
+            </button>
+          ) : null}
+          {canWithdrawEnrollment && enrollment.status === 'ENROLLED' ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => onWithdrawClick(enrollment)}
+            >
+              <Ban size={17} aria-hidden="true" />
+              Marcar desistencia
+            </button>
+          ) : null}
+        </div>
+      </td>
+    </>
+  )
+}
+
 function DiscipleshipClassDetailPage() {
   const { id } = useParams()
   const location = useLocation()
@@ -424,6 +594,7 @@ function DiscipleshipClassDetailPage() {
   const lifecycle = useDiscipleshipClassLifecycle(classId)
   const createEnrollment = useCreateDiscipleshipEnrollment(classId)
   const withdrawEnrollment = useWithdrawDiscipleshipEnrollment(classId)
+  const completeEnrollment = useCompleteDiscipleshipEnrollment(classId)
   const createLesson = useCreateDiscipleshipLesson(classId)
   const updateLesson = useUpdateDiscipleshipLesson(classId)
   const cancelLesson = useCancelDiscipleshipLesson(classId)
@@ -433,17 +604,23 @@ function DiscipleshipClassDetailPage() {
   const canCancel = useCan('DISCIPLESHIP_CLASS_CANCEL')
   const canCreateEnrollment = useCan('DISCIPLESHIP_ENROLLMENT_CREATE')
   const canWithdrawEnrollment = useCan('DISCIPLESHIP_ENROLLMENT_WITHDRAW')
+  const canCompleteEnrollment = useCan('DISCIPLESHIP_COMPLETION_MANAGE')
   const canCreateLesson = useCan('DISCIPLESHIP_LESSON_CREATE')
   const canChangeLesson = useCan('DISCIPLESHIP_LESSON_CHANGE')
   const canCancelLesson = useCan('DISCIPLESHIP_LESSON_CANCEL')
   const [dialogAction, setDialogAction] = useState<LifecycleAction | null>(null)
   const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false)
   const [withdrawTarget, setWithdrawTarget] = useState<DiscipleshipEnrollment | null>(null)
+  const [completeTarget, setCompleteTarget] = useState<{
+    enrollment: DiscipleshipEnrollment
+    completion: DiscipleshipCompletionSummary
+  } | null>(null)
   const [isLessonDialogOpen, setIsLessonDialogOpen] = useState(false)
   const [lessonEditTarget, setLessonEditTarget] = useState<DiscipleshipLesson | null>(null)
   const [lessonCancelTarget, setLessonCancelTarget] = useState<DiscipleshipLesson | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null)
+  const [completionError, setCompletionError] = useState<string | null>(null)
   const [lessonError, setLessonError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState(() => {
     const state = location.state as { successMessage?: string } | null
@@ -519,6 +696,22 @@ function DiscipleshipClassDetailPage() {
       setSuccessMessage('Matricula marcada como desistente.')
     } catch (error) {
       setEnrollmentError(businessErrorMessage(error))
+    }
+  }
+
+  const handleCompleteEnrollment = async () => {
+    if (!completeTarget) {
+      return
+    }
+
+    setCompletionError(null)
+
+    try {
+      await completeEnrollment.mutateAsync(completeTarget.enrollment.id)
+      setCompleteTarget(null)
+      setSuccessMessage('Discipulado concluido para esta matricula.')
+    } catch (error) {
+      setCompletionError(businessErrorMessage(error))
     }
   }
 
@@ -778,8 +971,8 @@ function DiscipleshipClassDetailPage() {
                       <tr>
                         <th scope="col">Pessoa</th>
                         <th scope="col">Status</th>
-                        <th scope="col">Matricula</th>
-                        <th scope="col">Desistencia</th>
+                        <th scope="col">Frequencia</th>
+                        <th scope="col">Resultado</th>
                         <th scope="col" className="people-table__actions-header">Acao</th>
                       </tr>
                     </thead>
@@ -793,23 +986,20 @@ function DiscipleshipClassDetailPage() {
                             ) : null}
                           </td>
                           <td><EnrollmentStatusBadge status={enrollment.status} /></td>
-                          <td>{formatDate(enrollment.enrolled_at)}</td>
-                          <td>{enrollment.withdrawn_at ? formatDate(enrollment.withdrawn_at) : '-'}</td>
-                          <td>
-                            {canWithdrawEnrollment && enrollment.status === 'ENROLLED' ? (
-                              <button
-                                className="button button--secondary"
-                                type="button"
-                                onClick={() => {
-                                  setEnrollmentError(null)
-                                  setWithdrawTarget(enrollment)
-                                }}
-                              >
-                                <Ban size={17} aria-hidden="true" />
-                                Marcar desistencia
-                              </button>
-                            ) : null}
-                          </td>
+                          <EnrollmentCompletionCells
+                            canCompleteEnrollment={canCompleteEnrollment}
+                            canWithdrawEnrollment={canWithdrawEnrollment}
+                            classId={classId}
+                            enrollment={enrollment}
+                            onCompleteClick={(targetEnrollment, completion) => {
+                              setCompletionError(null)
+                              setCompleteTarget({ enrollment: targetEnrollment, completion })
+                            }}
+                            onWithdrawClick={(targetEnrollment) => {
+                              setEnrollmentError(null)
+                              setWithdrawTarget(targetEnrollment)
+                            }}
+                          />
                         </tr>
                       ))}
                     </tbody>
@@ -850,6 +1040,16 @@ function DiscipleshipClassDetailPage() {
               isPending={withdrawEnrollment.isPending}
               onClose={() => setWithdrawTarget(null)}
               onConfirm={() => void handleWithdraw()}
+            />
+          ) : null}
+          {completeTarget ? (
+            <CompleteEnrollmentDialog
+              completion={completeTarget.completion}
+              enrollment={completeTarget.enrollment}
+              error={completionError}
+              isPending={completeEnrollment.isPending}
+              onClose={() => setCompleteTarget(null)}
+              onConfirm={() => void handleCompleteEnrollment()}
             />
           ) : null}
           {isLessonDialogOpen ? (

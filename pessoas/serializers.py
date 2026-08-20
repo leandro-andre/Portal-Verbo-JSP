@@ -2,6 +2,12 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from usuarios.services import get_access_status
+from church_journey.selectors import (
+    get_completed_discipleship,
+    get_discipleship_completed_at,
+    has_completed_discipleship,
+    is_eligible_for_membership,
+)
 
 from .models import Person
 
@@ -24,6 +30,7 @@ class PersonSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     portal_user = PersonPortalUserSerializer(source="user_account", read_only=True)
     has_church_journey = serializers.SerializerMethodField()
+    discipleship = serializers.SerializerMethodField()
 
     class Meta:
         model = Person
@@ -38,6 +45,7 @@ class PersonSerializer(serializers.ModelSerializer):
             "status",
             "portal_user",
             "has_church_journey",
+            "discipleship",
             "allow_possible_duplicate",
             "created_at",
             "updated_at",
@@ -46,6 +54,22 @@ class PersonSerializer(serializers.ModelSerializer):
 
     def get_has_church_journey(self, obj):
         return hasattr(obj, "church_journey")
+
+    def get_discipleship(self, obj):
+        completed_enrollment = get_completed_discipleship(obj)
+        return {
+            "completed": has_completed_discipleship(obj),
+            "completed_at": get_discipleship_completed_at(obj),
+            "completed_class": (
+                {
+                    "id": completed_enrollment.discipleship_class_id,
+                    "name": completed_enrollment.discipleship_class.name,
+                }
+                if completed_enrollment is not None
+                else None
+            ),
+            "membership_eligible": is_eligible_for_membership(obj),
+        }
 
     def validate(self, attrs):
         allow_possible_duplicate = attrs.pop("allow_possible_duplicate", False)

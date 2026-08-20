@@ -19,6 +19,7 @@ export function formatDate(value: string) {
 
 export function enrollmentStatusLabel(status: DiscipleshipEnrollmentStatus) {
   if (status === 'ENROLLED') return 'Matriculado'
+  if (status === 'COMPLETED') return 'Concluido'
   return 'Desistente'
 }
 

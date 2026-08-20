@@ -5,6 +5,7 @@ from .views import (
     DiscipleshipClassLifecycleView,
     DiscipleshipClassListCreateView,
     DiscipleshipEnrollmentDetailView,
+    DiscipleshipEnrollmentCompletionView,
     DiscipleshipEnrollmentListCreateView,
     DiscipleshipEnrollmentWithdrawView,
     DiscipleshipLessonAttendanceView,
@@ -69,6 +70,16 @@ urlpatterns = [
         "discipleship/classes/<int:class_id>/enrollments/<int:pk>/withdraw/",
         DiscipleshipEnrollmentWithdrawView.as_view(),
         name="discipleship-enrollment-withdraw",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/enrollments/<int:enrollment_id>/completion/",
+        DiscipleshipEnrollmentCompletionView.as_view(),
+        name="discipleship-enrollment-completion",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/enrollments/<int:enrollment_id>/complete/",
+        DiscipleshipEnrollmentCompletionView.as_view(),
+        name="discipleship-enrollment-complete",
     ),
     path(
         "discipleship/classes/<int:class_id>/lessons/",

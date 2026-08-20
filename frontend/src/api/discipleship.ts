@@ -4,6 +4,7 @@ import type {
   CreateDiscipleshipLessonInput,
   DiscipleshipAttendancePayload,
   DiscipleshipClass,
+  DiscipleshipCompletionSummary,
   DiscipleshipEnrollment,
   DiscipleshipLesson,
   DiscipleshipLessonValidationErrors,
@@ -146,6 +147,24 @@ function businessMessage(code: string) {
   }
   if (code === 'INVALID_DISCIPLESHIP_ATTENDANCE_STATUS') {
     return 'Informe um status de presenca valido.'
+  }
+  if (code === 'DISCIPLESHIP_CLASS_NOT_COMPLETED') {
+    return 'A turma ainda nao foi concluida.'
+  }
+  if (code === 'DISCIPLESHIP_ATTENDANCE_INCOMPLETE') {
+    return 'Ainda existem chamadas pendentes para esta matricula.'
+  }
+  if (code === 'DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED') {
+    return 'A frequencia minima nao foi atingida.'
+  }
+  if (code === 'DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR') {
+    return 'Nao ha aulas validas suficientes para calcular a frequencia.'
+  }
+  if (code === 'DISCIPLESHIP_ENROLLMENT_WITHDRAWN') {
+    return 'Matriculas desistentes nao podem ser concluidas.'
+  }
+  if (code === 'DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED') {
+    return 'Esta matricula ja foi concluida.'
   }
   return 'Nao foi possivel concluir a acao solicitada.'
 }
@@ -490,4 +509,42 @@ export async function saveDiscipleshipAttendance(
   }
 
   return data as DiscipleshipAttendancePayload
+}
+
+export async function getDiscipleshipCompletion(
+  classId: number,
+  enrollmentId: number,
+): Promise<DiscipleshipCompletionSummary> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/enrollments/${enrollmentId}/completion/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    throw new DiscipleshipHttpError(404, 'Resumo de conclusao nao encontrado.')
+  }
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar o resumo de conclusao.')
+  }
+
+  return response.json() as Promise<DiscipleshipCompletionSummary>
+}
+
+export async function completeDiscipleshipEnrollment(
+  classId: number,
+  enrollmentId: number,
+): Promise<DiscipleshipCompletionSummary> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/enrollments/${enrollmentId}/complete/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipCompletionSummary
 }

@@ -100,6 +100,7 @@ class DiscipleshipEnrollment(models.Model):
     class Status(models.TextChoices):
         ENROLLED = "ENROLLED", "Matriculado"
         WITHDRAWN = "WITHDRAWN", "Desistente"
+        COMPLETED = "COMPLETED", "Concluido"
 
     person = models.ForeignKey(
         "pessoas.Person",
@@ -121,6 +122,7 @@ class DiscipleshipEnrollment(models.Model):
     )
     enrolled_at = models.DateField("Data da matricula", default=timezone.localdate)
     withdrawn_at = models.DateField("Data da desistencia", blank=True, null=True)
+    completed_at = models.DateField("Data de conclusao", blank=True, null=True)
     created_at = models.DateTimeField("Criado em", auto_now_add=True)
     updated_at = models.DateTimeField("Atualizado em", auto_now=True)
 
@@ -130,6 +132,7 @@ class DiscipleshipEnrollment(models.Model):
         verbose_name_plural = "Matriculas de discipulado"
         permissions = [
             ("withdraw_discipleshipenrollment", "Can withdraw discipleship enrollment"),
+            ("complete_discipleshipenrollment", "Can complete discipleship enrollment"),
         ]
         constraints = [
             models.UniqueConstraint(

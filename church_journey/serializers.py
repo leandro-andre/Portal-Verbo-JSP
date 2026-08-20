@@ -122,6 +122,7 @@ class DiscipleshipEnrollmentSerializer(serializers.ModelSerializer):
             "status",
             "enrolled_at",
             "withdrawn_at",
+            "completed_at",
             "created_at",
             "updated_at",
         ]
@@ -132,6 +133,7 @@ class DiscipleshipEnrollmentSerializer(serializers.ModelSerializer):
             "status",
             "enrolled_at",
             "withdrawn_at",
+            "completed_at",
             "created_at",
             "updated_at",
         )

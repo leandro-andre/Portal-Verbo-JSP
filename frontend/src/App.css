@@ -662,6 +662,15 @@
   background: #f59e0b;
 }
 
+.enrollment-status-badge--completed {
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+.enrollment-status-badge--completed .status-badge__dot {
+  background: #16a34a;
+}
+
 .lesson-status-badge--scheduled {
   background: #eef4ff;
   color: #1e40af;

@@ -338,6 +338,18 @@ function PersonProfile({
               <dl className="profile-details">
                 <DetailItem label="Situacao" value={churchStatusLabel(churchJourney.church_status)} />
                 <DetailItem label="Inicio" value={formatDate(churchJourney.started_at)} />
+                <DetailItem
+                  label="Discipulado"
+                  value={
+                    person.discipleship.completed
+                      ? `Concluido em ${formatDate(person.discipleship.completed_at ?? '')}`
+                      : 'Nao concluido'
+                  }
+                />
+                <DetailItem
+                  label="Elegibilidade para membresia"
+                  value={person.discipleship.membership_eligible ? 'Elegivel' : 'Nao elegivel'}
+                />
               </dl>
             ) : (
               <div className="church-journey-empty">

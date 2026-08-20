@@ -26,6 +26,7 @@ from .services import (
     ChurchJourneyError,
     cancel_discipleship_class,
     cancel_discipleship_lesson,
+    complete_discipleship_enrollment,
     complete_discipleship_class,
     create_discipleship_class,
     create_discipleship_lesson,
@@ -37,6 +38,11 @@ from .services import (
     update_discipleship_class,
     update_discipleship_lesson,
     withdraw_discipleship_enrollment,
+)
+from .selectors import (
+    MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE,
+    get_discipleship_completion_eligibility,
+    is_eligible_for_membership,
 )
 
 
@@ -534,3 +540,67 @@ class DiscipleshipLessonAttendanceView(APIView):
             )
 
         return Response(self.get_attendance_payload(request, lesson))
+
+
+class DiscipleshipEnrollmentCompletionView(APIView):
+    def get_object(self, class_id, enrollment_id):
+        return get_object_or_404(
+            DiscipleshipEnrollment.objects.select_related("person", "discipleship_class__teacher"),
+            pk=enrollment_id,
+            discipleship_class_id=class_id,
+        )
+
+    def get_payload(self, enrollment):
+        eligibility = get_discipleship_completion_eligibility(enrollment)
+        summary = eligibility["summary"]
+        return {
+            "enrollment_id": enrollment.pk,
+            "status": enrollment.status,
+            "completed_at": enrollment.completed_at,
+            "frequency": {
+                "eligible_lessons": summary["eligible_lessons"],
+                "present": summary["present"],
+                "absent": summary["absent"],
+                "justified": summary["justified"],
+                "not_recorded": summary["not_recorded"],
+                "denominator": summary["denominator"],
+                "percentage": (
+                    round(summary["percentage"], 2)
+                    if summary["percentage"] is not None
+                    else None
+                ),
+                "attendance_complete": summary["attendance_complete"],
+            },
+            "completion": {
+                "can_complete": eligibility["can_complete"],
+                "minimum_percentage": MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE,
+                "reason": eligibility["reason"],
+            },
+            "membership_eligibility": is_eligible_for_membership(enrollment.person),
+        }
+
+    def get(self, request, class_id, enrollment_id):
+        enrollment = self.get_object(class_id, enrollment_id)
+        if not can_view_attendance(request.user, enrollment.discipleship_class):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        return Response(self.get_payload(enrollment))
+
+    def post(self, request, class_id, enrollment_id):
+        enrollment = self.get_object(class_id, enrollment_id)
+        if not (
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("church_journey.complete_discipleshipenrollment")
+        ):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            enrollment = complete_discipleship_enrollment(enrollment)
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(self.get_payload(enrollment))

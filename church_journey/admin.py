@@ -34,8 +34,15 @@ class DiscipleshipClassAdmin(admin.ModelAdmin):
 
 @admin.register(DiscipleshipEnrollment)
 class DiscipleshipEnrollmentAdmin(admin.ModelAdmin):
-    list_display = ("person", "discipleship_class", "status", "enrolled_at", "withdrawn_at")
-    list_filter = ("status", "enrolled_at")
+    list_display = (
+        "person",
+        "discipleship_class",
+        "status",
+        "enrolled_at",
+        "withdrawn_at",
+        "completed_at",
+    )
+    list_filter = ("status", "enrolled_at", "completed_at")
     list_select_related = ("person", "discipleship_class")
     search_fields = ("person__full_name", "person__preferred_name", "discipleship_class__name")
 

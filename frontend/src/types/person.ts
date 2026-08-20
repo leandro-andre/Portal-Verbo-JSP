@@ -19,6 +19,15 @@ export type Person = {
   status: PersonStatus
   portal_user: PersonPortalUser | null
   has_church_journey: boolean
+  discipleship: {
+    completed: boolean
+    completed_at: string | null
+    completed_class: {
+      id: number
+      name: string
+    } | null
+    membership_eligible: boolean
+  }
   created_at: string
   updated_at: string
 }
