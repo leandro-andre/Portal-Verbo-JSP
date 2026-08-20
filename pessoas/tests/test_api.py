@@ -62,6 +62,7 @@ class PersonApiTests(APITestCase):
                 "phone",
                 "status",
                 "portal_user",
+                "has_church_journey",
                 "created_at",
                 "updated_at",
             },

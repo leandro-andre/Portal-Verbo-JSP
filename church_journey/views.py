@@ -6,16 +6,22 @@ from rest_framework.views import APIView
 
 from pessoas.models import Person
 
-from .models import ChurchJourney, DiscipleshipClass
-from .serializers import ChurchJourneySerializer, DiscipleshipClassSerializer
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
+from .serializers import (
+    ChurchJourneySerializer,
+    DiscipleshipClassSerializer,
+    DiscipleshipEnrollmentSerializer,
+)
 from .services import (
     ChurchJourneyError,
     cancel_discipleship_class,
     complete_discipleship_class,
     create_discipleship_class,
+    enroll_person_in_discipleship_class,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_class,
+    withdraw_discipleship_enrollment,
 )
 
 
@@ -182,3 +188,88 @@ class DiscipleshipClassLifecycleView(APIView):
             )
 
         return Response(DiscipleshipClassSerializer(discipleship_class).data)
+
+
+class DiscipleshipEnrollmentListCreateView(APIView):
+    permission_classes = [HasDjangoPermission]
+    method_permissions = {
+        "GET": "church_journey.view_discipleshipenrollment",
+        "POST": "church_journey.add_discipleshipenrollment",
+    }
+
+    def get_class(self, class_id):
+        return get_object_or_404(DiscipleshipClass, pk=class_id)
+
+    def get_queryset(self, class_id):
+        return (
+            DiscipleshipEnrollment.objects.filter(discipleship_class_id=class_id)
+            .select_related("person", "discipleship_class")
+            .order_by("person__full_name", "id")
+        )
+
+    def get(self, request, class_id):
+        self.get_class(class_id)
+        serializer = DiscipleshipEnrollmentSerializer(self.get_queryset(class_id), many=True)
+        return Response(serializer.data)
+
+    def post(self, request, class_id):
+        discipleship_class = self.get_class(class_id)
+        serializer = DiscipleshipEnrollmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            enrollment = enroll_person_in_discipleship_class(
+                person=serializer.validated_data["person"],
+                discipleship_class=discipleship_class,
+            )
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(
+            DiscipleshipEnrollmentSerializer(enrollment).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DiscipleshipEnrollmentDetailView(APIView):
+    permission_classes = [HasDjangoPermission]
+    method_permissions = {
+        "GET": "church_journey.view_discipleshipenrollment",
+        "DELETE": "church_journey.view_discipleshipenrollment",
+    }
+
+    def get_object(self, class_id, pk):
+        return get_object_or_404(
+            DiscipleshipEnrollment.objects.select_related("person", "discipleship_class"),
+            pk=pk,
+            discipleship_class_id=class_id,
+        )
+
+    def get(self, request, class_id, pk):
+        return Response(DiscipleshipEnrollmentSerializer(self.get_object(class_id, pk)).data)
+
+
+class DiscipleshipEnrollmentWithdrawView(APIView):
+    permission_classes = [HasDjangoPermission]
+    permission_required = "church_journey.withdraw_discipleshipenrollment"
+
+    def get_object(self, class_id, pk):
+        return get_object_or_404(
+            DiscipleshipEnrollment.objects.select_related("person", "discipleship_class"),
+            pk=pk,
+            discipleship_class_id=class_id,
+        )
+
+    def post(self, request, class_id, pk):
+        try:
+            enrollment = withdraw_discipleship_enrollment(self.get_object(class_id, pk))
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(DiscipleshipEnrollmentSerializer(enrollment).data)

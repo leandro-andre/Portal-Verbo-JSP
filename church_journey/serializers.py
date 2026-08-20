@@ -3,7 +3,7 @@ from rest_framework import serializers
 from pessoas.models import Person
 
 from .enums import ChurchStatus
-from .models import ChurchJourney, DiscipleshipClass
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
 
 
 class ChurchJourneySerializer(serializers.ModelSerializer):
@@ -35,6 +35,7 @@ class ChurchJourneySerializer(serializers.ModelSerializer):
 class DiscipleshipClassTeacherSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     display_name = serializers.CharField()
+    full_name = serializers.CharField(required=False)
 
 
 class DiscipleshipClassSerializer(serializers.ModelSerializer):
@@ -83,3 +84,48 @@ class DiscipleshipClassSerializer(serializers.ModelSerializer):
                 {"expected_end_date": "O termino previsto nao pode ser anterior ao inicio."}
             )
         return attrs
+
+
+class DiscipleshipEnrollmentClassSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class DiscipleshipEnrollmentPersonSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    display_name = serializers.CharField()
+    full_name = serializers.CharField()
+
+
+class DiscipleshipEnrollmentSerializer(serializers.ModelSerializer):
+    person = DiscipleshipEnrollmentPersonSerializer(read_only=True)
+    person_id = serializers.PrimaryKeyRelatedField(
+        queryset=Person.objects.all(),
+        source="person",
+        write_only=True,
+    )
+    discipleship_class = DiscipleshipEnrollmentClassSerializer(read_only=True)
+
+    class Meta:
+        model = DiscipleshipEnrollment
+        fields = [
+            "id",
+            "person",
+            "person_id",
+            "discipleship_class",
+            "status",
+            "enrolled_at",
+            "withdrawn_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = (
+            "id",
+            "person",
+            "discipleship_class",
+            "status",
+            "enrolled_at",
+            "withdrawn_at",
+            "created_at",
+            "updated_at",
+        )

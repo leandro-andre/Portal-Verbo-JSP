@@ -4,6 +4,9 @@ from .views import (
     DiscipleshipClassDetailView,
     DiscipleshipClassLifecycleView,
     DiscipleshipClassListCreateView,
+    DiscipleshipEnrollmentDetailView,
+    DiscipleshipEnrollmentListCreateView,
+    DiscipleshipEnrollmentWithdrawView,
     PersonChurchJourneyView,
 )
 
@@ -47,5 +50,20 @@ urlpatterns = [
             permission_required="church_journey.cancel_discipleshipclass",
         ),
         name="discipleship-class-cancel",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/enrollments/",
+        DiscipleshipEnrollmentListCreateView.as_view(),
+        name="discipleship-enrollment-list",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/enrollments/<int:pk>/",
+        DiscipleshipEnrollmentDetailView.as_view(),
+        name="discipleship-enrollment-detail",
+    ),
+    path(
+        "discipleship/classes/<int:class_id>/enrollments/<int:pk>/withdraw/",
+        DiscipleshipEnrollmentWithdrawView.as_view(),
+        name="discipleship-enrollment-withdraw",
     ),
 ]

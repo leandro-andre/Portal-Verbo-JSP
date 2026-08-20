@@ -19,7 +19,7 @@ from usuarios.roles import (
 
 from .enums import ChurchStatus
 from .models import ChurchJourney
-from .models import DiscipleshipClass
+from .models import DiscipleshipClass, DiscipleshipEnrollment
 from .selectors import (
     get_church_status,
     get_discipleship_completed_at,
@@ -31,13 +31,19 @@ from .selectors import (
 from .services import (
     CHURCH_JOURNEY_ALREADY_EXISTS,
     DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS,
+    DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT,
+    DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS,
     INVALID_DISCIPLESHIP_CLASS_TRANSITION,
+    INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION,
+    PERSON_NOT_IN_CHURCH_JOURNEY,
     ChurchJourneyError,
     cancel_discipleship_class,
     complete_discipleship_class,
     create_discipleship_class,
+    enroll_person_in_discipleship_class,
     start_church_journey,
     start_discipleship_class,
+    withdraw_discipleship_enrollment,
 )
 
 
@@ -818,3 +824,348 @@ class DiscipleshipClassRolePermissionsTests(TestCase):
         )
 
         self.assertFalse(comum.has_perm("church_journey.view_discipleshipclass"))
+
+
+class DiscipleshipEnrollmentModelTests(TestCase):
+    def setUp(self):
+        self.teacher = Person.objects.create(full_name="Professor Matricula", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Aluno Matricula", birth_date=date(1990, 1, 1))
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Matricula",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=12,
+        )
+
+    def test_matricula_valida(self):
+        enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+        )
+
+        self.assertEqual(enrollment.person, self.person)
+        self.assertEqual(enrollment.discipleship_class, self.discipleship_class)
+
+    def test_default_enrolled_e_datas(self):
+        enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+        )
+
+        self.assertEqual(enrollment.status, DiscipleshipEnrollment.Status.ENROLLED)
+        self.assertEqual(enrollment.enrolled_at, timezone.localdate())
+        self.assertIsNone(enrollment.withdrawn_at)
+
+    def test_unicidade_person_class(self):
+        DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+        )
+
+        with self.assertRaises(IntegrityError):
+            DiscipleshipEnrollment.objects.create(
+                person=self.person,
+                discipleship_class=self.discipleship_class,
+            )
+
+    def test_mesma_person_pode_participar_de_outra_turma(self):
+        other_class = DiscipleshipClass.objects.create(
+            name="Discipulado Futuro",
+            teacher=self.teacher,
+            start_date=date(2027, 2, 1),
+            expected_end_date=date(2027, 4, 30),
+            planned_sessions=10,
+        )
+
+        DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=self.discipleship_class)
+        DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=other_class)
+
+        self.assertEqual(DiscipleshipEnrollment.objects.filter(person=self.person).count(), 2)
+
+
+class DiscipleshipEnrollmentDomainTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(full_name="Professor Dominio", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Aluno Dominio", birth_date=date(1990, 1, 1))
+        self.person_without_journey = Person.objects.create(
+            full_name="Sem Jornada",
+            birth_date=date(1991, 1, 1),
+        )
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Dominio",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=12,
+        )
+
+    def make_class(self, **kwargs):
+        data = {
+            "name": "Discipulado Extra",
+            "teacher": self.teacher,
+            "start_date": date(2027, 2, 1),
+            "expected_end_date": date(2027, 4, 30),
+            "planned_sessions": 10,
+        }
+        data.update(kwargs)
+        return DiscipleshipClass.objects.create(**data)
+
+    def test_person_com_church_journey_pode_ser_matriculada(self):
+        enrollment = enroll_person_in_discipleship_class(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+        )
+
+        self.assertEqual(enrollment.status, DiscipleshipEnrollment.Status.ENROLLED)
+
+    def test_person_sem_church_journey_nao_pode_ser_matriculada(self):
+        with self.assertRaises(ChurchJourneyError) as context:
+            enroll_person_in_discipleship_class(
+                person=self.person_without_journey,
+                discipleship_class=self.discipleship_class,
+            )
+
+        self.assertEqual(context.exception.code, PERSON_NOT_IN_CHURCH_JOURNEY)
+
+    def test_matricula_em_planned_e_in_progress_permitida(self):
+        in_progress = self.make_class(
+            name="Em andamento",
+            status=DiscipleshipClass.Status.IN_PROGRESS,
+        )
+        other_person = Person.objects.create(full_name="Outro Aluno", birth_date=date(1992, 1, 1))
+        ChurchJourney.objects.create(person=other_person)
+
+        planned_enrollment = enroll_person_in_discipleship_class(
+            person=self.person,
+            discipleship_class=self.discipleship_class,
+        )
+        in_progress_enrollment = enroll_person_in_discipleship_class(
+            person=other_person,
+            discipleship_class=in_progress,
+        )
+
+        self.assertEqual(planned_enrollment.status, DiscipleshipEnrollment.Status.ENROLLED)
+        self.assertEqual(in_progress_enrollment.status, DiscipleshipEnrollment.Status.ENROLLED)
+
+    def test_matricula_em_completed_e_cancelled_bloqueada(self):
+        for closed_status in (DiscipleshipClass.Status.COMPLETED, DiscipleshipClass.Status.CANCELLED):
+            closed_class = self.make_class(name=f"Fechada {closed_status}", status=closed_status)
+            with self.assertRaises(ChurchJourneyError) as context:
+                enroll_person_in_discipleship_class(
+                    person=self.person,
+                    discipleship_class=closed_class,
+                )
+            self.assertEqual(context.exception.code, DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT)
+
+    def test_duplicidade_bloqueada(self):
+        enroll_person_in_discipleship_class(person=self.person, discipleship_class=self.discipleship_class)
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            enroll_person_in_discipleship_class(person=self.person, discipleship_class=self.discipleship_class)
+
+        self.assertEqual(context.exception.code, DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS)
+
+    def test_withdraw_enrolled_funciona_e_preserva_relacoes(self):
+        enrollment = enroll_person_in_discipleship_class(person=self.person, discipleship_class=self.discipleship_class)
+        person_id = self.person.pk
+        journey_id = self.person.church_journey.pk
+        class_id = self.discipleship_class.pk
+
+        withdraw_discipleship_enrollment(enrollment)
+
+        self.assertEqual(enrollment.status, DiscipleshipEnrollment.Status.WITHDRAWN)
+        self.assertEqual(enrollment.withdrawn_at, timezone.localdate())
+        self.assertTrue(Person.objects.filter(pk=person_id).exists())
+        self.assertTrue(ChurchJourney.objects.filter(pk=journey_id).exists())
+        self.assertTrue(DiscipleshipClass.objects.filter(pk=class_id).exists())
+
+    def test_segunda_desistencia_bloqueada(self):
+        enrollment = enroll_person_in_discipleship_class(person=self.person, discipleship_class=self.discipleship_class)
+        withdraw_discipleship_enrollment(enrollment)
+
+        with self.assertRaises(ChurchJourneyError) as context:
+            withdraw_discipleship_enrollment(enrollment)
+
+        self.assertEqual(context.exception.code, INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION)
+
+    def test_matricula_nao_altera_legado_nem_status(self):
+        usuario = self.user_model.objects.create_user(
+            username="enrollment.legado",
+            password="senha-forte-123",
+            person=self.person,
+        )
+        original_person_status = self.person.status
+
+        enroll_person_in_discipleship_class(person=self.person, discipleship_class=self.discipleship_class)
+
+        usuario.refresh_from_db()
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.status, original_person_status)
+        self.assertEqual(get_church_status(self.person), ChurchStatus.VISITOR)
+        self.assertEqual(usuario.status_eclesiastico, self.user_model.StatusEclesiastico.VISITANTE)
+        self.assertFalse(usuario.discipulado_concluido)
+        self.assertIsNone(usuario.discipulado_concluido_em)
+
+
+class DiscipleshipEnrollmentApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.teacher = Person.objects.create(full_name="Professor API Matricula", birth_date=date(1980, 1, 1))
+        self.person = Person.objects.create(full_name="Aluno API Matricula", birth_date=date(1990, 1, 1))
+        ChurchJourney.objects.create(person=self.person)
+        self.discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado API Matricula",
+            teacher=self.teacher,
+            start_date=date(2026, 9, 5),
+            expected_end_date=date(2026, 11, 28),
+            planned_sessions=12,
+        )
+
+    def authenticate_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        self.client.force_authenticate(usuario)
+        return usuario
+
+    def list_url(self, discipleship_class=None):
+        return reverse("discipleship-enrollment-list", args=[(discipleship_class or self.discipleship_class).pk])
+
+    def detail_url(self, enrollment):
+        return reverse("discipleship-enrollment-detail", args=[self.discipleship_class.pk, enrollment.pk])
+
+    def withdraw_url(self, enrollment):
+        return reverse("discipleship-enrollment-withdraw", args=[self.discipleship_class.pk, enrollment.pk])
+
+    def test_get_list_detail_e_post_valido(self):
+        self.authenticate_role("secretaria.enrollment.api", SECRETARY_GROUP)
+
+        create_response = self.client.post(
+            self.list_url(),
+            {"person_id": self.person.pk, "status": DiscipleshipEnrollment.Status.WITHDRAWN},
+            format="json",
+        )
+        enrollment = DiscipleshipEnrollment.objects.get()
+        list_response = self.client.get(self.list_url())
+        detail_response = self.client.get(self.detail_url(enrollment))
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.json()["status"], DiscipleshipEnrollment.Status.ENROLLED)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+
+    def test_post_sem_church_journey_retorna_erro(self):
+        self.authenticate_role("secretaria.enrollment.nojourney", SECRETARY_GROUP)
+        person = Person.objects.create(full_name="Sem Jornada API", birth_date=date(1991, 1, 1))
+
+        response = self.client.post(self.list_url(), {"person_id": person.pk}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], PERSON_NOT_IN_CHURCH_JOURNEY)
+
+    def test_post_duplicado_retorna_erro(self):
+        self.authenticate_role("secretaria.enrollment.duplicate", SECRETARY_GROUP)
+        DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=self.discipleship_class)
+
+        response = self.client.post(self.list_url(), {"person_id": self.person.pk}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS)
+
+    def test_post_em_in_progress_permitido_e_completed_cancelled_bloqueados(self):
+        self.authenticate_role("secretaria.enrollment.status", SECRETARY_GROUP)
+        in_progress = DiscipleshipClass.objects.create(
+            name="Em andamento API",
+            teacher=self.teacher,
+            start_date=date(2027, 2, 1),
+            expected_end_date=date(2027, 4, 30),
+            planned_sessions=10,
+            status=DiscipleshipClass.Status.IN_PROGRESS,
+        )
+        completed = DiscipleshipClass.objects.create(
+            name="Concluida API",
+            teacher=self.teacher,
+            start_date=date(2025, 2, 1),
+            expected_end_date=date(2025, 4, 30),
+            planned_sessions=10,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        other_person = Person.objects.create(full_name="Outro API", birth_date=date(1992, 1, 1))
+        ChurchJourney.objects.create(person=other_person)
+
+        allowed = self.client.post(self.list_url(in_progress), {"person_id": self.person.pk}, format="json")
+        blocked = self.client.post(self.list_url(completed), {"person_id": other_person.pk}, format="json")
+
+        self.assertEqual(allowed.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(blocked.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(blocked.json()["code"], DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT)
+
+    def test_withdraw_valido_e_invalido(self):
+        self.authenticate_role("secretaria.enrollment.withdraw", SECRETARY_GROUP)
+        enrollment = DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=self.discipleship_class)
+
+        first = self.client.post(self.withdraw_url(enrollment))
+        second = self.client.post(self.withdraw_url(enrollment))
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(first.json()["status"], DiscipleshipEnrollment.Status.WITHDRAWN)
+        self.assertEqual(second.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(second.json()["code"], INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION)
+
+    def test_delete_nao_e_permitido(self):
+        self.authenticate_role("secretaria.enrollment.delete", SECRETARY_GROUP)
+        enrollment = DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=self.discipleship_class)
+
+        response = self.client.delete(self.detail_url(enrollment))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_permissions_pastor_view_comum_403_professor_sem_bypass(self):
+        enrollment = DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=self.discipleship_class)
+        pastor = self.authenticate_role("pastor.enrollment.view", PASTOR_GROUP)
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.post(self.list_url(), {"person_id": self.person.pk}, format="json").status_code, status.HTTP_403_FORBIDDEN)
+
+        professor_user = self.user_model.objects.create_user(
+            username="professor.no.bypass",
+            password="senha-forte-123",
+            person=self.teacher,
+        )
+        self.client.force_authenticate(professor_user)
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_403_FORBIDDEN)
+
+        comum = self.user_model.objects.create_user(username="comum.enrollment", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+        self.assertEqual(self.client.get(self.detail_url(enrollment)).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshipenrollment"))
+
+
+class DiscipleshipEnrollmentRolePermissionsTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+
+    def make_user_with_role(self, username, group_name):
+        usuario = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def test_admin_e_secretaria_gerenciam_matriculas(self):
+        for group_name in (PORTAL_ADMIN_GROUP, SECRETARY_GROUP):
+            usuario = self.make_user_with_role(f"{group_name}.enrollment", group_name)
+            self.assertTrue(usuario.has_perm("church_journey.view_discipleshipenrollment"))
+            self.assertTrue(usuario.has_perm("church_journey.add_discipleshipenrollment"))
+            self.assertTrue(usuario.has_perm("church_journey.withdraw_discipleshipenrollment"))
+
+    def test_pastor_apenas_visualiza_e_comum_nao_tem_acesso(self):
+        pastor = self.make_user_with_role("pastor.enrollment.perms", PASTOR_GROUP)
+        comum = self.user_model.objects.create_user(username="comum.enrollment.perms", password="senha-forte-123")
+
+        self.assertTrue(pastor.has_perm("church_journey.view_discipleshipenrollment"))
+        self.assertFalse(pastor.has_perm("church_journey.add_discipleshipenrollment"))
+        self.assertFalse(pastor.has_perm("church_journey.withdraw_discipleshipenrollment"))
+        self.assertFalse(comum.has_perm("church_journey.view_discipleshipenrollment"))

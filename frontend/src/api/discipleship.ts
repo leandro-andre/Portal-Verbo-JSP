@@ -1,6 +1,8 @@
 import type {
   CreateDiscipleshipClassInput,
+  CreateDiscipleshipEnrollmentInput,
   DiscipleshipClass,
+  DiscipleshipEnrollment,
   DiscipleshipValidationErrors,
   UpdateDiscipleshipClassInput,
 } from '../types/discipleship'
@@ -81,6 +83,18 @@ function businessMessage(code: string) {
   }
   if (code === 'INVALID_DISCIPLESHIP_CLASS_TRANSITION') {
     return 'Esta acao nao esta disponivel para o status atual da turma.'
+  }
+  if (code === 'PERSON_NOT_IN_CHURCH_JOURNEY') {
+    return 'Esta pessoa ainda nao esta na jornada da igreja.'
+  }
+  if (code === 'DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT') {
+    return 'Esta turma nao esta aberta para matriculas.'
+  }
+  if (code === 'DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS') {
+    return 'Esta pessoa ja possui matricula nesta turma.'
+  }
+  if (code === 'INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION') {
+    return 'Esta matricula nao permite esta acao.'
   }
   return 'Nao foi possivel concluir a acao solicitada.'
 }
@@ -205,4 +219,81 @@ export function completeDiscipleshipClass(id: number) {
 
 export function cancelDiscipleshipClass(id: number) {
   return runLifecycleAction(id, 'cancel')
+}
+
+export async function getDiscipleshipEnrollments(classId: number): Promise<DiscipleshipEnrollment[]> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/enrollments/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar as matriculas.')
+  }
+
+  return response.json() as Promise<DiscipleshipEnrollment[]>
+}
+
+export async function getDiscipleshipEnrollment(
+  classId: number,
+  enrollmentId: number,
+): Promise<DiscipleshipEnrollment> {
+  const response = await fetch(`/api/discipleship/classes/${classId}/enrollments/${enrollmentId}/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    throw new DiscipleshipHttpError(404, 'Matricula nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new DiscipleshipHttpError(response.status, 'Nao foi possivel carregar a matricula.')
+  }
+
+  return response.json() as Promise<DiscipleshipEnrollment>
+}
+
+export async function createDiscipleshipEnrollment(
+  classId: number,
+  payload: CreateDiscipleshipEnrollmentInput,
+): Promise<DiscipleshipEnrollment> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/discipleship/classes/${classId}/enrollments/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DiscipleshipApiValidationError({})
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipEnrollment
+}
+
+export async function withdrawDiscipleshipEnrollment(
+  classId: number,
+  enrollmentId: number,
+): Promise<DiscipleshipEnrollment> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(
+    `/api/discipleship/classes/${classId}/enrollments/${enrollmentId}/withdraw/`,
+    {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers,
+    },
+  )
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DiscipleshipEnrollment
 }

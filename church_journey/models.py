@@ -94,3 +94,49 @@ class DiscipleshipClass(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class DiscipleshipEnrollment(models.Model):
+    class Status(models.TextChoices):
+        ENROLLED = "ENROLLED", "Matriculado"
+        WITHDRAWN = "WITHDRAWN", "Desistente"
+
+    person = models.ForeignKey(
+        "pessoas.Person",
+        verbose_name="Pessoa",
+        on_delete=models.PROTECT,
+        related_name="discipleship_enrollments",
+    )
+    discipleship_class = models.ForeignKey(
+        DiscipleshipClass,
+        verbose_name="Turma de discipulado",
+        on_delete=models.PROTECT,
+        related_name="enrollments",
+    )
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ENROLLED,
+    )
+    enrolled_at = models.DateField("Data da matricula", default=timezone.localdate)
+    withdrawn_at = models.DateField("Data da desistencia", blank=True, null=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["person__full_name", "id"]
+        verbose_name = "Matricula de discipulado"
+        verbose_name_plural = "Matriculas de discipulado"
+        permissions = [
+            ("withdraw_discipleshipenrollment", "Can withdraw discipleship enrollment"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["person", "discipleship_class"],
+                name="unique_person_discipleship_class_enrollment",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.person} - {self.discipleship_class}"

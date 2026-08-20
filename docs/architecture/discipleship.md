@@ -91,3 +91,72 @@ Esta feature nao cria:
 
 Concluir uma turma encerra a turma, mas nao conclui automaticamente o
 discipulado dos alunos.
+
+## Enrollment
+
+`DiscipleshipEnrollment` representa a matricula de uma `Person` em uma
+`DiscipleshipClass`.
+
+Campos:
+
+- `person`
+- `discipleship_class`
+- `status`
+- `enrolled_at`
+- `withdrawn_at`
+- `created_at`
+- `updated_at`
+
+Somente `Person` com `ChurchJourney` real no novo dominio pode ser matriculada.
+O fallback legado de `Usuario.status_eclesiastico` nao e suficiente para criar
+matricula. Se a pessoa ainda nao possui jornada, o fluxo administrativo deve
+iniciar a jornada explicitamente antes da matricula.
+
+## Lifecycle Da Matricula
+
+Estados:
+
+- `ENROLLED`
+- `WITHDRAWN`
+
+`ENROLLED` significa pessoa atualmente matriculada na turma.
+
+`WITHDRAWN` significa desistencia, preservando historico. A desistencia preenche
+`withdrawn_at`, nao remove a matricula e nao altera `Person`, `ChurchJourney`,
+`Usuario` ou a turma.
+
+Nao existe `COMPLETED` na matricula nesta etapa. Conclusao individual sera
+tratada em feature futura, depois de encontros e presenca.
+
+## Regras De Matricula
+
+Uma pessoa pode ser matriculada em turmas `PLANNED` ou `IN_PROGRESS`.
+
+Turmas `COMPLETED` e `CANCELLED` nao aceitam novas matriculas.
+
+A combinacao `person + discipleship_class` e unica. A mesma pessoa nao pode ter
+duas matriculas na mesma turma, mesmo se uma delas estiver `WITHDRAWN`.
+
+A mesma pessoa pode participar novamente do discipulado em outra turma futura.
+
+Nao ha limite maximo de alunos nesta versao. Contadores de alunos sao derivados
+das matriculas, nunca persistidos na turma.
+
+## Permissoes De Matricula
+
+Administrador do Portal e Secretaria podem visualizar, criar e marcar
+desistencia.
+
+Pastor pode visualizar.
+
+Professor nao ganha permissao automaticamente por ser professor da turma. Essa
+regra depende de autorizacao contextual futura do Departamento de Discipulado.
+
+## Ausencias Intencionais
+
+Matricula nao cria `ChurchJourney` automaticamente, nao altera `ChurchStatus`,
+nao cria `Usuario` e nao escreve em `Usuario.discipulado_concluido` ou
+`Usuario.discipulado_concluido_em`.
+
+Esta feature tambem nao cria aulas reais, presenca, frequencia percentual,
+completion individual, elegibilidade para Membership ou Membership.

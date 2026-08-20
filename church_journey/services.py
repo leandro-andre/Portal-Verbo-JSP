@@ -2,12 +2,16 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import ChurchJourney, DiscipleshipClass
+from .models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
 DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS = "DISCIPLESHIP_CLASS_ALREADY_IN_PROGRESS"
 INVALID_DISCIPLESHIP_CLASS_TRANSITION = "INVALID_DISCIPLESHIP_CLASS_TRANSITION"
+PERSON_NOT_IN_CHURCH_JOURNEY = "PERSON_NOT_IN_CHURCH_JOURNEY"
+DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT = "DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT"
+DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS = "DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS"
+INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION = "INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION"
 
 
 class ChurchJourneyError(Exception):
@@ -136,3 +140,44 @@ def cancel_discipleship_class(discipleship_class):
     discipleship_class.status = DiscipleshipClass.Status.CANCELLED
     discipleship_class.save(update_fields=["status", "updated_at"])
     return discipleship_class
+
+
+def enroll_person_in_discipleship_class(*, person, discipleship_class):
+    if not hasattr(person, "church_journey"):
+        raise ChurchJourneyError(
+            PERSON_NOT_IN_CHURCH_JOURNEY,
+            "Esta pessoa ainda nao esta na jornada da igreja.",
+        )
+
+    if discipleship_class.status not in (
+        DiscipleshipClass.Status.PLANNED,
+        DiscipleshipClass.Status.IN_PROGRESS,
+    ):
+        raise ChurchJourneyError(
+            DISCIPLESHIP_CLASS_NOT_OPEN_FOR_ENROLLMENT,
+            "Esta turma nao esta aberta para matriculas.",
+        )
+
+    try:
+        return DiscipleshipEnrollment.objects.create(
+            person=person,
+            discipleship_class=discipleship_class,
+        )
+    except IntegrityError as exc:
+        raise ChurchJourneyError(
+            DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS,
+            "Esta pessoa ja possui matricula nesta turma.",
+        ) from exc
+
+
+def withdraw_discipleship_enrollment(enrollment):
+    if enrollment.status != DiscipleshipEnrollment.Status.ENROLLED:
+        raise ChurchJourneyError(
+            INVALID_DISCIPLESHIP_ENROLLMENT_TRANSITION,
+            "Somente matriculas ativas podem ser marcadas como desistentes.",
+        )
+
+    enrollment.status = DiscipleshipEnrollment.Status.WITHDRAWN
+    enrollment.withdrawn_at = timezone.localdate()
+    enrollment.save(update_fields=["status", "withdrawn_at", "updated_at"])
+    return enrollment

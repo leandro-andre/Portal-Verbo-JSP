@@ -23,6 +23,7 @@ class PersonSerializer(serializers.ModelSerializer):
     )
     display_name = serializers.CharField(read_only=True)
     portal_user = PersonPortalUserSerializer(source="user_account", read_only=True)
+    has_church_journey = serializers.SerializerMethodField()
 
     class Meta:
         model = Person
@@ -36,11 +37,15 @@ class PersonSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "portal_user",
+            "has_church_journey",
             "allow_possible_duplicate",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ("id", "display_name", "created_at", "updated_at")
+
+    def get_has_church_journey(self, obj):
+        return hasattr(obj, "church_journey")
 
     def validate(self, attrs):
         allow_possible_duplicate = attrs.pop("allow_possible_duplicate", False)

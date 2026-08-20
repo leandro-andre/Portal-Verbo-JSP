@@ -18,6 +18,7 @@ export type Person = {
   phone: string
   status: PersonStatus
   portal_user: PersonPortalUser | null
+  has_church_journey: boolean
   created_at: string
   updated_at: string
 }
