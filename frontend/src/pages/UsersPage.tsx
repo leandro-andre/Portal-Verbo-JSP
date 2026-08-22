@@ -8,6 +8,7 @@ import type { AccessStatus } from '../types/user'
 const filters: Array<{ label: string; value: AccessStatus | 'ALL' }> = [
   { label: 'Todos', value: 'ALL' },
   { label: 'Ativos', value: 'ACTIVE' },
+  { label: 'Aguardando aprovacao', value: 'PENDING_APPROVAL' },
   { label: 'Aguardando ativacao', value: 'PENDING_ACTIVATION' },
   { label: 'Bloqueados', value: 'BLOCKED' },
 ]

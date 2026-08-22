@@ -21,6 +21,17 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
 }
 
+function formatBrazilianPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return value || '-'
+}
+
 function AccessRequestsTable({ accessRequests }: AccessRequestsTableProps) {
   return (
     <div className="table-shell">
@@ -48,7 +59,7 @@ function AccessRequestsTable({ accessRequests }: AccessRequestsTableProps) {
               <td>
                 <div className="contact-cell">
                   <span>{accessRequest.email}</span>
-                  <span>{accessRequest.phone}</span>
+                  <span>{formatBrazilianPhone(accessRequest.phone)}</span>
                 </div>
               </td>
               <td>{formatDate(accessRequest.birth_date)}</td>

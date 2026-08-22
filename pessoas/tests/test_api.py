@@ -95,6 +95,35 @@ class PersonApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Person.objects.filter(full_name="Maria Silva").exists())
 
+    def test_post_normaliza_celular_com_mascara(self):
+        response = self.client.post(
+            reverse("person-list"),
+            {
+                "full_name": "Maria Silva",
+                "birth_date": "1990-05-10",
+                "phone": "(81) 99644-0827",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["phone"], "81996440827")
+        self.assertEqual(Person.objects.get().phone, "81996440827")
+
+    def test_post_rejeita_celular_invalido(self):
+        response = self.client.post(
+            reverse("person-list"),
+            {
+                "full_name": "Maria Silva",
+                "birth_date": "1990-05-10",
+                "phone": "(81) 8644-0827",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("phone", response.json())
+
     def test_post_exige_full_name(self):
         response = self.client.post(
             reverse("person-list"),
@@ -157,6 +186,34 @@ class PersonApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["email"], "maria@example.com")
         self.assertEqual(response.json()["phone"], "81999999999")
+
+    def test_patch_normaliza_celular_com_mascara(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        response = self.client.patch(
+            reverse("person-detail", args=[person.pk]),
+            {"phone": "(81) 99644-0827"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        person.refresh_from_db()
+        self.assertEqual(person.phone, "81996440827")
+
+    def test_list_search_filtra_por_nome_preferido_e_email(self):
+        Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Carminha",
+            birth_date=date(1990, 5, 10),
+            email="maria@example.com",
+        )
+        Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
+
+        response = self.client.get(reverse("person-list"), {"q": "carminha"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.json()), 1)
+        self.assertEqual(response.json()[0]["display_name"], "Carminha")
 
     def test_patch_com_nome_e_nascimento_do_proprio_registro_nao_gera_duplicidade(self):
         person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))

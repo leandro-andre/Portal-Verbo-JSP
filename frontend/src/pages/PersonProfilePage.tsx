@@ -14,6 +14,7 @@ import {
   useUpdatePerson,
 } from '../hooks/usePeople'
 import type { ChurchJourney, Person, PersonStatus } from '../types/person'
+import { formatBrazilianMobile } from '../utils/phone'
 
 function formatDate(value: string) {
   if (!value) {
@@ -296,7 +297,7 @@ function PersonProfile({
 
         <ProfileSection title="Contato">
           <DetailItem label="E-mail" value={person.email || '-'} />
-          <DetailItem label="Telefone" value={person.phone || '-'} />
+          <DetailItem label="Celular / WhatsApp" value={person.phone ? formatBrazilianMobile(person.phone) : '-'} />
         </ProfileSection>
 
         <ProfileSection title="Controle">
@@ -317,7 +318,7 @@ function PersonProfile({
                 />
               </dl>
               {canViewUsers ? (
-                <Link className="button button--secondary" to={`/pessoas/${person.id}/acesso`}>
+                <Link className="button button--secondary" to={`/usuarios/${person.portal_user.id}`}>
                   Gerenciar acesso
                 </Link>
               ) : null}

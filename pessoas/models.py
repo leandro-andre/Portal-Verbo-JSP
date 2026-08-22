@@ -1,5 +1,20 @@
+import re
+
 from django.core.exceptions import ValidationError
 from django.db import models
+
+
+def normalize_brazilian_mobile(value):
+    return re.sub(r"\D+", "", value or "")
+
+
+def validate_brazilian_mobile(value):
+    digits = normalize_brazilian_mobile(value)
+    if not digits:
+        return ""
+    if len(digits) != 11 or digits[2] != "9":
+        raise ValidationError("Informe um celular brasileiro valido com 11 digitos.")
+    return digits
 
 
 class PersonQuerySet(models.QuerySet):
@@ -51,7 +66,10 @@ class Person(models.Model):
         self.full_name = (self.full_name or "").strip()
         self.preferred_name = (self.preferred_name or "").strip()
         self.email = (self.email or "").strip()
-        self.phone = (self.phone or "").strip()
+        try:
+            self.phone = validate_brazilian_mobile(self.phone)
+        except ValidationError as exc:
+            raise ValidationError({"phone": exc.messages}) from exc
 
         if not self.full_name:
             raise ValidationError({"full_name": "Informe o nome completo."})

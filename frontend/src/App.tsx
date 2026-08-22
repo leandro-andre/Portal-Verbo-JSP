@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import './App.css'
 import AppShell from './components/layout/AppShell'
@@ -19,6 +19,7 @@ import PeoplePage from './pages/PeoplePage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
 import { useCurrentUser } from './hooks/useAuth'
+import { usePerson } from './hooks/usePeople'
 import type { Capability } from './types/auth'
 
 function AccessDenied() {
@@ -42,6 +43,29 @@ function AuthorizedRoute({
   const { data: currentUser } = useCurrentUser()
   const canAccess = Boolean(currentUser?.user?.capabilities.includes(capability))
   return canAccess ? children : <AccessDenied />
+}
+
+function PersonAccessRedirect() {
+  const { id } = useParams()
+  const personId = Number(id)
+  const { data: person, isError, isLoading } = usePerson(personId)
+
+  if (isLoading) {
+    return (
+      <section className="person-profile-page">
+        <div className="state-panel">
+          <h1>Carregando acesso...</h1>
+          <p>Aguarde enquanto localizamos o usuario vinculado.</p>
+        </div>
+      </section>
+    )
+  }
+
+  if (isError || !person?.portal_user) {
+    return <Navigate to="/usuarios" replace />
+  }
+
+  return <Navigate to={`/usuarios/${person.portal_user.id}`} replace />
 }
 
 function AdminRoutes() {
@@ -71,12 +95,13 @@ function AdminRoutes() {
         <Route path="/" element={<Navigate to="/pessoas" replace />} />
         <Route path="/pessoas" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PeoplePage /></AuthorizedRoute>} />
         <Route path="/pessoas/nova" element={<AuthorizedRoute capability="PEOPLE_CREATE"><PersonCreatePage /></AuthorizedRoute>} />
-        <Route path="/pessoas/:id/acesso" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
+        <Route path="/pessoas/:id/acesso" element={<AuthorizedRoute capability="USER_VIEW"><PersonAccessRedirect /></AuthorizedRoute>} />
         <Route path="/pessoas/:id/editar" element={<AuthorizedRoute capability="PEOPLE_CHANGE"><PersonEditPage /></AuthorizedRoute>} />
         <Route path="/pessoas/:id" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PersonProfilePage /></AuthorizedRoute>} />
         <Route path="/solicitacoes-acesso" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestsPage /></AuthorizedRoute>} />
         <Route path="/solicitacoes-acesso/:id" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><AccessRequestDetailPage /></AuthorizedRoute>} />
         <Route path="/usuarios" element={<AuthorizedRoute capability="USER_VIEW"><UsersPage /></AuthorizedRoute>} />
+        <Route path="/usuarios/:id" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />

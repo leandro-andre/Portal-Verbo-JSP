@@ -71,6 +71,9 @@ function parseValidationErrors(value: unknown): AccessRequestValidationErrors {
     'birth_date',
     'email',
     'phone',
+    'username',
+    'password',
+    'password_confirm',
   ]
 
   fields.forEach((field) => {
@@ -89,7 +92,10 @@ function parseValidationErrors(value: unknown): AccessRequestValidationErrors {
 function isPendingAccessRequestExistsResponse(
   value: unknown,
 ): value is PendingAccessRequestExistsResponse {
-  return isRecord(value) && value.code === 'PENDING_ACCESS_REQUEST_EXISTS'
+  return (
+    isRecord(value) &&
+    (value.code === 'PENDING_ACCESS_REQUEST_EXISTS' || value.code === 'USERNAME_ALREADY_EXISTS')
+  )
 }
 
 function isAccessRequestBusinessErrorResponse(
@@ -100,7 +106,8 @@ function isAccessRequestBusinessErrorResponse(
     (
       value.code === 'PERSON_ALREADY_HAS_USER' ||
       value.code === 'ACCESS_REQUEST_NOT_PENDING' ||
-      value.code === 'PERSON_NOT_FOUND'
+      value.code === 'PERSON_NOT_FOUND' ||
+      value.code === 'USERNAME_ALREADY_EXISTS'
     )
   )
 }

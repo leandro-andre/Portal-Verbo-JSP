@@ -39,8 +39,9 @@ export class ApiHttpError extends Error {
   }
 }
 
-export async function getPeople(): Promise<Person[]> {
-  const response = await fetch('/api/people/', {
+export async function getPeople(search?: string): Promise<Person[]> {
+  const params = search?.trim() ? `?q=${encodeURIComponent(search.trim())}` : ''
+  const response = await fetch(`/api/people/${params}`, {
     credentials: 'same-origin',
   })
 

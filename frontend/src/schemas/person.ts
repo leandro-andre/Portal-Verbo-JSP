@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isValidBrazilianMobile, normalizeBrazilianMobile } from '../utils/phone'
 
 function isValidDate(value: string) {
   const [year, month, day] = value.split('-').map(Number)
@@ -40,7 +41,13 @@ export const personCreateSchema = z.object({
     .optional()
     .default('')
     .refine((value) => !value || z.email().safeParse(value).success, 'E-mail invalido.'),
-  phone: z.string().trim().optional().default(''),
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .default('')
+    .refine((value) => !value || isValidBrazilianMobile(value), 'Informe um celular brasileiro valido.')
+    .transform((value) => normalizeBrazilianMobile(value)),
 })
 
 export type PersonCreateFormValues = z.input<typeof personCreateSchema>

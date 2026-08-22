@@ -9,7 +9,7 @@ from church_journey.selectors import (
     is_eligible_for_membership,
 )
 
-from .models import Person
+from .models import Person, validate_brazilian_mobile
 
 
 class PersonPortalUserSerializer(serializers.Serializer):
@@ -96,7 +96,7 @@ class PersonSerializer(serializers.ModelSerializer):
                 "full_name": person.full_name,
                 "preferred_name": person.preferred_name,
                 "email": person.email,
-                "phone": person.phone,
+                "phone": validate_brazilian_mobile(person.phone),
                 "allow_possible_duplicate": allow_possible_duplicate,
             }
         )

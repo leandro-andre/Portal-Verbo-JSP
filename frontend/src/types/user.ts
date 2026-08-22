@@ -1,9 +1,11 @@
-export type AccessStatus = 'PENDING_ACTIVATION' | 'ACTIVE' | 'BLOCKED'
+export type AccessStatus = 'PENDING_APPROVAL' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'BLOCKED'
 
 export type PortalUserPerson = {
   id: number
   display_name: string
-  status: string
+  full_name: string
+  email: string
+  status: 'ACTIVE' | 'INACTIVE'
 }
 
 export type PortalUser = {
@@ -23,5 +25,11 @@ export type UserAccessBusinessErrorResponse = {
     | 'CANNOT_DISABLE_SUPERUSER'
     | 'USER_ACCESS_NOT_ACTIVE'
     | 'USER_ACCESS_NOT_BLOCKED'
+    | 'PERSON_NOT_FOUND'
+    | 'PERSON_ALREADY_HAS_USER'
   message: string
+}
+
+export type LinkUserPersonInput = {
+  person_id: number
 }

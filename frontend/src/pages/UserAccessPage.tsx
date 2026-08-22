@@ -1,20 +1,25 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, RefreshCcw, ShieldOff, UserCheck } from 'lucide-react'
+import { ArrowLeft, Link2, RefreshCcw, Search, ShieldOff, Unlink } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
-import { ApiHttpError } from '../api/people'
 import { UserAccessBusinessError, UserAccessHttpError } from '../api/users'
+import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
-import PersonAvatar from '../components/people/PersonAvatar'
-import { useCan } from '../hooks/useAuth'
-import { usePerson } from '../hooks/usePeople'
-import { useDisableUser, useEnableUser, useUser } from '../hooks/useUsers'
-import type { PortalUser } from '../types/user'
+import { usePeopleSearch } from '../hooks/usePeople'
+import {
+  useDisableUser,
+  useEnableUser,
+  useLinkUserPerson,
+  useUnlinkUserPerson,
+  useUser,
+} from '../hooks/useUsers'
+import type { Person } from '../types/person'
+
+type DialogMode = 'disable' | 'enable' | 'link' | 'unlink'
 
 function formatDate(value?: string | null) {
   if (!value) {
     return '-'
   }
-
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeZone: 'America/Sao_Paulo',
@@ -30,63 +35,45 @@ function DetailItem({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function AccessDialog({
+function ConfirmationDialog({
+  children,
+  confirmLabel,
   error,
   isOpen,
   isPending,
-  mode,
   onClose,
   onConfirm,
-  user,
+  title,
 }: {
+  children: ReactNode
+  confirmLabel: string
   error: string | null
   isOpen: boolean
   isPending: boolean
-  mode: 'disable' | 'enable'
   onClose: () => void
   onConfirm: () => void
-  user: PortalUser
+  title: string
 }) {
   if (!isOpen) {
     return null
   }
 
-  const displayName = user.person?.display_name || user.username
-  const isDisable = mode === 'disable'
-
   return (
     <div className="dialog-backdrop" role="presentation">
-      <div
-        className="confirm-dialog"
-        role="dialog"
-        aria-labelledby="access-lifecycle-dialog-title"
-        aria-describedby="access-lifecycle-dialog-description"
-        aria-modal="true"
-      >
-        <h2 id="access-lifecycle-dialog-title">
-          {isDisable ? `Bloquear acesso de ${displayName}?` : `Reativar acesso de ${displayName}?`}
-        </h2>
-        <p id="access-lifecycle-dialog-description">
-          {isDisable
-            ? 'Essa pessoa nao podera entrar no Portal, mas seu cadastro e historico serao preservados.'
-            : 'A conta voltara a poder autenticar com a senha ja definida.'}
-        </p>
-
+      <div className="confirm-dialog" role="dialog" aria-labelledby="user-dialog-title" aria-modal="true">
+        <h2 id="user-dialog-title">{title}</h2>
+        <div className="dialog-copy">{children}</div>
         {error ? (
           <div className="form-alert form-alert--error" role="alert">
             {error}
           </div>
         ) : null}
-
         <div className="form-actions">
           <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose} autoFocus>
             Cancelar
           </button>
           <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
-            {isDisable ? <ShieldOff size={17} aria-hidden="true" /> : <UserCheck size={17} aria-hidden="true" />}
-            {isPending
-              ? isDisable ? 'Bloqueando...' : 'Reativando...'
-              : isDisable ? 'Bloquear acesso' : 'Reativar acesso'}
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -94,54 +81,128 @@ function AccessDialog({
   )
 }
 
+function PersonSearchPanel({
+  currentPersonId,
+  onConfirm,
+}: {
+  currentPersonId?: number
+  onConfirm: (person: Person) => void
+}) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const { data: people = [], isFetching } = usePeopleSearch(searchTerm)
+  const candidates = people.filter((person) => person.id !== currentPersonId)
+
+  return (
+    <div className="link-person-panel">
+      <label className="search-field">
+        <Search className="search-field__icon" size={18} aria-hidden="true" />
+        <span className="sr-only">Pesquisar pessoa</span>
+        <input
+          type="search"
+          placeholder="Buscar por nome, nome preferido ou e-mail"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
+      </label>
+      {searchTerm.trim().length < 2 ? (
+        <p className="page-heading__description">Digite ao menos 2 caracteres para pesquisar.</p>
+      ) : isFetching ? (
+        <p className="page-heading__description">Buscando pessoas...</p>
+      ) : candidates.length === 0 ? (
+        <p className="page-heading__description">Nenhuma pessoa encontrada.</p>
+      ) : (
+        <div className="identity-options">
+          {candidates.map((person) => (
+            <button
+              className="identity-option identity-option--button"
+              key={person.id}
+              type="button"
+              onClick={() => onConfirm(person)}
+            >
+              <span>
+                <strong>{person.display_name}</strong>
+                <span>{person.full_name}</span>
+                <span>{person.email || '-'}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function UserAccessPage() {
   const { id } = useParams()
-  const personId = Number(id)
-  const isValidId = Number.isInteger(personId) && personId > 0
-  const { data: person, error: personError, isError: isPersonError, isLoading: isPersonLoading } = usePerson(personId)
-  const userId = person?.portal_user?.id ?? 0
-  const { data: user, error: userError, isError: isUserError, isLoading: isUserLoading, refetch } = useUser(userId)
+  const userId = Number(id)
+  const isValidId = Number.isInteger(userId) && userId > 0
+  const { data: user, error, isError, isLoading, refetch } = useUser(userId)
   const disableUser = useDisableUser(userId)
   const enableUser = useEnableUser(userId)
-  const [dialogMode, setDialogMode] = useState<'disable' | 'enable' | null>(null)
+  const linkUserPerson = useLinkUserPerson(userId)
+  const unlinkUserPerson = useUnlinkUserPerson(userId)
+  const [dialogMode, setDialogMode] = useState<DialogMode | null>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const canDisableUser = useCan('USER_DISABLE')
-  const canEnableUser = useCan('USER_ENABLE')
-  const isNotFound = !isValidId || (personError instanceof ApiHttpError && personError.status === 404)
-  const isForbidden = userError instanceof UserAccessHttpError && userError.status === 403
+  const isForbidden = error instanceof UserAccessHttpError && error.status === 403
+  const isNotFound = !isValidId || (error instanceof UserAccessHttpError && error.status === 404)
+  const isMutating =
+    disableUser.isPending ||
+    enableUser.isPending ||
+    linkUserPerson.isPending ||
+    unlinkUserPerson.isPending
 
-  const handleBusinessError = (error: unknown) => {
-    if (error instanceof UserAccessBusinessError) {
-      if (error.details.code === 'CANNOT_DISABLE_OWN_ACCOUNT') {
+  const closeDialog = () => {
+    setDialogMode(null)
+    setDialogError(null)
+    setSelectedPerson(null)
+  }
+
+  const openDialog = (mode: DialogMode) => {
+    setDialogError(null)
+    setSelectedPerson(null)
+    setDialogMode(mode)
+  }
+
+  const handleBusinessError = (mutationError: unknown) => {
+    if (mutationError instanceof UserAccessBusinessError) {
+      if (mutationError.details.code === 'CANNOT_DISABLE_OWN_ACCOUNT') {
         setDialogError('Voce nao pode bloquear sua propria conta.')
         return
       }
-      if (error.details.code === 'CANNOT_DISABLE_SUPERUSER') {
+      if (mutationError.details.code === 'CANNOT_DISABLE_SUPERUSER') {
         setDialogError('Contas superuser nao podem ser bloqueadas por este fluxo.')
         return
       }
-      if (error.details.code === 'USER_ACCESS_NOT_BLOCKED') {
+      if (mutationError.details.code === 'USER_ACCESS_NOT_BLOCKED') {
         setDialogError('Esta conta nao esta bloqueada.')
         return
       }
-      if (error.details.code === 'USER_ACCESS_NOT_ACTIVE') {
+      if (mutationError.details.code === 'USER_ACCESS_NOT_ACTIVE') {
         setDialogError('Esta conta nao esta ativa.')
         return
       }
+      if (mutationError.details.code === 'PERSON_ALREADY_HAS_USER') {
+        setDialogError('Esta pessoa ja possui outro usuario vinculado.')
+        return
+      }
+      if (mutationError.details.code === 'PERSON_NOT_FOUND') {
+        setDialogError('Pessoa selecionada nao encontrada.')
+        return
+      }
     }
-
-    setDialogError('Nao foi possivel alterar o acesso.')
+    setDialogError('Nao foi possivel processar a operacao.')
   }
 
   const handleDisable = async () => {
     setDialogError(null)
     try {
       await disableUser.mutateAsync()
-      setDialogMode(null)
+      closeDialog()
       setSuccessMessage('Acesso bloqueado com sucesso.')
-    } catch (error) {
-      handleBusinessError(error)
+    } catch (mutationError) {
+      handleBusinessError(mutationError)
     }
   }
 
@@ -149,45 +210,57 @@ function UserAccessPage() {
     setDialogError(null)
     try {
       await enableUser.mutateAsync()
-      setDialogMode(null)
-      setSuccessMessage('Acesso reativado com sucesso.')
-    } catch (error) {
-      handleBusinessError(error)
+      closeDialog()
+      setSuccessMessage('Acesso desbloqueado com sucesso.')
+    } catch (mutationError) {
+      handleBusinessError(mutationError)
+    }
+  }
+
+  const handleLink = async () => {
+    if (!selectedPerson) {
+      return
+    }
+    setDialogError(null)
+    try {
+      await linkUserPerson.mutateAsync({ person_id: selectedPerson.id })
+      closeDialog()
+      setSuccessMessage('Vinculo atualizado com sucesso.')
+    } catch (mutationError) {
+      handleBusinessError(mutationError)
+    }
+  }
+
+  const handleUnlink = async () => {
+    setDialogError(null)
+    try {
+      await unlinkUserPerson.mutateAsync()
+      closeDialog()
+      setSuccessMessage('Vinculo removido com sucesso.')
+    } catch (mutationError) {
+      handleBusinessError(mutationError)
     }
   }
 
   return (
     <section className="person-profile-page">
-      {isPersonLoading && isValidId ? (
+      {isLoading && isValidId ? (
         <div className="state-panel">
-          <h1>Carregando acesso...</h1>
-          <p>Aguarde enquanto os dados sao carregados.</p>
+          <h1>Carregando usuario...</h1>
+          <p>Aguarde enquanto os dados da conta sao carregados.</p>
         </div>
       ) : isNotFound ? (
         <div className="state-panel">
-          <h1>Pessoa nao encontrada</h1>
-          <p>Nao encontramos a pessoa solicitada.</p>
+          <h1>Usuario nao encontrado</h1>
+          <p>Nao encontramos o usuario solicitado.</p>
           <Link className="button button--secondary" to="/usuarios">
             <ArrowLeft size={17} aria-hidden="true" />
             Voltar para Usuarios
           </Link>
         </div>
-      ) : person && !person.portal_user ? (
-        <div className="state-panel">
-          <h1>Sem acesso ao Portal</h1>
-          <p>Esta pessoa ainda nao possui uma conta de usuario vinculada.</p>
-          <Link className="button button--secondary" to={`/pessoas/${person.id}`}>
-            Voltar para perfil
-          </Link>
-        </div>
-      ) : isUserLoading ? (
-        <div className="state-panel">
-          <h1>Carregando usuario...</h1>
-          <p>Aguarde enquanto os dados da conta sao carregados.</p>
-        </div>
-      ) : isPersonError || isUserError ? (
+      ) : isError ? (
         <div className="state-panel state-panel--error">
-          <h1>{isForbidden ? 'Acesso negado' : 'Nao foi possivel carregar o acesso.'}</h1>
+          <h1>{isForbidden ? 'Acesso negado' : 'Nao foi possivel carregar o usuario.'}</h1>
           <p>
             {isForbidden
               ? 'Sua sessao atual nao possui permissao para administrar usuarios.'
@@ -199,49 +272,46 @@ function UserAccessPage() {
             </button>
           ) : null}
         </div>
-      ) : person && user ? (
+      ) : user ? (
         <>
           <nav className="breadcrumbs" aria-label="Breadcrumb">
             <Link to="/usuarios">Usuarios</Link>
             <span aria-hidden="true">/</span>
-            <strong>{person.display_name}</strong>
+            <strong>{user.username}</strong>
           </nav>
 
           <header className="profile-header">
-            <PersonAvatar name={person.display_name} />
             <div className="profile-header__identity">
-              <h1>{person.display_name}</h1>
-              <p>{user.username}</p>
+              <h1>{user.username}</h1>
+              <p>{user.person?.display_name || 'Nenhuma pessoa vinculada'}</p>
               <AccessStatusBadge status={user.access_status} />
             </div>
             <div className="profile-actions">
-              <Link className="button button--secondary" to={`/pessoas/${person.id}`}>
-                Ver perfil
-              </Link>
-              {user.access_status === 'ACTIVE' && canDisableUser ? (
-                <button
-                  className="button button--primary"
-                  type="button"
-                  onClick={() => {
-                    setDialogError(null)
-                    setDialogMode('disable')
-                  }}
-                >
+              {user.person ? (
+                <Link className="button button--secondary" to={`/pessoas/${user.person.id}`}>
+                  Ver pessoa
+                </Link>
+              ) : null}
+              <button className="button button--secondary" type="button" onClick={() => openDialog('link')}>
+                <Link2 size={17} aria-hidden="true" />
+                {user.person ? 'Alterar vinculo' : 'Vincular pessoa'}
+              </button>
+              {user.person ? (
+                <button className="button button--secondary" type="button" onClick={() => openDialog('unlink')}>
+                  <Unlink size={17} aria-hidden="true" />
+                  Remover vinculo
+                </button>
+              ) : null}
+              {user.access_status === 'ACTIVE' ? (
+                <button className="button button--primary" type="button" onClick={() => openDialog('disable')}>
                   <ShieldOff size={17} aria-hidden="true" />
                   Bloquear acesso
                 </button>
               ) : null}
-              {user.access_status === 'BLOCKED' && canEnableUser ? (
-                <button
-                  className="button button--primary"
-                  type="button"
-                  onClick={() => {
-                    setDialogError(null)
-                    setDialogMode('enable')
-                  }}
-                >
+              {user.access_status === 'BLOCKED' ? (
+                <button className="button button--primary" type="button" onClick={() => openDialog('enable')}>
                   <RefreshCcw size={17} aria-hidden="true" />
-                  Reativar acesso
+                  Desbloquear acesso
                 </button>
               ) : null}
             </div>
@@ -255,39 +325,119 @@ function UserAccessPage() {
 
           <div className="profile-content">
             <section className="profile-section">
-              <h2>Pessoa</h2>
+              <h2>Identidade</h2>
               <dl className="profile-details">
-                <DetailItem label="Nome" value={person.display_name} />
-                <DetailItem label="Status da pessoa" value={person.status === 'ACTIVE' ? 'Ativa' : 'Inativa'} />
+                <DetailItem label="Usuario" value={user.username} />
+                <DetailItem
+                  label="Pessoa vinculada"
+                  value={
+                    user.person ? (
+                      <Link className="person-name-link" to={`/pessoas/${user.person.id}`}>
+                        {user.person.display_name}
+                      </Link>
+                    ) : (
+                      'Nenhuma pessoa vinculada'
+                    )
+                  }
+                />
+                {user.person ? <DetailItem label="E-mail da pessoa" value={user.person.email || '-'} /> : null}
               </dl>
             </section>
+
+            {user.person ? (
+              <section className="profile-section">
+                <h2>Pessoa</h2>
+                <dl className="profile-details">
+                  <DetailItem label="Nome" value={user.person.display_name} />
+                  <DetailItem label="Nome completo" value={user.person.full_name} />
+                  <DetailItem label="Status da pessoa" value={<PersonStatusBadge status={user.person.status} />} />
+                </dl>
+              </section>
+            ) : null}
 
             <section className="profile-section">
               <h2>Acesso</h2>
               <dl className="profile-details">
-                <DetailItem label="Usuario" value={user.username} />
                 <DetailItem label="Status" value={<AccessStatusBadge status={user.access_status} />} />
                 <DetailItem label="Ultimo login" value={formatDate(user.last_login)} />
                 <DetailItem label="Criado em" value={formatDate(user.date_joined)} />
               </dl>
             </section>
+
+            <section className="profile-section">
+              <h2>Senha</h2>
+              <p className="page-heading__description">
+                Senhas nao podem ser visualizadas. A redefinicao segura ainda depende de infraestrutura propria de recuperacao.
+              </p>
+            </section>
           </div>
 
-          {user.access_status === 'PENDING_ACTIVATION' ? (
-            <div className="form-alert form-alert--success" role="status">
-              Esta conta aguarda ativacao inicial. Reativar acesso nao define senha nem substitui a ativacao.
+          <ConfirmationDialog
+            confirmLabel={dialogMode === 'enable' ? 'Desbloquear acesso' : 'Bloquear acesso'}
+            error={dialogError}
+            isOpen={dialogMode === 'disable' || dialogMode === 'enable'}
+            isPending={isMutating}
+            onClose={closeDialog}
+            onConfirm={dialogMode === 'enable' ? () => void handleEnable() : () => void handleDisable()}
+            title={dialogMode === 'enable' ? `Desbloquear ${user.username}?` : `Bloquear ${user.username}?`}
+          >
+            <p>
+              {dialogMode === 'enable'
+                ? 'A conta voltara a poder autenticar com a senha ja definida.'
+                : 'Este usuario nao podera entrar no Portal, mas a conta e os historicos serao preservados.'}
+            </p>
+          </ConfirmationDialog>
+
+          <ConfirmationDialog
+            confirmLabel="Confirmar vinculo"
+            error={dialogError}
+            isOpen={dialogMode === 'link' && selectedPerson !== null}
+            isPending={isMutating}
+            onClose={closeDialog}
+            onConfirm={() => void handleLink()}
+            title={user.person ? 'Alterar vinculo?' : 'Vincular pessoa?'}
+          >
+            <p>
+              {user.person ? `Vinculo atual: ${user.person.display_name}.` : 'Este usuario ainda nao possui pessoa vinculada.'}
+            </p>
+            <p>Novo vinculo: <strong>{selectedPerson?.display_name}</strong>.</p>
+          </ConfirmationDialog>
+
+          {dialogMode === 'link' && selectedPerson === null ? (
+            <div className="dialog-backdrop" role="presentation">
+              <div className="confirm-dialog" role="dialog" aria-labelledby="link-person-title" aria-modal="true">
+                <h2 id="link-person-title">{user.person ? 'Alterar vinculo' : 'Vincular pessoa'}</h2>
+                <PersonSearchPanel
+                  currentPersonId={user.person?.id}
+                  onConfirm={(person) => setSelectedPerson(person)}
+                />
+                {dialogError ? (
+                  <div className="form-alert form-alert--error" role="alert">
+                    {dialogError}
+                  </div>
+                ) : null}
+                <div className="form-actions">
+                  <button className="button button--secondary" type="button" onClick={closeDialog}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
 
-          <AccessDialog
+          <ConfirmationDialog
+            confirmLabel="Remover vinculo"
             error={dialogError}
-            isOpen={dialogMode !== null}
-            isPending={disableUser.isPending || enableUser.isPending}
-            mode={dialogMode ?? 'disable'}
-            onClose={() => setDialogMode(null)}
-            onConfirm={dialogMode === 'enable' ? () => void handleEnable() : () => void handleDisable()}
-            user={user}
-          />
+            isOpen={dialogMode === 'unlink'}
+            isPending={isMutating}
+            onClose={closeDialog}
+            onConfirm={() => void handleUnlink()}
+            title="Remover vinculo?"
+          >
+            <p>
+              Deseja remover o vinculo entre este usuario e esta pessoa? O acesso do usuario nao sera excluido.
+            </p>
+          </ConfirmationDialog>
         </>
       ) : null}
     </section>

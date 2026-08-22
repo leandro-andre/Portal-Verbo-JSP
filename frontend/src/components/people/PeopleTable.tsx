@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Person } from '../../types/person'
+import { formatBrazilianMobile } from '../../utils/phone'
 import PersonAvatar from './PersonAvatar'
 import PersonStatusBadge from './PersonStatusBadge'
 
@@ -56,7 +57,7 @@ function PeopleTable({ people }: PeopleTableProps) {
                 <td>
                   <div className="contact-cell">
                     <span>{person.email || '-'}</span>
-                    {person.phone ? <span>{person.phone}</span> : null}
+                    {person.phone ? <span>{formatBrazilianMobile(person.phone)}</span> : null}
                   </div>
                 </td>
                 <td>{formatBirthDate(person.birth_date)}</td>

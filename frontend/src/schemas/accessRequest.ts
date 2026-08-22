@@ -42,6 +42,20 @@ export const accessRequestSchema = z.object({
     .string()
     .trim()
     .min(1, 'Informe o telefone.'),
+  username: z
+    .string()
+    .trim()
+    .min(1, 'Informe o usuario.')
+    .regex(/^[\w.@+-]+$/, 'Use apenas letras, numeros e @/./+/-/_.'),
+  password: z
+    .string()
+    .min(1, 'Informe a senha.'),
+  password_confirm: z
+    .string()
+    .min(1, 'Confirme a senha.'),
+}).refine((value) => value.password === value.password_confirm, {
+  message: 'As senhas nao conferem.',
+  path: ['password_confirm'],
 })
 
 export type AccessRequestFormValues = z.input<typeof accessRequestSchema>
@@ -52,4 +66,7 @@ export const accessRequestDefaultValues: AccessRequestFormValues = {
   birth_date: '',
   email: '',
   phone: '',
+  username: '',
+  password: '',
+  password_confirm: '',
 }

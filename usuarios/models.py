@@ -120,6 +120,14 @@ class AccessRequest(models.Model):
         null=True,
         related_name="access_requests",
     )
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Usuario pendente",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="access_request",
+    )
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name="Revisada por",

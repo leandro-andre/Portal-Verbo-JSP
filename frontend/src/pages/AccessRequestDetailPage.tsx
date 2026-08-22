@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, XCircle } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import AccessRequestStatusBadge from '../components/accessRequests/AccessRequestStatusBadge'
@@ -31,6 +31,17 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
 }
 
+function formatBrazilianPhone(value?: string | null) {
+  const digits = (value || '').replace(/\D/g, '')
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return value || '-'
+}
+
 function DetailItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="profile-detail">
@@ -56,7 +67,7 @@ function CandidateCard({
         <strong>{candidate.display_name}</strong>
         <span>{formatDate(candidate.birth_date)}</span>
         <span>{candidate.email || '-'}</span>
-        <span>{candidate.phone || '-'}</span>
+        <span>{formatBrazilianPhone(candidate.phone)}</span>
       </span>
     </label>
   )
@@ -111,10 +122,10 @@ function ReviewDialog({
         </h2>
         <p>
           {isApprove && resolution?.type === 'new'
-            ? 'Uma nova pessoa sera cadastrada. O usuario sera criado aguardando ativacao.'
+            ? 'Uma nova pessoa sera cadastrada. O usuario solicitado sera ativado apos a aprovacao.'
             : null}
           {isApprove && selectedCandidate
-            ? `O acesso sera vinculado a ${selectedCandidate.display_name} ja cadastrada. O usuario sera criado aguardando ativacao.`
+            ? `O acesso sera vinculado a ${selectedCandidate.display_name} ja cadastrada. O usuario solicitado sera ativado apos a aprovacao.`
             : null}
           {!isApprove ? 'A solicitacao sera preservada com status rejeitado.' : null}
         </p>
@@ -167,7 +178,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const [activationUrl, setActivationUrl] = useState<string | null>(null)
+  const [approvedUsername, setApprovedUsername] = useState<string | null>(null)
   const canApproveRequest = useCan('ACCESS_REQUEST_APPROVE')
   const canRejectRequest = useCan('ACCESS_REQUEST_REJECT')
   const isPending = request.status === 'PENDING'
@@ -201,8 +212,8 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
           : { create_new_person: true },
       )
       setDialogMode(null)
-      setSuccessMessage('Acesso aprovado. Usuario criado aguardando ativacao.')
-      setActivationUrl(response.created_user.activation_url)
+      setSuccessMessage('Acesso aprovado. O usuario ja pode entrar no Portal.')
+      setApprovedUsername(response.created_user.username)
     } catch (error) {
       handleBusinessError(error)
     }
@@ -214,7 +225,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
       await rejectRequest.mutateAsync({ rejection_reason: rejectionReason })
       setDialogMode(null)
       setSuccessMessage('Solicitacao rejeitada.')
-      setActivationUrl(null)
+      setApprovedUsername(null)
     } catch (error) {
       handleBusinessError(error)
     }
@@ -228,6 +239,11 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
         <strong>{request.full_name}</strong>
       </nav>
 
+      <Link className="back-link" to="/solicitacoes-acesso">
+        <ArrowLeft size={17} aria-hidden="true" />
+        Voltar para solicitacoes
+      </Link>
+
       <div className="page-heading">
         <div>
           <h1>{request.full_name}</h1>
@@ -239,10 +255,10 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
       {successMessage ? (
         <div className="form-alert form-alert--success" role="status">
           {successMessage}
-          {activationUrl ? (
-            <a className="activation-link" href={activationUrl}>
-              Abrir link de ativacao
-            </a>
+          {approvedUsername ? (
+            <span className="activation-link">
+              Username: <strong>{approvedUsername}</strong>
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -254,8 +270,19 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
             <DetailItem label="Nome completo" value={request.full_name} />
             <DetailItem label="Data de nascimento" value={formatDate(request.birth_date)} />
             <DetailItem label="E-mail" value={request.email} />
-            <DetailItem label="Telefone" value={request.phone} />
+            <DetailItem label="Telefone" value={formatBrazilianPhone(request.phone)} />
             <DetailItem label="Solicitado em" value={formatDate(request.created_at)} />
+          </dl>
+        </section>
+
+        <section className="profile-section">
+          <h2>Acesso solicitado</h2>
+          <dl className="profile-details">
+            <DetailItem label="Usuario" value={request.usuario?.username || '-'} />
+            <DetailItem
+              label="Status do acesso"
+              value={request.usuario?.access_status === 'PENDING_APPROVAL' ? 'Aguardando aprovacao' : '-'}
+            />
           </dl>
         </section>
 

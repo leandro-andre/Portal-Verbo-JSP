@@ -4,6 +4,7 @@ from django.contrib.auth import SESSION_KEY, authenticate, get_user_model, login
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils.encoding import force_str
@@ -34,6 +35,8 @@ from .serializers import (
     PortalUserSerializer,
     PublicAccessRequestCreateSerializer,
     RejectAccessRequestSerializer,
+    LinkUserPersonSerializer,
+    USERNAME_ALREADY_EXISTS_CODE,
 )
 from .services import (
     AccessRequestError,
@@ -42,7 +45,9 @@ from .services import (
     build_account_activation_path,
     disable_user_access,
     enable_user_access,
+    link_user_to_person,
     reject_access_request,
+    unlink_user_from_person,
 )
 
 
@@ -277,8 +282,26 @@ class PublicAccessRequestCreateView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        user_model = get_user_model()
+        if user_model.objects.filter(username__iexact=data.get("username")).exists():
+            return Response(
+                {
+                    "code": USERNAME_ALREADY_EXISTS_CODE,
+                    "message": "Este nome de usuario ja esta sendo utilizado.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        with transaction.atomic():
+            access_request = serializer.save()
+        return Response(
+            {
+                "id": access_request.id,
+                "status": access_request.status,
+                "message": "Solicitacao recebida.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class AdminAccessRequestListView(APIView):
@@ -291,6 +314,7 @@ class AdminAccessRequestListView(APIView):
 
         queryset = AccessRequest.objects.filter(status=status_filter).select_related(
             "person",
+            "usuario",
             "reviewed_by",
         )
         if status_filter == AccessRequest.Status.PENDING:
@@ -305,7 +329,7 @@ class AdminAccessRequestDetailView(APIView):
 
     def get_object(self, pk):
         return get_object_or_404(
-            AccessRequest.objects.select_related("person", "reviewed_by"),
+            AccessRequest.objects.select_related("person", "usuario", "reviewed_by"),
             pk=pk,
         )
 
@@ -347,10 +371,11 @@ class AdminAccessRequestApproveView(APIView):
             "id": usuario.id,
             "username": usuario.username,
             "is_active": usuario.is_active,
-            "activation_url": request.build_absolute_uri(
-                build_account_activation_path(usuario),
-            ),
         }
+        if not usuario.is_active and not usuario.has_usable_password():
+            response_data["created_user"]["activation_url"] = request.build_absolute_uri(
+                build_account_activation_path(usuario),
+            )
         return Response(response_data)
 
 
@@ -428,4 +453,29 @@ class AdminUserEnableView(AdminUserDetailView):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        return Response(PortalUserSerializer(usuario).data)
+
+
+class AdminUserPersonLinkView(AdminUserDetailView):
+    permission_classes = [CanManageUsers]
+
+    def patch(self, request, pk):
+        serializer = LinkUserPersonSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        usuario = self.get_object(pk)
+        try:
+            usuario = link_user_to_person(
+                usuario,
+                person_id=serializer.validated_data["person_id"],
+            )
+        except UserAccessError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(PortalUserSerializer(usuario).data)
+
+    def delete(self, request, pk):
+        usuario = self.get_object(pk)
+        usuario = unlink_user_from_person(usuario)
         return Response(PortalUserSerializer(usuario).data)

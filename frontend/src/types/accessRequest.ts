@@ -3,6 +3,9 @@ export type CreateAccessRequestInput = {
   birth_date: string
   email: string
   phone: string
+  username: string
+  password: string
+  password_confirm: string
 }
 
 export type AccessRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -23,6 +26,13 @@ export type AccessRequestUser = {
   display_name: string
 }
 
+export type AccessRequestPendingUser = {
+  id: number
+  username: string
+  is_active: boolean
+  access_status: 'PENDING_APPROVAL' | 'PENDING_ACTIVATION' | 'ACTIVE' | 'BLOCKED'
+}
+
 export type AccessRequestResponse = {
   id: number
   full_name: string
@@ -35,6 +45,7 @@ export type AccessRequestResponse = {
   reviewed_at?: string | null
   rejection_reason?: string
   person?: AccessRequestPerson | null
+  usuario?: AccessRequestPendingUser | null
   reviewed_by?: AccessRequestUser | null
   candidates?: AccessRequestPerson[]
 }
@@ -55,6 +66,7 @@ export type AccessRequest = Required<
   reviewed_at: string | null
   rejection_reason: string
   person: AccessRequestPerson | null
+  usuario: AccessRequestPendingUser | null
   reviewed_by: AccessRequestUser | null
   candidates: AccessRequestPerson[]
 }
@@ -68,7 +80,7 @@ export type ApproveAccessRequestResponse = AccessRequest & {
     id: number
     username: string
     is_active: boolean
-    activation_url: string
+    activation_url?: string
   }
 }
 
@@ -77,12 +89,16 @@ export type RejectAccessRequestInput = {
 }
 
 export type AccessRequestBusinessErrorResponse = {
-  code: 'PERSON_ALREADY_HAS_USER' | 'ACCESS_REQUEST_NOT_PENDING' | 'PERSON_NOT_FOUND'
+  code:
+    | 'PERSON_ALREADY_HAS_USER'
+    | 'ACCESS_REQUEST_NOT_PENDING'
+    | 'PERSON_NOT_FOUND'
+    | 'USERNAME_ALREADY_EXISTS'
   message: string
 }
 
 export type PendingAccessRequestExistsResponse = {
-  code: 'PENDING_ACCESS_REQUEST_EXISTS'
+  code: 'PENDING_ACCESS_REQUEST_EXISTS' | 'USERNAME_ALREADY_EXISTS'
   message: string
 }
 

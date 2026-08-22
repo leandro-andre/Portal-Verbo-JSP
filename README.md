@@ -31,6 +31,7 @@ DJANGO_ENV=dev
 DJANGO_DEBUG=True
 DJANGO_SECRET_KEY=django-insecure-dev-only-key-change-me
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,testserver
+DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 Prepare o banco local:
@@ -64,6 +65,18 @@ Para rodar um app especifico:
 ```powershell
 python manage.py test governanca
 ```
+
+## Solicitacao de acesso
+
+O fluxo publico em `/pedir-acesso` cria uma `AccessRequest` pendente e um `Usuario`
+inativo na mesma transacao. A senha escolhida pelo solicitante e salva apenas como
+hash via Django; ela nao e persistida na solicitacao nem retornada pela API.
+
+Na aprovacao, a Secretaria resolve a `Person` e o mesmo `Usuario` pendente e
+vinculado a ela, ficando ativo para login. Solicitacoes antigas sem `Usuario`
+relacionado continuam suportadas temporariamente pelo fluxo legado de activation
+URL. Solicitacoes rejeitadas preservam o `Usuario` tecnico inativo vinculado a
+request ate uma politica futura de retencao/limpeza ser definida.
 
 ## Estrutura
 

@@ -9,6 +9,7 @@ import {
   type PersonCreateFormData,
   type PersonCreateFormValues,
 } from '../../schemas/person'
+import { formatBrazilianMobile } from '../../utils/phone'
 
 type PersonFormProps = {
   duplicate: PossibleDuplicateResponse | null
@@ -54,6 +55,7 @@ function PersonForm({
     register,
     reset,
     setError,
+    setValue,
   } = useForm<PersonCreateFormValues, unknown, PersonCreateFormData>({
     defaultValues: initialValues ?? personCreateDefaultValues,
     resolver: zodResolver(personCreateSchema),
@@ -192,14 +194,23 @@ function PersonForm({
           </div>
 
           <div className="field-group">
-            <label htmlFor="phone">Telefone</label>
+            <label htmlFor="phone">Celular / WhatsApp</label>
             <input
               id="phone"
               type="tel"
               autoComplete="tel"
+              inputMode="numeric"
+              maxLength={15}
               aria-invalid={Boolean(errors.phone)}
               aria-describedby={errors.phone ? 'phone-error' : undefined}
-              {...register('phone')}
+              {...register('phone', {
+                onChange: (event) => {
+                  setValue('phone', formatBrazilianMobile(event.target.value), {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                },
+              })}
             />
             {errors.phone ? (
               <span className="field-error" id="phone-error">

@@ -897,6 +897,57 @@
   color: #14532d;
   display: block;
   margin-top: 8px;
+}
+
+.password-field {
+  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+}
+
+.password-field .icon-button {
+  height: 42px;
+  width: 42px;
+}
+
+.dialog-copy {
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.dialog-copy p {
+  margin: 0;
+}
+
+.link-person-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.identity-option--button {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.back-link {
+  align-items: center;
+  color: var(--color-primary);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 800;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.back-link:hover,
+.back-link:focus-visible {
+  color: var(--color-primary-strong);
   text-decoration: underline;
 }
 

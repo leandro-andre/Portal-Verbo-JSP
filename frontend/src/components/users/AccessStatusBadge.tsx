@@ -1,6 +1,7 @@
 import type { AccessStatus } from '../../types/user'
 
 const labels: Record<AccessStatus, string> = {
+  PENDING_APPROVAL: 'Aguardando aprovacao',
   PENDING_ACTIVATION: 'Aguardando ativacao',
   ACTIVE: 'Ativo',
   BLOCKED: 'Bloqueado',

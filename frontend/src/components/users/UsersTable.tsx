@@ -41,17 +41,13 @@ function UsersTable({ users }: { users: PortalUser[] }) {
               <td>{formatDate(user.last_login)}</td>
               <td>{formatDate(user.date_joined)}</td>
               <td>
-                {user.person ? (
-                  <Link
-                    className="icon-button icon-button--table"
-                    to={`/pessoas/${user.person.id}/acesso`}
-                    aria-label={`Gerenciar acesso de ${user.person.display_name}`}
-                  >
-                    <ChevronRight size={18} aria-hidden="true" />
-                  </Link>
-                ) : (
-                  <span className="table-muted">Sem pessoa</span>
-                )}
+                <Link
+                  className="icon-button icon-button--table"
+                  to={`/usuarios/${user.id}`}
+                  aria-label={`Gerenciar usuario ${user.username}`}
+                >
+                  <ChevronRight size={18} aria-hidden="true" />
+                </Link>
               </td>
             </tr>
           ))}

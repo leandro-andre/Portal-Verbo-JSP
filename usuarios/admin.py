@@ -49,7 +49,7 @@ class UsuarioAdmin(UserAdmin):
 
 @admin.register(AccessRequest)
 class AccessRequestAdmin(admin.ModelAdmin):
-    list_display = ("full_name", "email", "phone", "birth_date", "status", "created_at")
+    list_display = ("full_name", "email", "phone", "birth_date", "status", "usuario", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("full_name", "email", "phone")
     readonly_fields = ("created_at", "updated_at")
@@ -62,6 +62,7 @@ class AccessRequestAdmin(admin.ModelAdmin):
                     "birth_date",
                     "email",
                     "phone",
+                    "usuario",
                     "status",
                 )
             },

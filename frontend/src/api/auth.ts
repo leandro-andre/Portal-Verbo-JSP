@@ -62,7 +62,7 @@ async function parseJson(response: Response): Promise<unknown> {
 
 export async function getCurrentUser(): Promise<CurrentUserResponse> {
   const response = await fetch('/api/auth/current-user/', {
-    credentials: 'same-origin',
+    credentials: 'include',
   })
 
   if (!response.ok) {
@@ -73,10 +73,10 @@ export async function getCurrentUser(): Promise<CurrentUserResponse> {
 }
 
 export async function login(payload: LoginInput): Promise<CurrentUserResponse> {
-  const headers = await csrfJsonHeaders()
+  const headers = await csrfJsonHeaders({ refresh: true })
   const response = await fetch('/api/auth/login/', {
     method: 'POST',
-    credentials: 'same-origin',
+    credentials: 'include',
     headers,
     body: JSON.stringify(payload),
   })
@@ -100,7 +100,7 @@ export async function logout(): Promise<void> {
   const headers = await csrfJsonHeaders()
   const response = await fetch('/api/auth/logout/', {
     method: 'POST',
-    credentials: 'same-origin',
+    credentials: 'include',
     headers,
   })
 
@@ -113,7 +113,7 @@ export async function activateAccount(payload: ActivateAccountInput): Promise<vo
   const headers = await csrfJsonHeaders()
   const response = await fetch('/api/auth/activate/', {
     method: 'POST',
-    credentials: 'same-origin',
+    credentials: 'include',
     headers,
     body: JSON.stringify(payload),
   })

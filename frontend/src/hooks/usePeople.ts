@@ -22,7 +22,16 @@ export function churchJourneyQueryKey(personId: number) {
 export function usePeople() {
   return useQuery({
     queryKey: peopleQueryKey,
-    queryFn: getPeople,
+    queryFn: () => getPeople(),
+  })
+}
+
+export function usePeopleSearch(search: string, enabled = true) {
+  const normalizedSearch = search.trim()
+  return useQuery({
+    queryKey: [...peopleQueryKey, 'search', normalizedSearch],
+    queryFn: () => getPeople(normalizedSearch),
+    enabled: enabled && normalizedSearch.length >= 2,
   })
 }
 

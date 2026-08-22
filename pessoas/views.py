@@ -1,3 +1,4 @@
+from django.db import models
 from rest_framework import mixins, status, viewsets
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -37,6 +38,17 @@ class PersonViewSet(
     serializer_class = PersonSerializer
     queryset = Person.objects.all()
     http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search = (self.request.query_params.get("q") or "").strip()
+        if search:
+            queryset = queryset.filter(
+                models.Q(full_name__icontains=search)
+                | models.Q(preferred_name__icontains=search)
+                | models.Q(email__icontains=search)
+            )
+        return queryset
 
     def _possible_duplicate_response(self, duplicates):
         return Response(

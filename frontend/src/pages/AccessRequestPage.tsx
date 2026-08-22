@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Send } from 'lucide-react'
+import { Eye, EyeOff, LogIn, Send } from 'lucide-react'
 import { useForm, type UseFormSetError } from 'react-hook-form'
 import {
   AccessRequestValidationError,
@@ -13,8 +13,27 @@ import {
   type AccessRequestFormData,
   type AccessRequestFormValues,
 } from '../schemas/accessRequest'
+import { Link } from 'react-router-dom'
 
 type SetError = UseFormSetError<AccessRequestFormValues>
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function formatBrazilianPhone(value: string) {
+  const digits = onlyDigits(value).slice(0, 11)
+  if (digits.length <= 2) {
+    return digits ? `(${digits}` : ''
+  }
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  }
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+}
 
 function AccessRequestPage() {
   const createRequest = useCreateAccessRequest()
@@ -22,6 +41,8 @@ function AccessRequestPage() {
   const [generalError, setGeneralError] = useState<string | null>(null)
   const [pendingRequestError, setPendingRequestError] = useState<string | null>(null)
   const [apiValidationErrors, setApiValidationErrors] = useState<AccessRequestValidationError | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const appliedApiErrorsRef = useRef<AccessRequestValidationError | null>(null)
   const {
     formState: { errors },
@@ -29,6 +50,7 @@ function AccessRequestPage() {
     register,
     reset,
     setError,
+    setValue,
   } = useForm<AccessRequestFormValues, unknown, AccessRequestFormData>({
     defaultValues: accessRequestDefaultValues,
     resolver: zodResolver(accessRequestSchema),
@@ -68,7 +90,14 @@ function AccessRequestPage() {
       reset(accessRequestDefaultValues)
     } catch (error) {
       if (error instanceof PendingAccessRequestExistsError) {
-        setPendingRequestError('Ja existe uma solicitacao pendente para este e-mail ou telefone.')
+        if (error.details.code === 'USERNAME_ALREADY_EXISTS') {
+          setError('username', {
+            message: 'Este nome de usuario ja esta sendo utilizado.',
+            type: 'server',
+          })
+        } else {
+          setPendingRequestError('Ja existe uma solicitacao pendente para este e-mail ou telefone.')
+        }
         return
       }
 
@@ -100,6 +129,10 @@ function AccessRequestPage() {
             <p>
               A Secretaria ira revisar seus dados. Voce recebera uma orientacao quando o acesso for aprovado.
             </p>
+            <Link className="button button--secondary" to="/login">
+              <LogIn size={17} aria-hidden="true" />
+              Voltar para o login
+            </Link>
           </div>
         ) : (
           <>
@@ -181,11 +214,89 @@ function AccessRequestPage() {
                   autoComplete="tel"
                   aria-invalid={Boolean(errors.phone)}
                   aria-describedby={errors.phone ? 'access_phone-error' : undefined}
-                  {...register('phone')}
+                  {...register('phone', {
+                    onChange: (event) => {
+                      setValue('phone', formatBrazilianPhone(event.target.value), {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    },
+                  })}
                 />
                 {errors.phone ? (
                   <span className="field-error" id="access_phone-error">
                     {errors.phone.message}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="access_username">Usuario *</label>
+                <input
+                  id="access_username"
+                  type="text"
+                  autoComplete="username"
+                  aria-invalid={Boolean(errors.username)}
+                  aria-describedby={errors.username ? 'access_username-error' : undefined}
+                  {...register('username')}
+                />
+                {errors.username ? (
+                  <span className="field-error" id="access_username-error">
+                    {errors.username.message}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="access_password">Senha *</label>
+                <div className="password-field">
+                  <input
+                    id="access_password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    aria-invalid={Boolean(errors.password)}
+                    aria-describedby={errors.password ? 'access_password-error' : undefined}
+                    {...register('password')}
+                  />
+                  <button
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    className="icon-button"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                  </button>
+                </div>
+                {errors.password ? (
+                  <span className="field-error" id="access_password-error">
+                    {errors.password.message}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="access_password_confirm">Confirmar senha *</label>
+                <div className="password-field">
+                  <input
+                    id="access_password_confirm"
+                    type={showPasswordConfirm ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    aria-invalid={Boolean(errors.password_confirm)}
+                    aria-describedby={errors.password_confirm ? 'access_password_confirm-error' : undefined}
+                    {...register('password_confirm')}
+                  />
+                  <button
+                    aria-label={showPasswordConfirm ? 'Ocultar confirmacao de senha' : 'Mostrar confirmacao de senha'}
+                    className="icon-button"
+                    type="button"
+                    onClick={() => setShowPasswordConfirm((current) => !current)}
+                  >
+                    {showPasswordConfirm ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                  </button>
+                </div>
+                {errors.password_confirm ? (
+                  <span className="field-error" id="access_password_confirm-error">
+                    {errors.password_confirm.message}
                   </span>
                 ) : null}
               </div>

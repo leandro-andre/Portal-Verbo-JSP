@@ -58,7 +58,23 @@ class UserAccessNotBlockedError(UserAccessError):
     message = "Somente acessos bloqueados podem ser reativados."
 
 
+class UserPersonLinkError(UserAccessError):
+    code = "USER_PERSON_LINK_ERROR"
+    message = "Nao foi possivel alterar o vinculo do usuario."
+
+
+class UserPersonNotFoundError(UserPersonLinkError):
+    code = "PERSON_NOT_FOUND"
+    message = "A pessoa selecionada nao foi encontrada."
+
+
+class UserPersonAlreadyHasUserError(UserPersonLinkError):
+    code = "PERSON_ALREADY_HAS_USER"
+    message = "Esta pessoa ja possui outro usuario vinculado."
+
+
 class AccessStatus:
+    PENDING_APPROVAL = "PENDING_APPROVAL"
     PENDING_ACTIVATION = "PENDING_ACTIVATION"
     ACTIVE = "ACTIVE"
     BLOCKED = "BLOCKED"
@@ -67,6 +83,8 @@ class AccessStatus:
 def get_access_status(usuario):
     if usuario.is_active:
         return AccessStatus.ACTIVE
+    if AccessRequest.objects.filter(usuario=usuario, status=AccessRequest.Status.PENDING).exists():
+        return AccessStatus.PENDING_APPROVAL
     if not usuario.has_usable_password():
         return AccessStatus.PENDING_ACTIVATION
     return AccessStatus.BLOCKED
@@ -134,7 +152,9 @@ def _get_or_create_person(access_request, *, person_id=None, create_new_person=F
 
 @transaction.atomic
 def approve_access_request(access_request, *, reviewed_by, person_id=None, create_new_person=False):
-    access_request = AccessRequest.objects.select_for_update().get(pk=access_request.pk)
+    access_request = AccessRequest.objects.select_for_update().select_related("usuario").get(
+        pk=access_request.pk
+    )
     _ensure_pending(access_request)
 
     person = _get_or_create_person(
@@ -145,19 +165,40 @@ def approve_access_request(access_request, *, reviewed_by, person_id=None, creat
     if hasattr(person, "user_account"):
         raise PersonAlreadyHasUserError
 
-    first_name, last_name = split_legacy_name(person.full_name)
-    user_model = get_user_model()
-    usuario = user_model(
-        username=generate_username(person.full_name),
-        person=person,
-        first_name=first_name,
-        last_name=last_name,
-        email=person.email,
-        telefone=person.phone,
-        is_active=False,
-    )
-    usuario.set_unusable_password()
-    usuario.save()
+    usuario = access_request.usuario
+    if usuario is None:
+        first_name, last_name = split_legacy_name(person.full_name)
+        user_model = get_user_model()
+        usuario = user_model(
+            username=generate_username(person.full_name),
+            person=person,
+            first_name=first_name,
+            last_name=last_name,
+            email=person.email,
+            telefone=person.phone,
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save()
+        access_request.usuario = usuario
+    else:
+        first_name, last_name = split_legacy_name(person.full_name)
+        usuario.person = person
+        usuario.first_name = first_name
+        usuario.last_name = last_name
+        usuario.email = person.email or access_request.email
+        usuario.telefone = person.phone or access_request.phone
+        usuario.is_active = True
+        usuario.save(
+            update_fields=[
+                "person",
+                "first_name",
+                "last_name",
+                "email",
+                "telefone",
+                "is_active",
+            ]
+        )
 
     access_request.person = person
     access_request.status = AccessRequest.Status.APPROVED
@@ -167,6 +208,7 @@ def approve_access_request(access_request, *, reviewed_by, person_id=None, creat
     access_request.save(
         update_fields=[
             "person",
+            "usuario",
             "status",
             "reviewed_by",
             "reviewed_at",
@@ -224,4 +266,31 @@ def enable_user_access(usuario):
 
     usuario.is_active = True
     usuario.save(update_fields=["is_active"])
+    return usuario
+
+
+@transaction.atomic
+def link_user_to_person(usuario, *, person_id):
+    user_model = get_user_model()
+    usuario = user_model.objects.select_for_update().get(pk=usuario.pk)
+    try:
+        person = Person.objects.select_for_update().get(pk=person_id)
+    except Person.DoesNotExist as exc:
+        raise UserPersonNotFoundError from exc
+
+    existing_user = getattr(person, "user_account", None)
+    if existing_user is not None and existing_user.pk != usuario.pk:
+        raise UserPersonAlreadyHasUserError
+
+    usuario.person = person
+    usuario.save(update_fields=["person"])
+    return usuario
+
+
+@transaction.atomic
+def unlink_user_from_person(usuario):
+    user_model = get_user_model()
+    usuario = user_model.objects.select_for_update().get(pk=usuario.pk)
+    usuario.person = None
+    usuario.save(update_fields=["person"])
     return usuario

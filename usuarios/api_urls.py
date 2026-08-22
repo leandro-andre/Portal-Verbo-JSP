@@ -8,6 +8,7 @@ from .api_views import (
     AdminUserDetailView,
     AdminUserDisableView,
     AdminUserEnableView,
+    AdminUserPersonLinkView,
     AdminUserListView,
     PublicAccessRequestCreateView,
     activate_account_view,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("users/<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("users/<int:pk>/disable/", AdminUserDisableView.as_view(), name="admin-user-disable"),
     path("users/<int:pk>/enable/", AdminUserEnableView.as_view(), name="admin-user-enable"),
+    path("users/<int:pk>/person/", AdminUserPersonLinkView.as_view(), name="admin-user-person"),
     path("access-requests/", PublicAccessRequestCreateView.as_view(), name="access-request-create"),
     path(
         "access-requests/admin/",

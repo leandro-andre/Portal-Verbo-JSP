@@ -6,6 +6,7 @@ import PersonForm from '../components/people/PersonForm'
 import { usePerson, useUpdatePerson } from '../hooks/usePeople'
 import type { PersonCreateFormData, PersonCreateFormValues } from '../schemas/person'
 import type { PossibleDuplicateResponse, UpdatePersonInput } from '../types/person'
+import { formatBrazilianMobile } from '../utils/phone'
 
 type SetError = UseFormSetError<PersonCreateFormValues>
 
@@ -43,7 +44,7 @@ function PersonEditPage() {
       preferred_name: person.preferred_name,
       birth_date: person.birth_date,
       email: person.email,
-      phone: person.phone,
+      phone: formatBrazilianMobile(person.phone),
     }
   }, [person])
 

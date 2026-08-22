@@ -1,4 +1,4 @@
-import type { PortalUser, UserAccessBusinessErrorResponse } from '../types/user'
+import type { LinkUserPersonInput, PortalUser, UserAccessBusinessErrorResponse } from '../types/user'
 import { csrfJsonHeaders } from './http'
 
 export class UserAccessBusinessError extends Error {
@@ -34,7 +34,9 @@ function isUserAccessBusinessErrorResponse(
       value.code === 'CANNOT_DISABLE_OWN_ACCOUNT' ||
       value.code === 'CANNOT_DISABLE_SUPERUSER' ||
       value.code === 'USER_ACCESS_NOT_ACTIVE' ||
-      value.code === 'USER_ACCESS_NOT_BLOCKED'
+      value.code === 'USER_ACCESS_NOT_BLOCKED' ||
+      value.code === 'PERSON_NOT_FOUND' ||
+      value.code === 'PERSON_ALREADY_HAS_USER'
     )
   )
 }
@@ -93,6 +95,30 @@ export async function enableUser(id: number): Promise<PortalUser> {
   const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/users/${id}/enable/`, {
     method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  return await handleUserResponse(response) as PortalUser
+}
+
+export async function linkUserPerson(
+  id: number,
+  payload: LinkUserPersonInput,
+): Promise<PortalUser> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/users/${id}/person/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  return await handleUserResponse(response) as PortalUser
+}
+
+export async function unlinkUserPerson(id: number): Promise<PortalUser> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/users/${id}/person/`, {
+    method: 'DELETE',
     credentials: 'same-origin',
     headers,
   })
