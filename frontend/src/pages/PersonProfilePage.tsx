@@ -9,6 +9,7 @@ import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
 import {
   useChurchJourney,
+  useApproveMembership,
   useMembership,
   usePerson,
   useStartChurchJourney,
@@ -216,6 +217,56 @@ function StartChurchJourneyDialog({
   )
 }
 
+function ApproveMembershipDialog({
+  error,
+  isOpen,
+  isPending,
+  onClose,
+  onConfirm,
+  person,
+}: {
+  error: string | null
+  isOpen: boolean
+  isPending: boolean
+  onClose: () => void
+  onConfirm: () => void
+  person: Person
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  const completedAt = person.discipleship.completed_at
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-labelledby="membership-dialog-title" aria-modal="true">
+        <h2 id="membership-dialog-title">Aprovar a membresia de {person.display_name}?</h2>
+        <div className="dialog-copy">
+          <p>Discipulado concluido em {formatDate(completedAt ?? '')}.</p>
+          <p>A data oficial de membresia sera {formatDate(completedAt ?? '')}.</p>
+          <p>Apos a aprovacao, a pessoa passara a ser considerada membro ativo.</p>
+        </div>
+
+        {error ? (
+          <div className="form-alert form-alert--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="form-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            {isPending ? 'Aprovando...' : 'Aprovar membresia'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function churchStatusLabel(status: ChurchJourney['church_status']) {
   if (status === 'VISITOR') {
     return 'Visitante'
@@ -232,6 +283,7 @@ function churchStatusLabel(status: ChurchJourney['church_status']) {
 function PersonProfile({
   canChangePeople,
   canCreateChurchJourney,
+  canApproveMembership,
   canViewChurchJourney,
   canViewUsers,
   churchJourney,
@@ -241,12 +293,14 @@ function PersonProfile({
   membershipError,
   membershipLoading,
   onLifecycleClick,
+  onApproveMembershipClick,
   onStartChurchJourneyClick,
   person,
   successMessage,
 }: {
   canChangePeople: boolean
   canCreateChurchJourney: boolean
+  canApproveMembership: boolean
   canViewChurchJourney: boolean
   canViewUsers: boolean
   churchJourney: ChurchJourney | null | undefined
@@ -256,6 +310,7 @@ function PersonProfile({
   membershipError: boolean
   membershipLoading: boolean
   onLifecycleClick: () => void
+  onApproveMembershipClick: () => void
   onStartChurchJourneyClick: () => void
   person: Person
   successMessage: string | null
@@ -346,38 +401,47 @@ function PersonProfile({
             ) : churchJourneyError || membershipError ? (
               <p className="page-heading__description">Nao foi possivel carregar a jornada da igreja.</p>
             ) : churchJourney ? (
-              <dl className="profile-details">
-                <DetailItem label="Situacao" value={churchStatusLabel(churchJourney.church_status)} />
-                <DetailItem label="Inicio" value={formatDate(churchJourney.started_at)} />
-                {membership ? (
-                  <>
+              <>
+                <dl className="profile-details">
+                  <DetailItem label="Situacao" value={churchStatusLabel(churchJourney.church_status)} />
+                  <DetailItem label="Inicio" value={formatDate(churchJourney.started_at)} />
+                  {membership ? (
+                    <>
+                      <DetailItem
+                        label="Membership"
+                        value={membership.status === 'ACTIVE' ? 'Aprovada' : 'Inativa'}
+                      />
+                      <DetailItem label="Membro desde" value={formatDate(membership.member_since)} />
+                      <DetailItem label="Aprovado em" value={formatDate(membership.approved_at ?? '')} />
+                      <DetailItem label="Aprovado por" value={membership.approved_by?.display_name || '-'} />
+                    </>
+                  ) : (
                     <DetailItem
                       label="Membership"
-                      value={membership.status === 'ACTIVE' ? 'Aprovada' : 'Inativa'}
+                      value={person.discipleship.membership_can_create ? 'Ainda nao aprovada' : 'Nao disponivel'}
                     />
-                    <DetailItem label="Membro desde" value={formatDate(membership.member_since)} />
-                    <DetailItem label="Aprovado em" value={formatDate(membership.approved_at ?? '')} />
-                    <DetailItem label="Aprovado por" value={membership.approved_by?.display_name || '-'} />
-                  </>
-                ) : (
+                  )}
                   <DetailItem
-                    label="Membership"
-                    value={person.discipleship.membership_can_create ? 'Ainda nao aprovada' : 'Nao disponivel'}
+                    label="Discipulado"
+                    value={
+                      person.discipleship.completed
+                        ? `Concluido em ${formatDate(person.discipleship.completed_at ?? '')}`
+                        : 'Nao concluido'
+                    }
                   />
-                )}
-                <DetailItem
-                  label="Discipulado"
-                  value={
-                    person.discipleship.completed
-                      ? `Concluido em ${formatDate(person.discipleship.completed_at ?? '')}`
-                      : 'Nao concluido'
-                  }
-                />
-                <DetailItem
-                  label="Elegibilidade para membresia"
-                  value={person.discipleship.membership_can_create ? 'Elegivel' : 'Nao elegivel'}
-                />
-              </dl>
+                  <DetailItem
+                    label="Elegibilidade para membresia"
+                    value={person.discipleship.membership_can_create ? 'Elegivel' : 'Nao elegivel'}
+                  />
+                </dl>
+                {!membership && person.discipleship.membership_can_create && canApproveMembership ? (
+                  <div className="form-actions">
+                    <button className="button button--primary" type="button" onClick={onApproveMembershipClick}>
+                      Aprovar membresia
+                    </button>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="church-journey-empty">
                 <p className="page-heading__description">
@@ -409,6 +473,7 @@ function PersonProfilePage() {
   const canViewUsers = useCan('USER_VIEW')
   const canViewChurchJourney = useCan('CHURCH_JOURNEY_VIEW')
   const canViewMembership = useCan('MEMBERSHIP_VIEW')
+  const canApproveMembership = useCan('MEMBERSHIP_APPROVE')
   const canCreateChurchJourney = useCan('CHURCH_JOURNEY_CREATE')
   const {
     data: churchJourney,
@@ -420,12 +485,15 @@ function PersonProfilePage() {
     isError: isMembershipError,
     isLoading: isMembershipLoading,
   } = useMembership(personId, canViewMembership && isValidId)
+  const approveMembership = useApproveMembership(personId)
   const startChurchJourney = useStartChurchJourney(personId)
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
   const [lifecycleSuccessMessage, setLifecycleSuccessMessage] = useState<string | null>(null)
   const [isStartJourneyDialogOpen, setIsStartJourneyDialogOpen] = useState(false)
   const [startJourneyError, setStartJourneyError] = useState<string | null>(null)
+  const [isApproveMembershipDialogOpen, setIsApproveMembershipDialogOpen] = useState(false)
+  const [approveMembershipError, setApproveMembershipError] = useState<string | null>(null)
   const [startedAt, setStartedAt] = useState(getTodayInputValue)
   const navigationState = location.state as { successMessage?: string } | null
   const successMessage = lifecycleSuccessMessage ?? navigationState?.successMessage ?? null
@@ -464,6 +532,18 @@ function PersonProfilePage() {
     }
   }
 
+  const handleApproveMembershipConfirm = async () => {
+    setApproveMembershipError(null)
+
+    try {
+      await approveMembership.mutateAsync()
+      setIsApproveMembershipDialogOpen(false)
+      setLifecycleSuccessMessage('Membresia aprovada com sucesso.')
+    } catch {
+      setApproveMembershipError('Nao foi possivel aprovar a membresia.')
+    }
+  }
+
   return (
     <section className="person-profile-page">
       {isLoading && isValidId ? (
@@ -492,6 +572,7 @@ function PersonProfilePage() {
         <>
           <PersonProfile
             canChangePeople={canChangePeople}
+            canApproveMembership={canApproveMembership}
             canCreateChurchJourney={canCreateChurchJourney}
             canViewChurchJourney={canViewChurchJourney}
             canViewUsers={canViewUsers}
@@ -501,6 +582,10 @@ function PersonProfilePage() {
             membership={membership}
             membershipError={isMembershipError}
             membershipLoading={isMembershipLoading}
+            onApproveMembershipClick={() => {
+              setApproveMembershipError(null)
+              setIsApproveMembershipDialogOpen(true)
+            }}
             onLifecycleClick={() => {
               setLifecycleError(null)
               setIsLifecycleDialogOpen(true)
@@ -530,6 +615,14 @@ function PersonProfilePage() {
             onStartedAtChange={setStartedAt}
             person={person}
             startedAt={startedAt}
+          />
+          <ApproveMembershipDialog
+            error={approveMembershipError}
+            isOpen={isApproveMembershipDialogOpen}
+            isPending={approveMembership.isPending}
+            onClose={() => setIsApproveMembershipDialogOpen(false)}
+            onConfirm={() => void handleApproveMembershipConfirm()}
+            person={person}
           />
         </>
       ) : null}

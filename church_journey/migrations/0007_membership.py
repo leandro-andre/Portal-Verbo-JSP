@@ -55,6 +55,7 @@ class Migration(migrations.Migration):
                 "verbose_name": "Membresia",
                 "verbose_name_plural": "Membresias",
                 "ordering": ["person__full_name", "person_id"],
+                "permissions": [("approve_membership", "Can approve membership")],
             },
         ),
     ]

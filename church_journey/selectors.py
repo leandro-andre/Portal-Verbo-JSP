@@ -131,12 +131,39 @@ def get_completed_discipleship(person):
     )
 
 
+def get_first_completed_discipleship(person):
+    if person is None:
+        return None
+
+    return (
+        DiscipleshipEnrollment.objects.filter(
+            person=person,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            completed_at__isnull=False,
+        )
+        .order_by("completed_at", "id")
+        .first()
+    )
+
+
 def is_eligible_for_membership(person):
     return get_completed_discipleship(person) is not None
 
 
 def can_create_membership(person):
     return is_eligible_for_membership(person) and not has_membership(person)
+
+
+def get_membership_eligible_people():
+    return (
+        DiscipleshipEnrollment.objects.filter(
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            person__church_journey__isnull=False,
+            person__membership__isnull=True,
+        )
+        .select_related("person")
+        .order_by("completed_at", "person__full_name", "person_id")
+    )
 
 
 def get_frequency_eligible_lessons(enrollment):

@@ -13,6 +13,8 @@ from .views import (
     DiscipleshipLessonDetailView,
     DiscipleshipLessonListCreateView,
     PersonChurchJourneyView,
+    MembershipEligibleListView,
+    PersonMembershipApproveView,
     PersonMembershipView,
 )
 
@@ -27,6 +29,16 @@ urlpatterns = [
         "people/<int:person_id>/membership/",
         PersonMembershipView.as_view(),
         name="person-membership",
+    ),
+    path(
+        "people/<int:person_id>/membership/approve/",
+        PersonMembershipApproveView.as_view(),
+        name="person-membership-approve",
+    ),
+    path(
+        "membership/eligible/",
+        MembershipEligibleListView.as_view(),
+        name="membership-eligible-list",
     ),
     path(
         "discipleship/classes/",

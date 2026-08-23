@@ -12,6 +12,7 @@ import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
 import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import DiscipleshipAttendancePage from './pages/DiscipleshipAttendancePage'
 import LoginPage from './pages/LoginPage'
+import MembershipPage from './pages/MembershipPage'
 import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
@@ -103,6 +104,7 @@ function AdminRoutes() {
         <Route path="/usuarios" element={<AuthorizedRoute capability="USER_VIEW"><UsersPage /></AuthorizedRoute>} />
         <Route path="/usuarios/:id" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
+        <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/:classId/aulas/:lessonId/chamada" element={<DiscipleshipAttendancePage />} />

@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -56,7 +57,9 @@ from .services import (
     DISCIPLESHIP_ATTENDANCE_INCOMPLETE,
     DISCIPLESHIP_ENROLLMENT_ALREADY_EXISTS,
     DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED,
+    DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP,
     DISCIPLESHIP_ENROLLMENT_WITHDRAWN,
+    MEMBERSHIP_ALREADY_EXISTS,
     DISCIPLESHIP_LESSON_DATE_CONFLICT,
     CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE,
     DISCIPLESHIP_ATTENDANCE_CLASS_MISMATCH,
@@ -70,6 +73,7 @@ from .services import (
     INVALID_DISCIPLESHIP_LESSON_TRANSITION,
     PERSON_NOT_IN_CHURCH_JOURNEY,
     ChurchJourneyError,
+    approve_membership,
     cancel_discipleship_class,
     cancel_discipleship_lesson,
     complete_discipleship_class,
@@ -2671,3 +2675,193 @@ class MembershipFoundationTests(APITestCase):
         self.assertEqual(self.client.post(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertEqual(self.client.patch(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertEqual(self.client.delete(url).status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_approve_membership_cria_membership_active(self):
+        self.prepare_membership_person(completed_at=date(2026, 8, 18))
+        portal_user = self.user_model.objects.create_user(
+            username="membership.portal.user",
+            password="senha-forte-123",
+            person=self.person,
+            is_active=False,
+        )
+        person_status = self.person.status
+        enrollment = DiscipleshipEnrollment.objects.get(person=self.person)
+        enrollment_status = enrollment.status
+        enrollment_completed_at = enrollment.completed_at
+        approved_at = timezone.datetime(2026, 8, 22, 12, 0, tzinfo=timezone.get_current_timezone())
+
+        with patch("church_journey.services.timezone.now", return_value=approved_at):
+            membership = approve_membership(self.person, approved_by=self.admin)
+
+        self.assertEqual(membership.status, Membership.Status.ACTIVE)
+        self.assertEqual(membership.member_since, date(2026, 8, 18))
+        self.assertEqual(membership.approved_by, self.admin)
+        self.assertEqual(membership.approved_at, approved_at)
+        self.assertEqual(get_church_status(self.person), ChurchStatus.MEMBER)
+
+        self.person.refresh_from_db()
+        portal_user.refresh_from_db()
+        enrollment.refresh_from_db()
+        self.assertEqual(self.person.status, person_status)
+        self.assertFalse(portal_user.is_active)
+        self.assertEqual(enrollment.status, enrollment_status)
+        self.assertEqual(enrollment.completed_at, enrollment_completed_at)
+
+    def test_approve_membership_usa_primeira_conclusao(self):
+        self.prepare_membership_person(completed_at=date(2026, 12, 1))
+        self.create_completed_discipleship(person=self.person, completed_at=date(2026, 6, 1))
+
+        membership = approve_membership(self.person, approved_by=self.admin)
+
+        self.assertEqual(membership.member_since, date(2026, 6, 1))
+
+    def test_approve_membership_sem_church_journey_bloqueia(self):
+        self.create_completed_discipleship()
+
+        with self.assertRaises(ChurchJourneyError) as ctx:
+            approve_membership(self.person, approved_by=self.admin)
+
+        self.assertEqual(ctx.exception.code, PERSON_NOT_IN_CHURCH_JOURNEY)
+
+    def test_approve_membership_sem_completed_bloqueia(self):
+        ChurchJourney.objects.create(person=self.person)
+
+        with self.assertRaises(ChurchJourneyError) as ctx:
+            approve_membership(self.person, approved_by=self.admin)
+
+        self.assertEqual(ctx.exception.code, DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP)
+
+    def test_approve_membership_enrolled_e_withdrawn_nao_contam(self):
+        ChurchJourney.objects.create(person=self.person)
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Nao Concluido",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=1,
+        )
+        DiscipleshipEnrollment.objects.create(person=self.person, discipleship_class=discipleship_class)
+        withdrawn_person = Person.objects.create(full_name="Withdrawn Membership", birth_date=date(1993, 1, 1))
+        ChurchJourney.objects.create(person=withdrawn_person)
+        DiscipleshipEnrollment.objects.create(
+            person=withdrawn_person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.WITHDRAWN,
+            withdrawn_at=date(2026, 8, 10),
+        )
+
+        with self.assertRaises(ChurchJourneyError):
+            approve_membership(self.person, approved_by=self.admin)
+        with self.assertRaises(ChurchJourneyError):
+            approve_membership(withdrawn_person, approved_by=self.admin)
+
+    def test_approve_membership_duplicada_retorna_erro(self):
+        self.create_membership()
+
+        with self.assertRaises(ChurchJourneyError) as ctx:
+            approve_membership(self.person, approved_by=self.admin)
+
+        self.assertEqual(ctx.exception.code, MEMBERSHIP_ALREADY_EXISTS)
+
+    def test_approve_membership_nao_altera_attendance(self):
+        self.prepare_membership_person(completed_at=date(2026, 8, 18))
+        enrollment = DiscipleshipEnrollment.objects.get(person=self.person)
+        lesson = DiscipleshipLesson.objects.create(
+            discipleship_class=enrollment.discipleship_class,
+            title="Aula Membership",
+            lesson_date=date(2026, 8, 10),
+        )
+        attendance = DiscipleshipAttendance.objects.create(
+            enrollment=enrollment,
+            lesson=lesson,
+            status=DiscipleshipAttendance.Status.PRESENT,
+            recorded_by=self.admin,
+        )
+
+        approve_membership(self.person, approved_by=self.admin)
+
+        attendance.refresh_from_db()
+        self.assertEqual(attendance.status, DiscipleshipAttendance.Status.PRESENT)
+        self.assertEqual(attendance.recorded_by, self.admin)
+
+    def test_api_approve_membership_valido(self):
+        self.prepare_membership_person(completed_at=date(2026, 8, 18))
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(
+            reverse("person-membership-approve", args=[self.person.pk]),
+            {"status": "INACTIVE", "member_since": "2026-01-01"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["status"], Membership.Status.ACTIVE)
+        self.assertEqual(response.json()["member_since"], "2026-08-18")
+        self.assertEqual(response.json()["approved_by"]["id"], self.secretary.pk)
+
+    def test_api_approve_membership_sem_permissao(self):
+        self.prepare_membership_person()
+        comum = self.user_model.objects.create_user(username="membership.approve.common", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+
+        response = self.client.post(reverse("person-membership-approve", args=[self.person.pk]), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_approve_membership_pastor_nao_pode(self):
+        self.prepare_membership_person()
+        self.client.force_authenticate(self.pastor)
+
+        response = self.client.post(reverse("person-membership-approve", args=[self.person.pk]), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_approve_membership_duplicado(self):
+        self.create_membership()
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(reverse("person-membership-approve", args=[self.person.pk]), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], MEMBERSHIP_ALREADY_EXISTS)
+
+    def test_get_membership_apos_aprovacao(self):
+        self.prepare_membership_person()
+        self.client.force_authenticate(self.admin)
+        self.client.post(reverse("person-membership-approve", args=[self.person.pk]), {}, format="json")
+
+        response = self.client.get(reverse("person-membership", args=[self.person.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["status"], Membership.Status.ACTIVE)
+
+    def test_lista_elegiveis(self):
+        self.prepare_membership_person()
+        enrolled_person = Person.objects.create(full_name="Enrolled Membership", birth_date=date(1994, 1, 1))
+        ChurchJourney.objects.create(person=enrolled_person)
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Enrolled",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=1,
+        )
+        DiscipleshipEnrollment.objects.create(person=enrolled_person, discipleship_class=discipleship_class)
+        active_member = Person.objects.create(full_name="Ja Membro", birth_date=date(1995, 1, 1))
+        self.create_membership(active_member)
+        inactive_member = Person.objects.create(full_name="Membro Inativo Lista", birth_date=date(1996, 1, 1))
+        self.create_membership(inactive_member, Membership.Status.INACTIVE)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(reverse("membership-eligible-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.json()}
+        self.assertIn(self.person.pk, ids)
+        self.assertNotIn(enrolled_person.pk, ids)
+        self.assertNotIn(active_member.pk, ids)
+        self.assertNotIn(inactive_member.pk, ids)
+
+    def test_secretaria_recebe_approve_membership_e_pastor_nao(self):
+        self.assertTrue(self.secretary.has_perm("church_journey.approve_membership"))
+        self.assertFalse(self.pastor.has_perm("church_journey.approve_membership"))

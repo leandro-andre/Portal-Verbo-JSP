@@ -22,10 +22,12 @@ from .serializers import (
     DiscipleshipClassSerializer,
     DiscipleshipEnrollmentSerializer,
     DiscipleshipLessonSerializer,
+    MembershipEligiblePersonSerializer,
     MembershipSerializer,
 )
 from .services import (
     ChurchJourneyError,
+    approve_membership,
     cancel_discipleship_class,
     cancel_discipleship_lesson,
     complete_discipleship_enrollment,
@@ -44,6 +46,7 @@ from .services import (
 from .selectors import (
     MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE,
     get_discipleship_completion_eligibility,
+    get_membership_eligible_people,
     is_eligible_for_membership,
 )
 
@@ -71,6 +74,15 @@ class CanViewMembership(BasePermission):
             request.user.is_authenticated
             and request.user.is_active
             and request.user.has_perm("church_journey.view_membership")
+        )
+
+
+class CanApproveMembership(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("church_journey.approve_membership")
         )
 
 
@@ -114,6 +126,28 @@ class PersonMembershipView(APIView):
             person=person,
         )
         return Response(MembershipSerializer(membership).data)
+
+
+class PersonMembershipApproveView(APIView):
+    permission_classes = [CanApproveMembership]
+
+    def post(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        try:
+            membership = approve_membership(person, approved_by=request.user)
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(MembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
+
+
+class MembershipEligibleListView(APIView):
+    permission_classes = [CanViewMembership]
+
+    def get(self, request):
+        return Response(MembershipEligiblePersonSerializer(get_membership_eligible_people(), many=True).data)
 
 
 class HasDjangoPermission(BasePermission):

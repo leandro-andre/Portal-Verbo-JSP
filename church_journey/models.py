@@ -58,6 +58,9 @@ class Membership(models.Model):
         ordering = ["person__full_name", "person_id"]
         verbose_name = "Membresia"
         verbose_name_plural = "Membresias"
+        permissions = [
+            ("approve_membership", "Can approve membership"),
+        ]
 
     def __str__(self):
         return f"Membresia de {self.person}"
@@ -71,9 +74,9 @@ class Membership(models.Model):
         elif not hasattr(self.person, "church_journey"):
             errors["person"] = "Membership exige jornada eclesiastica."
         else:
-            from .selectors import has_completed_discipleship
+            from .selectors import get_completed_discipleship
 
-            if not has_completed_discipleship(self.person):
+            if not get_completed_discipleship(self.person):
                 errors["person"] = "Membership exige discipulado concluido."
 
         if not self.member_since:

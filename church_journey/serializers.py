@@ -72,6 +72,13 @@ class MembershipSerializer(serializers.ModelSerializer):
         }
 
 
+class MembershipEligiblePersonSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="person.id")
+    display_name = serializers.CharField(source="person.display_name")
+    full_name = serializers.CharField(source="person.full_name")
+    completed_at = serializers.DateField()
+
+
 class DiscipleshipClassTeacherSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     display_name = serializers.CharField()

@@ -1,4 +1,4 @@
-import { BookOpenCheck, ClipboardList, UserCog, UsersRound } from 'lucide-react'
+import { BookOpenCheck, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -13,6 +13,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
   const canViewAccessRequests = capabilities.includes('ACCESS_REQUEST_VIEW')
   const canViewUsers = capabilities.includes('USER_VIEW')
   const canViewDiscipleship = capabilities.includes('DISCIPLESHIP_CLASS_VIEW')
+  const canViewMembership = capabilities.includes('MEMBERSHIP_VIEW')
   const hasAccessItems = canViewAccessRequests || canViewUsers
 
   return (
@@ -65,7 +66,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
           </NavLink>
         ) : null}
 
-        {canViewDiscipleship && !isCollapsed ? (
+        {(canViewDiscipleship || canViewMembership) && !isCollapsed ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Jornada</p>
         ) : null}
         {canViewDiscipleship ? (
@@ -75,6 +76,15 @@ function Sidebar({ isCollapsed }: SidebarProps) {
           >
             <BookOpenCheck size={18} aria-hidden="true" />
             {!isCollapsed ? <span>Discipulado</span> : null}
+          </NavLink>
+        ) : null}
+        {canViewMembership ? (
+          <NavLink
+            className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+            to="/membresia"
+          >
+            <ShieldCheck size={18} aria-hidden="true" />
+            {!isCollapsed ? <span>Membresia</span> : null}
           </NavLink>
         ) : null}
       </nav>

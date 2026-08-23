@@ -9,8 +9,9 @@ from .models import (
     DiscipleshipClass,
     DiscipleshipEnrollment,
     DiscipleshipLesson,
+    Membership,
 )
-from .selectors import get_discipleship_completion_eligibility
+from .selectors import get_discipleship_completion_eligibility, get_first_completed_discipleship
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
@@ -40,6 +41,8 @@ DISCIPLESHIP_MINIMUM_ATTENDANCE_NOT_REACHED = "DISCIPLESHIP_MINIMUM_ATTENDANCE_N
 DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR = "DISCIPLESHIP_NO_VALID_ATTENDANCE_DENOMINATOR"
 DISCIPLESHIP_ENROLLMENT_WITHDRAWN = "DISCIPLESHIP_ENROLLMENT_WITHDRAWN"
 DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED = "DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED"
+MEMBERSHIP_ALREADY_EXISTS = "MEMBERSHIP_ALREADY_EXISTS"
+DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP = "DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP"
 
 COMPLETION_REASON_ERROR_CODES = {
     "CLASS_NOT_COMPLETED": DISCIPLESHIP_CLASS_NOT_COMPLETED,
@@ -438,3 +441,44 @@ def complete_discipleship_enrollment(enrollment):
     enrollment.completed_at = timezone.localdate()
     enrollment.save(update_fields=["status", "completed_at", "updated_at"])
     return enrollment
+
+
+def approve_membership(person, *, approved_by):
+    if person is None:
+        raise ValueError("Informe uma Person para aprovar a membresia.")
+
+    with transaction.atomic():
+        person = type(person).objects.select_for_update().get(pk=person.pk)
+
+        if not hasattr(person, "church_journey"):
+            raise ChurchJourneyError(
+                PERSON_NOT_IN_CHURCH_JOURNEY,
+                "Esta pessoa ainda nao esta na jornada da igreja.",
+            )
+
+        if hasattr(person, "membership"):
+            raise ChurchJourneyError(
+                MEMBERSHIP_ALREADY_EXISTS,
+                "Esta pessoa ja possui membresia.",
+            )
+
+        completed_enrollment = get_first_completed_discipleship(person)
+        if completed_enrollment is None:
+            raise ChurchJourneyError(
+                DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP,
+                "Esta pessoa ainda nao concluiu o discipulado.",
+            )
+
+        try:
+            return Membership.objects.create(
+                person=person,
+                status=Membership.Status.ACTIVE,
+                member_since=completed_enrollment.completed_at,
+                approved_by=approved_by,
+                approved_at=timezone.now(),
+            )
+        except IntegrityError as exc:
+            raise ChurchJourneyError(
+                MEMBERSHIP_ALREADY_EXISTS,
+                "Esta pessoa ja possui membresia.",
+            ) from exc

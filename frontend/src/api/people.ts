@@ -2,6 +2,7 @@ import type {
   ApiValidationErrors,
   ChurchJourney,
   CreatePersonInput,
+  EligibleMembershipPerson,
   Membership,
   Person,
   PossibleDuplicateResponse,
@@ -198,6 +199,44 @@ export async function getMembership(personId: number): Promise<Membership | null
   }
 
   return response.json() as Promise<Membership>
+}
+
+export async function approveMembership(personId: number): Promise<Membership> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/membership/approve/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({}),
+  })
+
+  const data: unknown = await response.json().catch(() => null)
+
+  if (response.status === 409 && isRecord(data) && typeof data.code === 'string') {
+    throw new ApiHttpError(409, data.message as string || 'Nao foi possivel aprovar a membresia.')
+  }
+
+  if (response.status === 403) {
+    throw new ApiHttpError(403, 'Voce nao tem permissao para aprovar membresia.')
+  }
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel aprovar a membresia.')
+  }
+
+  return data as Membership
+}
+
+export async function getEligibleMembershipPeople(): Promise<EligibleMembershipPerson[]> {
+  const response = await fetch('/api/membership/eligible/', {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar pessoas elegiveis.')
+  }
+
+  return response.json() as Promise<EligibleMembershipPerson[]>
 }
 
 export async function startChurchJourney(

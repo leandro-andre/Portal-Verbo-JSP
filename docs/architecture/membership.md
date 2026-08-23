@@ -38,8 +38,7 @@ jornada ou status de visitante. Ela so pode existir para pessoa com
 aprovacao nem a data de criacao do registro.
 
 Discipulado concluido nao cria Membership automaticamente. Nao ha signal,
-dual-write ou backfill nesta fundacao. A aprovacao explicita pela Secretaria
-fica para PVV-024.
+dual-write ou backfill.
 
 Pastor nao implica Membership. Role pastoral e membresia sao conceitos separados.
 
@@ -63,11 +62,42 @@ existe enrollment concluido.
 `can_create_membership(person)` indica possibilidade de criar Membership:
 discipulado concluido e nenhuma Membership existente.
 
+## Aprovacao
+
+A aprovacao de Membership e um caso de uso explicito executado pela Secretaria
+ou pelo Administrador do Portal. Pastor visualiza, mas nao aprova nesta versao.
+
+Endpoint:
+
+`POST /api/people/{person_id}/membership/approve/`
+
+O payload nao define `status`, `member_since`, `approved_by` ou `approved_at`.
+O backend deriva todos os dados.
+
+Pre-condicoes:
+
+- a pessoa possui `ChurchJourney`;
+- a pessoa possui `DiscipleshipEnrollment` com status `COMPLETED`;
+- a pessoa ainda nao possui `Membership`.
+
+Somente o novo dominio de discipulado vale para aprovar nova Membership.
+Campos legados em `Usuario`, como `discipulado_concluido`, podem existir para
+compatibilidade de leitura, mas nao aprovam Membership nova.
+
+Quando ha mais de uma conclusao, `member_since` usa a primeira conclusao valida
+por `completed_at` e depois `id`. Isso preserva a data da primeira entrada
+possivel como membro.
+
+`approved_by` e o `Usuario` autenticado que executou a aprovacao.
+`approved_at` e o momento da aprovacao via `timezone.now()`.
+
+Membership nasce `ACTIVE`, o que faz `ChurchStatus` derivado passar a `MEMBER`.
+A aprovacao nao altera `Person.status`, `Usuario`, roles, groups, enrollments,
+attendance, lessons ou dados legados.
+
 ## Futuro
 
-PVV-024 deve implementar aprovacao da Secretaria como caso de uso explicito.
-Lifecycle ACTIVE/INACTIVE, reativacao e historico tambem ficam fora desta
-fundacao.
+Lifecycle ACTIVE/INACTIVE, reativacao e historico ficam fora desta etapa.
 
 Departamentos e escalas ainda nao mudam nesta fase. Regra futura: apenas
 `Membership ACTIVE` deve permitir novos vinculos departamentais e novas

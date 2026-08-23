@@ -51,6 +51,13 @@ export type Membership = {
   updated_at: string
 }
 
+export type EligibleMembershipPerson = {
+  id: number
+  display_name: string
+  full_name: string
+  completed_at: string
+}
+
 export type ChurchJourney = {
   id: number
   person_id: number

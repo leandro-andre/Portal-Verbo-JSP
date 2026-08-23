@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPerson,
+  approveMembership,
+  getEligibleMembershipPeople,
   getChurchJourney,
   getMembership,
   getPeople,
@@ -23,6 +25,8 @@ export function churchJourneyQueryKey(personId: number) {
 export function membershipQueryKey(personId: number) {
   return ['people', personId, 'membership'] as const
 }
+
+export const eligibleMembershipPeopleQueryKey = ['membership', 'eligible'] as const
 
 export function usePeople() {
   return useQuery({
@@ -61,6 +65,29 @@ export function useMembership(personId: number, enabled: boolean) {
     queryKey: membershipQueryKey(personId),
     queryFn: () => getMembership(personId),
     enabled: enabled && Number.isFinite(personId),
+  })
+}
+
+export function useEligibleMembershipPeople() {
+  return useQuery({
+    queryKey: eligibleMembershipPeopleQueryKey,
+    queryFn: getEligibleMembershipPeople,
+  })
+}
+
+export function useApproveMembership(personId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => approveMembership(personId),
+    onSuccess: async (membership) => {
+      queryClient.setQueryData(membershipQueryKey(personId), membership)
+      await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
+      await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
+      await queryClient.invalidateQueries({ queryKey: membershipQueryKey(personId) })
+      await queryClient.invalidateQueries({ queryKey: eligibleMembershipPeopleQueryKey })
+      await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
+    },
   })
 }
 
