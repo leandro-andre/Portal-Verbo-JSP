@@ -111,8 +111,8 @@ function AdminRoutes() {
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
         <Route path="/departamentos" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentsPage /></AuthorizedRoute>} />
         <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
-        <Route path="/departamentos/:id/editar" element={<AuthorizedRoute capability="DEPARTMENT_CHANGE"><DepartmentEditPage /></AuthorizedRoute>} />
-        <Route path="/departamentos/:id" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentDetailPage /></AuthorizedRoute>} />
+        <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />
+        <Route path="/departamentos/:id" element={<DepartmentDetailPage />} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/:classId/aulas/:lessonId/chamada" element={<DiscipleshipAttendancePage />} />

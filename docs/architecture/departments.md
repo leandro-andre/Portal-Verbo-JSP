@@ -1,12 +1,13 @@
 # Department Foundation
 
 `Departamento` representa a estrutura organizacional da igreja. A PVV-027
-reaproveita o model legado `departamentos.Departamento` e o expõe na nova
-arquitetura React + DRF.
+reaproveitou o model legado `departamentos.Departamento` e o expos na nova
+arquitetura React + DRF. A PVV-028 adiciona cargos e vinculos departamentais
+novos, baseados em `Person`, sem migrar automaticamente os vinculos legados.
 
 ## Modelo
 
-O model atual foi mantido:
+O model `Departamento` foi mantido:
 
 - `nome`: nome administrativo do departamento.
 - `codigo`: identificador funcional/tecnico unico.
@@ -15,7 +16,38 @@ O model atual foi mantido:
 - `criado_em`: data de criacao.
 
 Nenhum novo model `Department` foi criado. `DepartamentoMembro` tambem nao foi
-migrado nesta etapa.
+migrado.
+
+## Cargos
+
+`DepartmentRole` representa um cargo configuravel dentro de um `Departamento`.
+
+- `department`: departamento dono do cargo.
+- `name`: nome administrativo do cargo.
+- `code`: identificador slug-like unico por departamento.
+- `active`: lifecycle ativo/inativo.
+- `can_manage_department`: permite gerenciar dados do proprio departamento no
+  contexto daquele departamento.
+- `can_manage_members`: permite gerenciar cargos e pessoas do proprio
+  departamento.
+
+O codigo do cargo e imutavel pela API depois da criacao. A regra de lideranca
+nao depende do nome "Lider"; depende das flags do cargo.
+
+## Pessoas No Departamento
+
+`DepartmentMembership` representa o vinculo novo entre uma `Person`, um
+`Departamento` e um `DepartmentRole`.
+
+- Ha no maximo um registro por `Person + Departamento`.
+- Troca de cargo atualiza o mesmo registro; nao ha historico de cargos nesta
+  etapa.
+- Criacao e reativacao exigem `Membership` eclesiastica ativa no dominio
+  `church_journey`.
+- Pessoa sem `Usuario` pode ser vinculada, desde que tenha `Membership ACTIVE`.
+- Se a membresia eclesiastica ficar inativa depois, o vinculo departamental nao
+  e alterado automaticamente; a API passa a marcar `operationally_eligible` como
+  falso.
 
 ## Codigo
 
@@ -25,13 +57,13 @@ migrado nesta etapa.
 - `midia`
 - `infantil`
 
-Por isso, na API React o codigo e obrigatorio na criacao e imutavel na edicao.
-O backend normaliza para formato slug-like usando a regra existente do model.
-Codigos existentes nao sao renomeados automaticamente.
+Por isso, na API React o codigo do departamento e obrigatorio na criacao e
+imutavel na edicao. O backend normaliza para formato slug-like usando a regra
+existente do model. Codigos existentes nao sao renomeados automaticamente.
 
 ## Lifecycle
 
-O lifecycle usa o campo existente `ativo`:
+O lifecycle de `Departamento` usa o campo existente `ativo`:
 
 - `ACTIVE`: `ativo=True`
 - `INACTIVE`: `ativo=False`
@@ -53,25 +85,47 @@ Inativar departamento nao exclui nem altera:
 
 DELETE funcional nao existe para Departamento.
 
+Tambem nao existe DELETE funcional para cargos ou vinculos departamentais. O
+lifecycle usa endpoints explicitos:
+
+- `POST /api/departments/{department_id}/roles/{role_id}/deactivate/`
+- `POST /api/departments/{department_id}/roles/{role_id}/reactivate/`
+- `POST /api/departments/{department_id}/members/{membership_id}/deactivate/`
+- `POST /api/departments/{department_id}/members/{membership_id}/reactivate/`
+
 ## Permissoes
 
-Capabilities novas:
+Capabilities:
 
 - `DEPARTMENT_VIEW`
 - `DEPARTMENT_CREATE`
 - `DEPARTMENT_CHANGE`
 - `DEPARTMENT_DEACTIVATE`
 - `DEPARTMENT_REACTIVATE`
+- `DEPARTMENT_ROLE_VIEW`
+- `DEPARTMENT_ROLE_CREATE`
+- `DEPARTMENT_ROLE_CHANGE`
+- `DEPARTMENT_ROLE_DEACTIVATE`
+- `DEPARTMENT_ROLE_REACTIVATE`
+- `DEPARTMENT_MEMBERSHIP_VIEW`
+- `DEPARTMENT_MEMBERSHIP_CREATE`
+- `DEPARTMENT_MEMBERSHIP_CHANGE`
+- `DEPARTMENT_MEMBERSHIP_DEACTIVATE`
+- `DEPARTMENT_MEMBERSHIP_REACTIVATE`
 
 Matriz:
 
 - Administrador do Portal: visualizar, criar, editar, inativar e reativar.
 - Secretaria: visualizar, criar, editar, inativar e reativar.
-- Pastor: visualizar.
+- Pastor: visualizar departamento, cargos e pessoas.
 - Usuario comum: sem acesso administrativo.
 
 A API nova usa permissoes Django e nao usa bypass legado de `eh_pastor` para
 alteracao.
+
+Permissoes contextuais nao criam Global Role. Um usuario com `person` vinculada
+a uma `DepartmentMembership ACTIVE` no departamento pode receber acesso ao
+proprio departamento conforme as flags do seu `DepartmentRole`.
 
 ## Secretaria E Midia
 
@@ -83,14 +137,16 @@ Global Role.
 
 ## Coexistencia Legada
 
-As telas Django template de Departamentos continuam existindo. A PVV-027 apenas
-adiciona a nova API e UI React para a entidade `Departamento`.
+As telas Django template de Departamentos continuam existindo. A API e UI React
+novas convivem com a entidade `Departamento`.
 
 `DepartamentoMembro` ainda aponta para `Usuario` e permanece como base de
-Escalas e Infantil ate a futura PVV-028.
+Escalas, Infantil e qualquer rotina legada que ainda dependa dele.
+
+PVV-028 nao executa dual-write, backfill ou migracao automatica de
+`DepartamentoMembro` para `DepartmentMembership`.
 
 ## Futuro
 
-PVV-028 deve tratar `DepartmentMembership` com `Person`, `Membership ACTIVE`,
-papel contextual e lideranca. Lideranca nao deve ser campo direto em
-`Departamento`.
+Uma feature futura pode tratar migracao assistida do legado, historico de cargos
+ou selectors especificos de elegibilidade para Escalas.

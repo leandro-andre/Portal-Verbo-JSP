@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.text import slugify
 
 
@@ -177,6 +178,98 @@ class DepartamentoMembro(models.Model):
         return f"{self.membro} - {self.departamento} ({self.get_papel_display()})"
 
 
+class DepartmentRole(models.Model):
+    department = models.ForeignKey(
+        Departamento,
+        verbose_name="Departamento",
+        on_delete=models.CASCADE,
+        related_name="roles",
+    )
+    name = models.CharField("Nome", max_length=120)
+    code = models.SlugField("Codigo", max_length=60)
+    active = models.BooleanField("Ativo", default=True)
+    can_manage_department = models.BooleanField("Pode gerenciar departamento", default=False)
+    can_manage_members = models.BooleanField("Pode gerenciar pessoas", default=False)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["department__nome", "name", "id"]
+        verbose_name = "Cargo de departamento"
+        verbose_name_plural = "Cargos de departamento"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["department", "code"],
+                name="uniq_department_role_code_per_department",
+            )
+        ]
+        permissions = [
+            ("deactivate_departmentrole", "Can deactivate department role"),
+            ("reactivate_departmentrole", "Can reactivate department role"),
+        ]
+
+    def __str__(self):
+        return f"{self.department} - {self.name}"
+
+    def save(self, *args, **kwargs):
+        self.name = (self.name or "").strip()
+        self.code = Departamento.normalizar_codigo(self.code or self.name)
+        return super().save(*args, **kwargs)
+
+
+class DepartmentMembership(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Ativa"
+        INACTIVE = "INACTIVE", "Inativa"
+
+    person = models.ForeignKey(
+        "pessoas.Person",
+        verbose_name="Pessoa",
+        on_delete=models.PROTECT,
+        related_name="department_memberships",
+    )
+    department = models.ForeignKey(
+        Departamento,
+        verbose_name="Departamento",
+        on_delete=models.PROTECT,
+        related_name="department_memberships",
+    )
+    role = models.ForeignKey(
+        DepartmentRole,
+        verbose_name="Cargo",
+        on_delete=models.PROTECT,
+        related_name="memberships",
+    )
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    joined_at = models.DateField("Data de entrada", default=timezone.localdate)
+    left_at = models.DateField("Data de saida", blank=True, null=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["department__nome", "person__full_name", "id"]
+        verbose_name = "Pessoa no departamento"
+        verbose_name_plural = "Pessoas nos departamentos"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["person", "department"],
+                name="uniq_department_membership_person_department",
+            )
+        ]
+        permissions = [
+            ("deactivate_departmentmembership", "Can deactivate department membership"),
+            ("reactivate_departmentmembership", "Can reactivate department membership"),
+        ]
+
+    def __str__(self):
+        return f"{self.person} - {self.department} ({self.role})"
+
+
 # Compatibilidade de import para o restante do projeto enquanto o dominio de escalas
 # termina de migrar para o app dedicado.
 from escalas.models import CultoPadrao, Escala, EscalaItem, IndisponibilidadeMembro  # noqa: E402
@@ -186,6 +279,8 @@ __all__ = [
     "CultoPadrao",
     "Departamento",
     "DepartamentoMembro",
+    "DepartmentMembership",
+    "DepartmentRole",
     "Escala",
     "EscalaItem",
     "IndisponibilidadeMembro",

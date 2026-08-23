@@ -1,8 +1,14 @@
 import type {
   CreateDepartmentInput,
+  CreateDepartmentMembershipInput,
+  CreateDepartmentRoleInput,
   Department,
+  DepartmentMembership,
+  DepartmentRole,
   DepartmentValidationErrors,
   UpdateDepartmentInput,
+  UpdateDepartmentMembershipInput,
+  UpdateDepartmentRoleInput,
 } from '../types/department'
 import { csrfJsonHeaders } from './http'
 
@@ -50,10 +56,7 @@ function parseValidationErrors(value: unknown): DepartmentValidationErrors {
   }
 
   const errors: DepartmentValidationErrors = {}
-  const fields: Array<keyof CreateDepartmentInput> = ['nome', 'codigo', 'descricao']
-
-  fields.forEach((field) => {
-    const fieldValue = value[field]
+  Object.entries(value).forEach(([field, fieldValue]) => {
 
     if (isStringArray(fieldValue)) {
       errors[field] = fieldValue
@@ -180,4 +183,182 @@ export function deactivateDepartment(id: number) {
 
 export function reactivateDepartment(id: number) {
   return runDepartmentLifecycle(id, 'reactivate')
+}
+
+export async function getDepartmentRoles(departmentId: number): Promise<DepartmentRole[]> {
+  const response = await fetch(`/api/departments/${departmentId}/roles/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DepartmentHttpError(response.status, 'Nao foi possivel carregar os cargos.')
+  }
+
+  return response.json() as Promise<DepartmentRole[]>
+}
+
+export async function createDepartmentRole(
+  departmentId: number,
+  payload: CreateDepartmentRoleInput,
+): Promise<DepartmentRole> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/roles/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentRole
+}
+
+export async function updateDepartmentRole(
+  departmentId: number,
+  roleId: number,
+  payload: UpdateDepartmentRoleInput,
+): Promise<DepartmentRole> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/roles/${roleId}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentRole
+}
+
+async function runDepartmentRoleLifecycle(
+  departmentId: number,
+  roleId: number,
+  action: 'deactivate' | 'reactivate',
+) {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/roles/${roleId}/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentRole
+}
+
+export function deactivateDepartmentRole(departmentId: number, roleId: number) {
+  return runDepartmentRoleLifecycle(departmentId, roleId, 'deactivate')
+}
+
+export function reactivateDepartmentRole(departmentId: number, roleId: number) {
+  return runDepartmentRoleLifecycle(departmentId, roleId, 'reactivate')
+}
+
+export async function getDepartmentMemberships(departmentId: number): Promise<DepartmentMembership[]> {
+  const response = await fetch(`/api/departments/${departmentId}/members/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DepartmentHttpError(response.status, 'Nao foi possivel carregar as pessoas.')
+  }
+
+  return response.json() as Promise<DepartmentMembership[]>
+}
+
+export async function createDepartmentMembership(
+  departmentId: number,
+  payload: CreateDepartmentMembershipInput,
+): Promise<DepartmentMembership> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/members/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentMembership
+}
+
+export async function updateDepartmentMembership(
+  departmentId: number,
+  membershipId: number,
+  payload: UpdateDepartmentMembershipInput,
+): Promise<DepartmentMembership> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/members/${membershipId}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentMembership
+}
+
+async function runDepartmentMembershipLifecycle(
+  departmentId: number,
+  membershipId: number,
+  action: 'deactivate' | 'reactivate',
+) {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/members/${membershipId}/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentMembership
+}
+
+export function deactivateDepartmentMembership(departmentId: number, membershipId: number) {
+  return runDepartmentMembershipLifecycle(departmentId, membershipId, 'deactivate')
+}
+
+export function reactivateDepartmentMembership(departmentId: number, membershipId: number) {
+  return runDepartmentMembershipLifecycle(departmentId, membershipId, 'reactivate')
 }

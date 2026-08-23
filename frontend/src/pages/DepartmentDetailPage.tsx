@@ -1,12 +1,21 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Edit3, RefreshCcw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
+import { ArrowLeft, Edit3, Plus, RefreshCcw, Save } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { DepartmentBusinessError, DepartmentHttpError } from '../api/departments'
 import { useCan } from '../hooks/useAuth'
-import { useDepartment, useDepartmentLifecycle } from '../hooks/useDepartments'
-import type { Department } from '../types/department'
+import {
+  useDepartment,
+  useDepartmentLifecycle,
+  useDepartmentMembershipMutations,
+  useDepartmentMemberships,
+  useDepartmentRoleMutations,
+  useDepartmentRoles,
+} from '../hooks/useDepartments'
+import { usePeople } from '../hooks/usePeople'
+import type { Department, DepartmentMembership, DepartmentRole } from '../types/department'
 
-function formatDate(value: string) {
+function formatDate(value: string | null) {
   if (!value) {
     return '-'
   }
@@ -32,6 +41,15 @@ function DepartmentStatusBadge({ ativo }: { ativo: boolean }) {
     <span className={`status-badge ${ativo ? 'person-status-badge--active' : 'person-status-badge--inactive'}`}>
       <span className="status-badge__dot" aria-hidden="true" />
       {ativo ? 'Ativo' : 'Inativo'}
+    </span>
+  )
+}
+
+function RoleStatusBadge({ active }: { active: boolean }) {
+  return (
+    <span className={`status-badge ${active ? 'person-status-badge--active' : 'person-status-badge--inactive'}`}>
+      <span className="status-badge__dot" aria-hidden="true" />
+      {active ? 'Ativo' : 'Inativo'}
     </span>
   )
 }
@@ -89,10 +107,138 @@ function LifecycleDialog({
 }
 
 function businessErrorMessage(error: unknown) {
-  if (error instanceof DepartmentBusinessError && error.code === 'INVALID_DEPARTMENT_TRANSITION') {
-    return 'Esta acao nao esta disponivel para o status atual do departamento.'
+  if (error instanceof DepartmentBusinessError) {
+    const messages: Record<string, string> = {
+      INVALID_DEPARTMENT_TRANSITION: 'Esta acao nao esta disponivel para o status atual do departamento.',
+      PERSON_IS_NOT_ACTIVE_MEMBER: 'A pessoa selecionada precisa ter membresia ativa.',
+      DEPARTMENT_ROLE_MISMATCH: 'O cargo selecionado nao pertence a este departamento.',
+      DEPARTMENT_NOT_ACTIVE: 'O departamento precisa estar ativo para esta acao.',
+      DEPARTMENT_ROLE_NOT_ACTIVE: 'O cargo selecionado precisa estar ativo.',
+      DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS: 'Esta pessoa ja esta vinculada a este departamento.',
+      INVALID_DEPARTMENT_ROLE_TRANSITION: 'Esta transicao de cargo nao esta disponivel.',
+      INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION: 'Esta transicao de pessoa no departamento nao esta disponivel.',
+    }
+    return messages[error.code] ?? error.message
   }
-  return 'Nao foi possivel alterar o departamento.'
+  return 'Nao foi possivel concluir a acao.'
+}
+
+function RoleForm({
+  isPending,
+  onSubmit,
+}: {
+  isPending: boolean
+  onSubmit: (payload: { name: string; code: string; can_manage_department: boolean; can_manage_members: boolean }) => void
+}) {
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [canManageDepartment, setCanManageDepartment] = useState(false)
+  const [canManageMembers, setCanManageMembers] = useState(false)
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    onSubmit({
+      name,
+      code,
+      can_manage_department: canManageDepartment,
+      can_manage_members: canManageMembers,
+    })
+    setName('')
+    setCode('')
+    setCanManageDepartment(false)
+    setCanManageMembers(false)
+  }
+
+  return (
+    <form className="department-inline-form" onSubmit={handleSubmit}>
+      <label className="form-field">
+        <span>Nome do cargo</span>
+        <input value={name} onChange={(event) => setName(event.target.value)} required />
+      </label>
+      <label className="form-field">
+        <span>Codigo</span>
+        <input value={code} onChange={(event) => setCode(event.target.value)} required />
+      </label>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={canManageDepartment}
+          onChange={(event) => setCanManageDepartment(event.target.checked)}
+        />
+        <span>Gerencia dados do departamento</span>
+      </label>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={canManageMembers}
+          onChange={(event) => setCanManageMembers(event.target.checked)}
+        />
+        <span>Gerencia cargos e pessoas</span>
+      </label>
+      <button className="button button--primary" type="submit" disabled={isPending}>
+        <Plus size={17} aria-hidden="true" />
+        {isPending ? 'Criando...' : 'Criar cargo'}
+      </button>
+    </form>
+  )
+}
+
+function MembershipForm({
+  activeRoles,
+  existingMemberships,
+  isPending,
+  onSubmit,
+}: {
+  activeRoles: DepartmentRole[]
+  existingMemberships: DepartmentMembership[]
+  isPending: boolean
+  onSubmit: (payload: { person_id: number; role_id: number }) => void
+}) {
+  const { data: people = [] } = usePeople()
+  const [personId, setPersonId] = useState('')
+  const [roleId, setRoleId] = useState('')
+  const linkedPersonIds = useMemo(
+    () => new Set(existingMemberships.map((membership) => membership.person.id)),
+    [existingMemberships],
+  )
+  const selectablePeople = people.filter((person) => !linkedPersonIds.has(person.id))
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    onSubmit({
+      person_id: Number(personId),
+      role_id: Number(roleId),
+    })
+    setPersonId('')
+    setRoleId('')
+  }
+
+  return (
+    <form className="department-inline-form" onSubmit={handleSubmit}>
+      <label className="form-field">
+        <span>Pessoa</span>
+        <select value={personId} onChange={(event) => setPersonId(event.target.value)} required>
+          <option value="">Selecione</option>
+          {selectablePeople.map((person) => (
+            <option key={person.id} value={person.id}>{person.display_name}</option>
+          ))}
+        </select>
+      </label>
+      <label className="form-field">
+        <span>Cargo</span>
+        <select value={roleId} onChange={(event) => setRoleId(event.target.value)} required>
+          <option value="">Selecione</option>
+          {activeRoles.map((role) => (
+            <option key={role.id} value={role.id}>{role.name}</option>
+          ))}
+        </select>
+      </label>
+      <button className="button button--primary" type="submit" disabled={isPending || activeRoles.length === 0}>
+        <Plus size={17} aria-hidden="true" />
+        {isPending ? 'Adicionando...' : 'Adicionar pessoa'}
+      </button>
+    </form>
+  )
 }
 
 function DepartmentDetailPage() {
@@ -102,10 +248,17 @@ function DepartmentDetailPage() {
   const departmentId = Number(id)
   const isValidId = Number.isInteger(departmentId) && departmentId > 0
   const { data: department, error, isError, isLoading, refetch } = useDepartment(departmentId)
+  const rolesQuery = useDepartmentRoles(departmentId, Boolean(department))
+  const membershipsQuery = useDepartmentMemberships(departmentId, Boolean(department))
+  const roleMutations = useDepartmentRoleMutations(departmentId)
+  const membershipMutations = useDepartmentMembershipMutations(departmentId)
   const lifecycle = useDepartmentLifecycle(departmentId)
-  const canChange = useCan('DEPARTMENT_CHANGE')
+  const canChangeGlobally = useCan('DEPARTMENT_CHANGE')
   const canDeactivate = useCan('DEPARTMENT_DEACTIVATE')
   const canReactivate = useCan('DEPARTMENT_REACTIVATE')
+  const canChange = Boolean(department?.permissions?.can_manage_department || canChangeGlobally)
+  const canManageRoles = Boolean(department?.permissions?.can_manage_roles)
+  const canManageMembers = Boolean(department?.permissions?.can_manage_members)
   const [dialogMode, setDialogMode] = useState<'deactivate' | 'reactivate' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState(() => {
@@ -114,6 +267,9 @@ function DepartmentDetailPage() {
   })
   const isNotFound = !isValidId || (error instanceof DepartmentHttpError && error.status === 404)
   const isActionPending = lifecycle.deactivate.isPending || lifecycle.reactivate.isPending
+  const roles = rolesQuery.data ?? []
+  const memberships = membershipsQuery.data ?? []
+  const activeRoles = roles.filter((role) => role.active)
 
   useEffect(() => {
     if (location.state) {
@@ -139,6 +295,16 @@ function DepartmentDetailPage() {
       setDialogMode(null)
     } catch (lifecycleError) {
       setActionError(businessErrorMessage(lifecycleError))
+    }
+  }
+
+  const runAction = async (action: () => Promise<unknown>, message: string) => {
+    setActionError(null)
+    try {
+      await action()
+      setSuccessMessage(message)
+    } catch (mutationError) {
+      setActionError(businessErrorMessage(mutationError))
     }
   }
 
@@ -199,21 +365,218 @@ function DepartmentDetailPage() {
           </header>
 
           {successMessage ? <div className="form-alert form-alert--success" role="status">{successMessage}</div> : null}
+          {actionError ? <div className="form-alert form-alert--error" role="alert">{actionError}</div> : null}
 
           <div className="profile-content">
             <section className="profile-section">
-              <h2>Dados do departamento</h2>
+              <h2>Visao geral</h2>
               <dl className="profile-details">
                 <DetailItem label="Nome" value={department.nome} />
                 <DetailItem label="Codigo" value={department.codigo} />
                 <DetailItem label="Status" value={department.ativo ? 'Ativo' : 'Inativo'} />
                 <DetailItem label="Criado em" value={formatDate(department.criado_em)} />
               </dl>
+              <p className="page-heading__description">{department.descricao || 'Sem descricao cadastrada.'}</p>
             </section>
 
             <section className="profile-section">
-              <h2>Descricao</h2>
-              <p className="page-heading__description">{department.descricao || 'Sem descricao cadastrada.'}</p>
+              <div className="section-heading-row">
+                <h2>Cargos</h2>
+                {rolesQuery.isFetching ? <span className="table-muted">Atualizando...</span> : null}
+              </div>
+              {canManageRoles ? (
+                <RoleForm
+                  isPending={roleMutations.create.isPending}
+                  onSubmit={(payload) =>
+                    void runAction(
+                      () => roleMutations.create.mutateAsync(payload),
+                      'Cargo criado com sucesso.',
+                    )
+                  }
+                />
+              ) : null}
+              <div className="table-shell table-shell--section">
+                <table className="people-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Codigo</th>
+                      <th>Status</th>
+                      <th>Permissoes</th>
+                      {canManageRoles ? <th className="people-table__actions-header">Acoes</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roles.map((role) => (
+                      <tr key={role.id}>
+                        <td>{role.name}</td>
+                        <td>{role.code}</td>
+                        <td><RoleStatusBadge active={role.active} /></td>
+                        <td>
+                          {[
+                            role.can_manage_department ? 'Departamento' : null,
+                            role.can_manage_members ? 'Cargos e pessoas' : null,
+                          ].filter(Boolean).join(', ') || '-'}
+                        </td>
+                        {canManageRoles ? (
+                          <td>
+                            <div className="table-actions">
+                              <button
+                                className="button button--secondary"
+                                type="button"
+                                onClick={() =>
+                                  void runAction(
+                                    () => roleMutations.update.mutateAsync({
+                                      roleId: role.id,
+                                      payload: {
+                                        name: role.name,
+                                        can_manage_department: !role.can_manage_department,
+                                        can_manage_members: role.can_manage_members,
+                                      },
+                                    }),
+                                    'Cargo atualizado com sucesso.',
+                                  )
+                                }
+                              >
+                                <Save size={16} aria-hidden="true" />
+                                Departamento
+                              </button>
+                              <button
+                                className="button button--secondary"
+                                type="button"
+                                onClick={() =>
+                                  void runAction(
+                                    () => roleMutations.update.mutateAsync({
+                                      roleId: role.id,
+                                      payload: {
+                                        name: role.name,
+                                        can_manage_department: role.can_manage_department,
+                                        can_manage_members: !role.can_manage_members,
+                                      },
+                                    }),
+                                    'Cargo atualizado com sucesso.',
+                                  )
+                                }
+                              >
+                                <Save size={16} aria-hidden="true" />
+                                Pessoas
+                              </button>
+                              <button
+                                className="button button--secondary"
+                                type="button"
+                                onClick={() =>
+                                  void runAction(
+                                    () => role.active
+                                      ? roleMutations.deactivate.mutateAsync(role.id)
+                                      : roleMutations.reactivate.mutateAsync(role.id),
+                                    role.active ? 'Cargo inativado com sucesso.' : 'Cargo reativado com sucesso.',
+                                  )
+                                }
+                              >
+                                <RefreshCcw size={16} aria-hidden="true" />
+                                {role.active ? 'Inativar' : 'Reativar'}
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                    {roles.length === 0 ? (
+                      <tr><td colSpan={canManageRoles ? 5 : 4} className="table-muted">Nenhum cargo cadastrado.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="profile-section">
+              <div className="section-heading-row">
+                <h2>Pessoas</h2>
+                {membershipsQuery.isFetching ? <span className="table-muted">Atualizando...</span> : null}
+              </div>
+              {canManageMembers ? (
+                <MembershipForm
+                  activeRoles={activeRoles}
+                  existingMemberships={memberships}
+                  isPending={membershipMutations.create.isPending}
+                  onSubmit={(payload) =>
+                    void runAction(
+                      () => membershipMutations.create.mutateAsync(payload),
+                      'Pessoa adicionada ao departamento.',
+                    )
+                  }
+                />
+              ) : null}
+              <div className="table-shell table-shell--section">
+                <table className="people-table">
+                  <thead>
+                    <tr>
+                      <th>Pessoa</th>
+                      <th>Cargo</th>
+                      <th>Status</th>
+                      <th>Elegibilidade</th>
+                      <th>Entrada</th>
+                      {canManageMembers ? <th className="people-table__actions-header">Acoes</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {memberships.map((membership) => (
+                      <tr key={membership.id}>
+                        <td>{membership.person.display_name}</td>
+                        <td>
+                          <select
+                            disabled={!canManageMembers || membership.status !== 'ACTIVE'}
+                            value={membership.role.id}
+                            onChange={(event) =>
+                              void runAction(
+                                () => membershipMutations.update.mutateAsync({
+                                  membershipId: membership.id,
+                                  payload: { role_id: Number(event.target.value) },
+                                }),
+                                'Cargo da pessoa atualizado.',
+                              )
+                            }
+                          >
+                            {activeRoles.map((role) => (
+                              <option key={role.id} value={role.id}>{role.name}</option>
+                            ))}
+                            {!membership.role.active ? (
+                              <option value={membership.role.id}>{membership.role.name}</option>
+                            ) : null}
+                          </select>
+                        </td>
+                        <td>{membership.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}</td>
+                        <td>{membership.operationally_eligible ? 'Elegivel' : 'Nao elegivel'}</td>
+                        <td>{formatDate(membership.joined_at)}</td>
+                        {canManageMembers ? (
+                          <td>
+                            <button
+                              className="button button--secondary"
+                              type="button"
+                              onClick={() =>
+                                void runAction(
+                                  () => membership.status === 'ACTIVE'
+                                    ? membershipMutations.deactivate.mutateAsync(membership.id)
+                                    : membershipMutations.reactivate.mutateAsync(membership.id),
+                                  membership.status === 'ACTIVE'
+                                    ? 'Pessoa inativada no departamento.'
+                                    : 'Pessoa reativada no departamento.',
+                                )
+                              }
+                            >
+                              <RefreshCcw size={16} aria-hidden="true" />
+                              {membership.status === 'ACTIVE' ? 'Inativar' : 'Reativar'}
+                            </button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                    {memberships.length === 0 ? (
+                      <tr><td colSpan={canManageMembers ? 6 : 5} className="table-muted">Nenhuma pessoa vinculada.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
 

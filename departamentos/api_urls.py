@@ -7,6 +7,46 @@ urlpatterns = [
     path("departments/", api_views.DepartmentListCreateView.as_view(), name="department-list"),
     path("departments/<int:pk>/", api_views.DepartmentDetailView.as_view(), name="department-detail"),
     path(
+        "departments/<int:department_id>/roles/",
+        api_views.DepartmentRoleListCreateView.as_view(),
+        name="department-role-list",
+    ),
+    path(
+        "departments/<int:department_id>/roles/<int:role_id>/",
+        api_views.DepartmentRoleDetailView.as_view(),
+        name="department-role-detail",
+    ),
+    path(
+        "departments/<int:department_id>/roles/<int:role_id>/deactivate/",
+        api_views.DepartmentRoleDeactivateView.as_view(),
+        name="department-role-deactivate",
+    ),
+    path(
+        "departments/<int:department_id>/roles/<int:role_id>/reactivate/",
+        api_views.DepartmentRoleReactivateView.as_view(),
+        name="department-role-reactivate",
+    ),
+    path(
+        "departments/<int:department_id>/members/",
+        api_views.DepartmentMembershipListCreateView.as_view(),
+        name="department-membership-list",
+    ),
+    path(
+        "departments/<int:department_id>/members/<int:membership_id>/",
+        api_views.DepartmentMembershipDetailView.as_view(),
+        name="department-membership-detail",
+    ),
+    path(
+        "departments/<int:department_id>/members/<int:membership_id>/deactivate/",
+        api_views.DepartmentMembershipDeactivateView.as_view(),
+        name="department-membership-deactivate",
+    ),
+    path(
+        "departments/<int:department_id>/members/<int:membership_id>/reactivate/",
+        api_views.DepartmentMembershipReactivateView.as_view(),
+        name="department-membership-reactivate",
+    ),
+    path(
         "departments/<int:pk>/deactivate/",
         api_views.DepartmentDeactivateView.as_view(),
         name="department-deactivate",
