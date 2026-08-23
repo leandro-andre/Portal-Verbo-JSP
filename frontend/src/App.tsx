@@ -6,6 +6,10 @@ import AccessRequestPage from './pages/AccessRequestPage'
 import AccessRequestDetailPage from './pages/AccessRequestDetailPage'
 import AccessRequestsPage from './pages/AccessRequestsPage'
 import ActivateAccountPage from './pages/ActivateAccountPage'
+import DepartmentCreatePage from './pages/DepartmentCreatePage'
+import DepartmentDetailPage from './pages/DepartmentDetailPage'
+import DepartmentEditPage from './pages/DepartmentEditPage'
+import DepartmentsPage from './pages/DepartmentsPage'
 import DiscipleshipClassCreatePage from './pages/DiscipleshipClassCreatePage'
 import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
 import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
@@ -105,6 +109,10 @@ function AdminRoutes() {
         <Route path="/usuarios/:id" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
+        <Route path="/departamentos" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentsPage /></AuthorizedRoute>} />
+        <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
+        <Route path="/departamentos/:id/editar" element={<AuthorizedRoute capability="DEPARTMENT_CHANGE"><DepartmentEditPage /></AuthorizedRoute>} />
+        <Route path="/departamentos/:id" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentDetailPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/:classId/aulas/:lessonId/chamada" element={<DiscipleshipAttendancePage />} />

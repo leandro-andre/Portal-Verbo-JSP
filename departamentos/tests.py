@@ -1,10 +1,13 @@
 from datetime import date, time
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from .models import (
     CultoPadrao,
@@ -27,7 +30,20 @@ from .permissions import (
     usuario_pode_gerenciar_escalas,
     usuario_pode_gerenciar_membros,
 )
+from .services import (
+    INVALID_DEPARTMENT_TRANSITION,
+    DepartmentError,
+    deactivate_department,
+    reactivate_department,
+)
 from .utils import gerar_escalas_do_mes_para_departamento, membro_esta_indisponivel
+from usuarios.roles import (
+    PASTOR_GROUP,
+    PORTAL_ADMIN_GROUP,
+    SECRETARY_GROUP,
+    get_role_codes,
+    setup_portal_roles,
+)
 
 
 class DepartamentosModelsTests(TestCase):
@@ -1043,3 +1059,261 @@ class EscalasInternasViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(EscalaItem.objects.filter(pk=item.pk).exists())
         self.assertContains(response, "Membro removido da escala com sucesso")
+
+
+class DepartmentLifecycleServiceTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="department.lifecycle",
+            password="senha-forte-123",
+            status_eclesiastico=user_model.StatusEclesiastico.MEMBRO,
+        )
+        self.department = Departamento.objects.create(nome="Juniores")
+        self.participacao = DepartamentoMembro.objects.create(
+            membro=self.user,
+            departamento=self.department,
+            papel=DepartamentoMembro.Papel.LIDERADO,
+            ativo=True,
+        )
+        self.escala = Escala.objects.create(
+            departamento=self.department,
+            titulo="Escala Juniores",
+            data="2026-09-06",
+            horario="18:00",
+            ativa=True,
+        )
+
+    def test_deactivate_e_reactivate_preservam_relacoes_legadas(self):
+        department_id = self.department.pk
+
+        department = deactivate_department(self.department)
+
+        self.assertEqual(department.pk, department_id)
+        self.assertFalse(department.ativo)
+        self.assertTrue(Departamento.objects.filter(pk=department_id).exists())
+        self.assertTrue(DepartamentoMembro.objects.filter(pk=self.participacao.pk, ativo=True).exists())
+        self.assertTrue(Escala.objects.filter(pk=self.escala.pk).exists())
+
+        department = reactivate_department(department)
+
+        self.assertEqual(department.pk, department_id)
+        self.assertTrue(department.ativo)
+
+    def test_transicoes_invalidas_retornam_erro(self):
+        with self.assertRaises(DepartmentError) as active_ctx:
+            reactivate_department(self.department)
+        self.assertEqual(active_ctx.exception.code, INVALID_DEPARTMENT_TRANSITION)
+
+        department = deactivate_department(self.department)
+        with self.assertRaises(DepartmentError) as inactive_ctx:
+            deactivate_department(department)
+        self.assertEqual(inactive_ctx.exception.code, INVALID_DEPARTMENT_TRANSITION)
+
+
+class DepartmentApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.department = Departamento.objects.create(
+            nome="Louvor API",
+            codigo="louvor-api",
+            descricao="Equipe de louvor.",
+        )
+        self.admin = self.make_user_with_role("department.api.admin", PORTAL_ADMIN_GROUP)
+        self.secretary = self.make_user_with_role("department.api.secretary", SECRETARY_GROUP)
+        self.pastor = self.make_user_with_role("department.api.pastor", PASTOR_GROUP, eh_pastor=True)
+        self.common = self.user_model.objects.create_user(
+            username="department.api.common",
+            password="senha-forte-123",
+        )
+
+    def make_user_with_role(self, username, group_name, **kwargs):
+        usuario = self.user_model.objects.create_user(
+            username=username,
+            password="senha-forte-123",
+            **kwargs,
+        )
+        usuario.groups.add(Group.objects.get(name=group_name))
+        return usuario
+
+    def test_list_e_detail(self):
+        self.client.force_authenticate(self.pastor)
+
+        list_response = self.client.get(reverse("department-list"))
+        detail_response = self.client.get(reverse("department-detail", args=[self.department.pk]))
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail_response.json()["codigo"], "louvor-api")
+        self.assertNotIn("membros", detail_response.json())
+
+    def test_list_filtra_status(self):
+        Departamento.objects.create(nome="Inativo API", codigo="inativo-api", ativo=False)
+        self.client.force_authenticate(self.admin)
+
+        active_response = self.client.get(reverse("department-list"), {"status": "ACTIVE"})
+        inactive_response = self.client.get(reverse("department-list"), {"status": "INACTIVE"})
+
+        self.assertEqual({item["codigo"] for item in active_response.json()}, {"louvor-api"})
+        self.assertEqual({item["codigo"] for item in inactive_response.json()}, {"inativo-api"})
+
+    def test_create_department_nasce_ativo_e_normaliza_codigo(self):
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(
+            reverse("department-list"),
+            {
+                "nome": "Juniores",
+                "codigo": "Departamento Juniores",
+                "descricao": "Equipe de juniores.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["codigo"], "departamento-juniores")
+        self.assertTrue(response.json()["ativo"])
+        self.assertTrue(Departamento.objects.get(codigo="departamento-juniores").ativo)
+
+    def test_create_rejeita_overposting_status_e_membros(self):
+        self.client.force_authenticate(self.admin)
+
+        status_response = self.client.post(
+            reverse("department-list"),
+            {"nome": "Status Indevido", "codigo": "status-indevido", "ativo": False},
+            format="json",
+        )
+        membros_response = self.client.post(
+            reverse("department-list"),
+            {"nome": "Membros Indevidos", "codigo": "membros-indevidos", "membros": [self.admin.pk]},
+            format="json",
+        )
+
+        self.assertEqual(status_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(membros_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(Departamento.objects.filter(codigo="status-indevido").exists())
+        self.assertFalse(Departamento.objects.filter(codigo="membros-indevidos").exists())
+
+    def test_create_valida_nome_e_codigo_unico(self):
+        self.client.force_authenticate(self.admin)
+
+        blank_response = self.client.post(
+            reverse("department-list"),
+            {"nome": "   ", "codigo": "novo-codigo"},
+            format="json",
+        )
+        duplicate_response = self.client.post(
+            reverse("department-list"),
+            {"nome": "Outro Louvor", "codigo": "Louvor API"},
+            format="json",
+        )
+
+        self.assertEqual(blank_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_permite_nome_descricao_e_codigo_eh_imutavel(self):
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.patch(
+            reverse("department-detail", args=[self.department.pk]),
+            {
+                "nome": "Louvor Atualizado",
+                "descricao": "Descricao nova.",
+            },
+            format="json",
+        )
+        codigo_response = self.client.patch(
+            reverse("department-detail", args=[self.department.pk]),
+            {"codigo": "outro-codigo"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["nome"], "Louvor Atualizado")
+        self.assertEqual(response.json()["codigo"], "louvor-api")
+        self.assertEqual(codigo_response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_lifecycle_api(self):
+        self.client.force_authenticate(self.admin)
+
+        deactivate_response = self.client.post(reverse("department-deactivate", args=[self.department.pk]))
+        invalid_deactivate = self.client.post(reverse("department-deactivate", args=[self.department.pk]))
+        reactivate_response = self.client.post(reverse("department-reactivate", args=[self.department.pk]))
+        invalid_reactivate = self.client.post(reverse("department-reactivate", args=[self.department.pk]))
+
+        self.assertEqual(deactivate_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(deactivate_response.json()["ativo"])
+        self.assertEqual(invalid_deactivate.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(invalid_deactivate.json()["code"], INVALID_DEPARTMENT_TRANSITION)
+        self.assertEqual(reactivate_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(reactivate_response.json()["ativo"])
+        self.assertEqual(invalid_reactivate.status_code, status.HTTP_409_CONFLICT)
+
+    def test_delete_nao_e_permitido(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.delete(reverse("department-detail", args=[self.department.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Departamento.objects.filter(pk=self.department.pk).exists())
+
+    def test_permissions_por_global_role(self):
+        for user in [self.admin, self.secretary]:
+            self.client.force_authenticate(user)
+            self.assertEqual(self.client.get(reverse("department-list")).status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                self.client.post(
+                    reverse("department-list"),
+                    {"nome": f"Novo {user.username}", "codigo": f"novo-{user.pk}"},
+                    format="json",
+                ).status_code,
+                status.HTTP_201_CREATED,
+            )
+
+        self.client.force_authenticate(self.pastor)
+        self.assertEqual(self.client.get(reverse("department-list")).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.client.patch(
+                reverse("department-detail", args=[self.department.pk]),
+                {"nome": "Pastor Change"},
+                format="json",
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.post(reverse("department-deactivate", args=[self.department.pk])).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        self.client.force_authenticate(self.common)
+        self.assertEqual(self.client.get(reverse("department-list")).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_secretaria_departamento_nao_atribui_global_role(self):
+        secretaria = Departamento.objects.create(nome="Secretaria API", codigo=Departamento.CodigoSistema.SECRETARIA)
+        usuario = self.user_model.objects.create_user(
+            username="department.secretaria.member",
+            password="senha-forte-123",
+        )
+        DepartamentoMembro.objects.create(
+            membro=usuario,
+            departamento=secretaria,
+            papel=DepartamentoMembro.Papel.LIDER,
+        )
+
+        self.assertNotIn("SECRETARY", get_role_codes(usuario))
+        self.assertFalse(usuario.groups.filter(name=SECRETARY_GROUP).exists())
+
+    def test_midia_departamento_nao_cria_global_role(self):
+        midia = Departamento.objects.create(nome="Midia API", codigo=Departamento.CodigoSistema.MIDIA)
+        usuario = self.user_model.objects.create_user(
+            username="department.midia.member",
+            password="senha-forte-123",
+        )
+        DepartamentoMembro.objects.create(
+            membro=usuario,
+            departamento=midia,
+            papel=DepartamentoMembro.Papel.LIDER,
+        )
+
+        self.assertEqual(get_role_codes(usuario), [])

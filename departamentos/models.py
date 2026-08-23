@@ -50,6 +50,10 @@ class Departamento(models.Model):
         ordering = ["nome"]
         verbose_name = "Departamento"
         verbose_name_plural = "Departamentos"
+        permissions = [
+            ("deactivate_departamento", "Can deactivate departamento"),
+            ("reactivate_departamento", "Can reactivate departamento"),
+        ]
 
     def __str__(self):
         return self.nome

@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("api/", include("usuarios.api_urls")),
     path("api/", include("church_journey.urls")),
+    path("api/", include("departamentos.api_urls")),
     path("api/people/", include("pessoas.urls")),
     path("usuarios/", include("usuarios.urls")),
     path("", include("core.urls")),
