@@ -8,6 +8,7 @@ from .models import (
     DiscipleshipEnrollment,
     DiscipleshipLesson,
     Membership,
+    MembershipStatusHistory,
 )
 
 
@@ -24,6 +25,24 @@ class MembershipAdmin(admin.ModelAdmin):
     list_filter = ("status", "member_since", "approved_at")
     list_select_related = ("person", "approved_by")
     search_fields = ("person__full_name", "person__preferred_name", "person__email")
+
+
+@admin.register(MembershipStatusHistory)
+class MembershipStatusHistoryAdmin(admin.ModelAdmin):
+    list_display = ("membership", "from_status", "to_status", "changed_by", "changed_at")
+    list_filter = ("from_status", "to_status", "changed_at")
+    list_select_related = ("membership__person", "changed_by")
+    readonly_fields = ("membership", "from_status", "to_status", "changed_by", "changed_at", "reason")
+    search_fields = ("membership__person__full_name", "membership__person__preferred_name", "changed_by__username")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(DiscipleshipClass)

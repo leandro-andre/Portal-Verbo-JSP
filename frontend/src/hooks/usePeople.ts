@@ -2,15 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPerson,
   approveMembership,
+  deactivateMembership,
   getEligibleMembershipPeople,
   getChurchJourney,
   getMembership,
+  getMembershipHistory,
+  getMemberships,
   getPeople,
   getPerson,
+  reactivateMembership,
   startChurchJourney,
   updatePerson,
 } from '../api/people'
-import type { CreatePersonInput, StartChurchJourneyInput, UpdatePersonInput } from '../types/person'
+import type { CreatePersonInput, MembershipStatus, StartChurchJourneyInput, UpdatePersonInput } from '../types/person'
 
 export const peopleQueryKey = ['people']
 
@@ -26,7 +30,15 @@ export function membershipQueryKey(personId: number) {
   return ['people', personId, 'membership'] as const
 }
 
+export function membershipHistoryQueryKey(personId: number) {
+  return ['people', personId, 'membership-history'] as const
+}
+
 export const eligibleMembershipPeopleQueryKey = ['membership', 'eligible'] as const
+
+export function membershipsQueryKey(status?: MembershipStatus) {
+  return ['memberships', status ?? 'ALL'] as const
+}
 
 export function usePeople() {
   return useQuery({
@@ -75,6 +87,34 @@ export function useEligibleMembershipPeople() {
   })
 }
 
+export function useMemberships(status?: MembershipStatus) {
+  return useQuery({
+    queryKey: membershipsQueryKey(status),
+    queryFn: () => getMemberships(status),
+  })
+}
+
+export function useMembershipHistory(personId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: membershipHistoryQueryKey(personId),
+    queryFn: () => getMembershipHistory(personId),
+    enabled: enabled && Number.isFinite(personId),
+  })
+}
+
+async function invalidateMembershipQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  personId: number,
+) {
+  await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
+  await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
+  await queryClient.invalidateQueries({ queryKey: membershipQueryKey(personId) })
+  await queryClient.invalidateQueries({ queryKey: membershipHistoryQueryKey(personId) })
+  await queryClient.invalidateQueries({ queryKey: eligibleMembershipPeopleQueryKey })
+  await queryClient.invalidateQueries({ queryKey: ['memberships'] })
+  await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
+}
+
 export function useApproveMembership(personId: number) {
   const queryClient = useQueryClient()
 
@@ -82,11 +122,31 @@ export function useApproveMembership(personId: number) {
     mutationFn: () => approveMembership(personId),
     onSuccess: async (membership) => {
       queryClient.setQueryData(membershipQueryKey(personId), membership)
-      await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
-      await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
-      await queryClient.invalidateQueries({ queryKey: membershipQueryKey(personId) })
-      await queryClient.invalidateQueries({ queryKey: eligibleMembershipPeopleQueryKey })
-      await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
+      await invalidateMembershipQueries(queryClient, personId)
+    },
+  })
+}
+
+export function useDeactivateMembership(personId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (reason: string) => deactivateMembership(personId, reason),
+    onSuccess: async (membership) => {
+      queryClient.setQueryData(membershipQueryKey(personId), membership)
+      await invalidateMembershipQueries(queryClient, personId)
+    },
+  })
+}
+
+export function useReactivateMembership(personId: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (reason: string) => reactivateMembership(personId, reason),
+    onSuccess: async (membership) => {
+      queryClient.setQueryData(membershipQueryKey(personId), membership)
+      await invalidateMembershipQueries(queryClient, personId)
     },
   })
 }

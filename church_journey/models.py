@@ -60,6 +60,8 @@ class Membership(models.Model):
         verbose_name_plural = "Membresias"
         permissions = [
             ("approve_membership", "Can approve membership"),
+            ("deactivate_membership", "Can deactivate membership"),
+            ("reactivate_membership", "Can reactivate membership"),
         ]
 
     def __str__(self):
@@ -88,6 +90,43 @@ class Membership(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class MembershipStatusHistory(models.Model):
+    membership = models.ForeignKey(
+        Membership,
+        verbose_name="Membresia",
+        on_delete=models.CASCADE,
+        related_name="status_history",
+    )
+    from_status = models.CharField(
+        "Status anterior",
+        max_length=20,
+        choices=Membership.Status.choices,
+    )
+    to_status = models.CharField(
+        "Novo status",
+        max_length=20,
+        choices=Membership.Status.choices,
+    )
+    changed_by = models.ForeignKey(
+        "usuarios.Usuario",
+        verbose_name="Alterado por",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="membership_status_changes",
+    )
+    changed_at = models.DateTimeField("Alterado em", default=timezone.now)
+    reason = models.TextField("Motivo/observacao", blank=True)
+
+    class Meta:
+        ordering = ["-changed_at", "-id"]
+        verbose_name = "Historico de status de membresia"
+        verbose_name_plural = "Historicos de status de membresia"
+
+    def __str__(self):
+        return f"{self.membership}: {self.from_status} -> {self.to_status}"
 
 
 class DiscipleshipClass(models.Model):

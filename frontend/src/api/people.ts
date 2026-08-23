@@ -4,6 +4,8 @@ import type {
   CreatePersonInput,
   EligibleMembershipPerson,
   Membership,
+  MembershipStatus,
+  MembershipStatusHistory,
   Person,
   PossibleDuplicateResponse,
   StartChurchJourneyInput,
@@ -225,6 +227,73 @@ export async function approveMembership(personId: number): Promise<Membership> {
   }
 
   return data as Membership
+}
+
+async function postMembershipLifecycle(
+  personId: number,
+  action: 'deactivate' | 'reactivate',
+  reason: string,
+): Promise<Membership> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/membership/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify({ reason }),
+  })
+
+  const data: unknown = await response.json().catch(() => null)
+
+  if (response.status === 409 && isRecord(data) && typeof data.code === 'string') {
+    throw new ApiHttpError(409, data.message as string || 'Nao foi possivel alterar a membresia.')
+  }
+
+  if (response.status === 403) {
+    throw new ApiHttpError(403, 'Voce nao tem permissao para alterar membresia.')
+  }
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel alterar a membresia.')
+  }
+
+  return data as Membership
+}
+
+export async function deactivateMembership(personId: number, reason: string): Promise<Membership> {
+  return postMembershipLifecycle(personId, 'deactivate', reason)
+}
+
+export async function reactivateMembership(personId: number, reason: string): Promise<Membership> {
+  return postMembershipLifecycle(personId, 'reactivate', reason)
+}
+
+export async function getMembershipHistory(personId: number): Promise<MembershipStatusHistory[]> {
+  const response = await fetch(`/api/people/${personId}/membership/history/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    return []
+  }
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar o historico da membresia.')
+  }
+
+  return response.json() as Promise<MembershipStatusHistory[]>
+}
+
+export async function getMemberships(status?: MembershipStatus): Promise<Membership[]> {
+  const params = status ? `?status=${status}` : ''
+  const response = await fetch(`/api/memberships/${params}`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar membresias.')
+  }
+
+  return response.json() as Promise<Membership[]>
 }
 
 export async function getEligibleMembershipPeople(): Promise<EligibleMembershipPerson[]> {

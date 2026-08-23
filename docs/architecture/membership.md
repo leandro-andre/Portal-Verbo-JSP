@@ -95,9 +95,37 @@ Membership nasce `ACTIVE`, o que faz `ChurchStatus` derivado passar a `MEMBER`.
 A aprovacao nao altera `Person.status`, `Usuario`, roles, groups, enrollments,
 attendance, lessons ou dados legados.
 
-## Futuro
+## Lifecycle
 
-Lifecycle ACTIVE/INACTIVE, reativacao e historico ficam fora desta etapa.
+Membership pode alternar entre `ACTIVE` e `INACTIVE` sem criar outro registro.
+O mesmo `id`, `member_since`, `approved_by` e `approved_at` sao preservados em
+inativacoes e reativacoes.
+
+Endpoints:
+
+- `POST /api/people/{person_id}/membership/deactivate/`
+- `POST /api/people/{person_id}/membership/reactivate/`
+- `GET /api/people/{person_id}/membership/history/`
+- `GET /api/memberships/?status=ACTIVE|INACTIVE`
+
+O payload de inativacao e reativacao aceita apenas `reason` opcional. Qualquer
+tentativa de repetir o status atual retorna erro de dominio
+`INVALID_MEMBERSHIP_TRANSITION`.
+
+Cada transicao grava `MembershipStatusHistory` com `from_status`, `to_status`,
+`changed_by`, `changed_at` e `reason`. A aprovacao inicial nao entra neste
+historico porque ja possui campos proprios em `Membership`.
+
+Permissoes:
+
+- Administrador e Secretaria podem aprovar, inativar e reativar Membership.
+- Pastor pode visualizar Membership, mas nao aprovar nem alterar lifecycle.
+
+Membro inativo continua tendo Membership e `ChurchStatus.INACTIVE_MEMBER`; ele
+nao volta a ser visitante e nao fica elegivel para nova aprovacao. A reativacao
+devolve `ChurchStatus.MEMBER`.
+
+## Futuro
 
 Departamentos e escalas ainda nao mudam nesta fase. Regra futura: apenas
 `Membership ACTIVE` deve permitir novos vinculos departamentais e novas

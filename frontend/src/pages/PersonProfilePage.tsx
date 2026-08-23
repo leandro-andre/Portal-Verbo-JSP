@@ -10,12 +10,15 @@ import { useCan } from '../hooks/useAuth'
 import {
   useChurchJourney,
   useApproveMembership,
+  useDeactivateMembership,
   useMembership,
+  useMembershipHistory,
   usePerson,
+  useReactivateMembership,
   useStartChurchJourney,
   useUpdatePerson,
 } from '../hooks/usePeople'
-import type { ChurchJourney, Membership, Person, PersonStatus } from '../types/person'
+import type { ChurchJourney, Membership, MembershipStatusHistory, Person, PersonStatus } from '../types/person'
 import { formatBrazilianMobile } from '../utils/phone'
 
 function formatDate(value: string) {
@@ -267,6 +270,83 @@ function ApproveMembershipDialog({
   )
 }
 
+function MembershipLifecycleDialog({
+  error,
+  isOpen,
+  isPending,
+  membership,
+  mode,
+  onClose,
+  onConfirm,
+  onReasonChange,
+  person,
+  reason,
+}: {
+  error: string | null
+  isOpen: boolean
+  isPending: boolean
+  membership: Membership
+  mode: 'deactivate' | 'reactivate'
+  onClose: () => void
+  onConfirm: () => void
+  onReasonChange: (value: string) => void
+  person: Person
+  reason: string
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  const isDeactivate = mode === 'deactivate'
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-labelledby="membership-lifecycle-title" aria-modal="true">
+        <h2 id="membership-lifecycle-title">
+          {isDeactivate ? `Inativar a membresia de ${person.display_name}?` : `Reativar a membresia de ${person.display_name}?`}
+        </h2>
+        <div className="dialog-copy">
+          <p>
+            {isDeactivate
+              ? 'Esta pessoa deixara de ser considerada membro ativo.'
+              : 'A membresia original sera preservada.'}
+          </p>
+          <p>O historico de membresia sera preservado.</p>
+          <p>Membro desde {formatDate(membership.member_since)}.</p>
+        </div>
+
+        <label className="field-group" htmlFor="membership_lifecycle_reason">
+          <span>{isDeactivate ? 'Motivo (opcional)' : 'Motivo/observacao (opcional)'}</span>
+          <textarea
+            id="membership_lifecycle_reason"
+            className="textarea-control"
+            rows={4}
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+          />
+        </label>
+
+        {error ? (
+          <div className="form-alert form-alert--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="form-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            {isPending
+              ? isDeactivate ? 'Inativando...' : 'Reativando...'
+              : isDeactivate ? 'Inativar membresia' : 'Reativar membresia'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function churchStatusLabel(status: ChurchJourney['church_status']) {
   if (status === 'VISITOR') {
     return 'Visitante'
@@ -284,6 +364,8 @@ function PersonProfile({
   canChangePeople,
   canCreateChurchJourney,
   canApproveMembership,
+  canDeactivateMembership,
+  canReactivateMembership,
   canViewChurchJourney,
   canViewUsers,
   churchJourney,
@@ -291,9 +373,13 @@ function PersonProfile({
   churchJourneyLoading,
   membership,
   membershipError,
+  membershipHistory,
+  membershipHistoryLoading,
   membershipLoading,
   onLifecycleClick,
   onApproveMembershipClick,
+  onDeactivateMembershipClick,
+  onReactivateMembershipClick,
   onStartChurchJourneyClick,
   person,
   successMessage,
@@ -301,6 +387,8 @@ function PersonProfile({
   canChangePeople: boolean
   canCreateChurchJourney: boolean
   canApproveMembership: boolean
+  canDeactivateMembership: boolean
+  canReactivateMembership: boolean
   canViewChurchJourney: boolean
   canViewUsers: boolean
   churchJourney: ChurchJourney | null | undefined
@@ -308,9 +396,13 @@ function PersonProfile({
   churchJourneyLoading: boolean
   membership: Membership | null | undefined
   membershipError: boolean
+  membershipHistory: MembershipStatusHistory[]
+  membershipHistoryLoading: boolean
   membershipLoading: boolean
   onLifecycleClick: () => void
   onApproveMembershipClick: () => void
+  onDeactivateMembershipClick: () => void
+  onReactivateMembershipClick: () => void
   onStartChurchJourneyClick: () => void
   person: Person
   successMessage: string | null
@@ -441,6 +533,20 @@ function PersonProfile({
                     </button>
                   </div>
                 ) : null}
+                {membership?.status === 'ACTIVE' && canDeactivateMembership ? (
+                  <div className="form-actions">
+                    <button className="button button--secondary" type="button" onClick={onDeactivateMembershipClick}>
+                      Inativar membresia
+                    </button>
+                  </div>
+                ) : null}
+                {membership?.status === 'INACTIVE' && canReactivateMembership ? (
+                  <div className="form-actions">
+                    <button className="button button--primary" type="button" onClick={onReactivateMembershipClick}>
+                      Reativar membresia
+                    </button>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="church-journey-empty">
@@ -453,6 +559,28 @@ function PersonProfile({
                     Iniciar jornada
                   </button>
                 ) : null}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {membership ? (
+          <section className="profile-section">
+            <h2>Historico da membresia</h2>
+            {membershipHistoryLoading ? (
+              <p className="page-heading__description">Carregando historico...</p>
+            ) : membershipHistory.length === 0 ? (
+              <p className="page-heading__description">Nenhuma alteracao de situacao registrada.</p>
+            ) : (
+              <div className="timeline-list">
+                {membershipHistory.map((entry) => (
+                  <div className="timeline-item" key={entry.id}>
+                    <strong>{formatDate(entry.changed_at)}</strong>
+                    <span>{entry.to_status === 'ACTIVE' ? 'Membresia reativada' : 'Membresia inativada'}</span>
+                    <span>Por {entry.changed_by?.display_name || '-'}</span>
+                    {entry.reason ? <span>Observacao: {entry.reason}</span> : null}
+                  </div>
+                ))}
               </div>
             )}
           </section>
@@ -474,6 +602,8 @@ function PersonProfilePage() {
   const canViewChurchJourney = useCan('CHURCH_JOURNEY_VIEW')
   const canViewMembership = useCan('MEMBERSHIP_VIEW')
   const canApproveMembership = useCan('MEMBERSHIP_APPROVE')
+  const canDeactivateMembership = useCan('MEMBERSHIP_DEACTIVATE')
+  const canReactivateMembership = useCan('MEMBERSHIP_REACTIVATE')
   const canCreateChurchJourney = useCan('CHURCH_JOURNEY_CREATE')
   const {
     data: churchJourney,
@@ -485,7 +615,13 @@ function PersonProfilePage() {
     isError: isMembershipError,
     isLoading: isMembershipLoading,
   } = useMembership(personId, canViewMembership && isValidId)
+  const {
+    data: membershipHistory = [],
+    isLoading: isMembershipHistoryLoading,
+  } = useMembershipHistory(personId, canViewMembership && Boolean(membership))
   const approveMembership = useApproveMembership(personId)
+  const deactivateMembership = useDeactivateMembership(personId)
+  const reactivateMembership = useReactivateMembership(personId)
   const startChurchJourney = useStartChurchJourney(personId)
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
@@ -494,6 +630,9 @@ function PersonProfilePage() {
   const [startJourneyError, setStartJourneyError] = useState<string | null>(null)
   const [isApproveMembershipDialogOpen, setIsApproveMembershipDialogOpen] = useState(false)
   const [approveMembershipError, setApproveMembershipError] = useState<string | null>(null)
+  const [membershipLifecycleMode, setMembershipLifecycleMode] = useState<'deactivate' | 'reactivate' | null>(null)
+  const [membershipLifecycleReason, setMembershipLifecycleReason] = useState('')
+  const [membershipLifecycleError, setMembershipLifecycleError] = useState<string | null>(null)
   const [startedAt, setStartedAt] = useState(getTodayInputValue)
   const navigationState = location.state as { successMessage?: string } | null
   const successMessage = lifecycleSuccessMessage ?? navigationState?.successMessage ?? null
@@ -544,6 +683,28 @@ function PersonProfilePage() {
     }
   }
 
+  const handleMembershipLifecycleConfirm = async () => {
+    if (!membership || !membershipLifecycleMode) {
+      return
+    }
+
+    setMembershipLifecycleError(null)
+
+    try {
+      if (membershipLifecycleMode === 'deactivate') {
+        await deactivateMembership.mutateAsync(membershipLifecycleReason)
+        setLifecycleSuccessMessage('Membresia inativada com sucesso.')
+      } else {
+        await reactivateMembership.mutateAsync(membershipLifecycleReason)
+        setLifecycleSuccessMessage('Membresia reativada com sucesso.')
+      }
+      setMembershipLifecycleMode(null)
+      setMembershipLifecycleReason('')
+    } catch {
+      setMembershipLifecycleError('Nao foi possivel alterar a membresia.')
+    }
+  }
+
   return (
     <section className="person-profile-page">
       {isLoading && isValidId ? (
@@ -573,7 +734,9 @@ function PersonProfilePage() {
           <PersonProfile
             canChangePeople={canChangePeople}
             canApproveMembership={canApproveMembership}
+            canDeactivateMembership={canDeactivateMembership}
             canCreateChurchJourney={canCreateChurchJourney}
+            canReactivateMembership={canReactivateMembership}
             canViewChurchJourney={canViewChurchJourney}
             canViewUsers={canViewUsers}
             churchJourney={churchJourney}
@@ -581,10 +744,17 @@ function PersonProfilePage() {
             churchJourneyLoading={isChurchJourneyLoading}
             membership={membership}
             membershipError={isMembershipError}
+            membershipHistory={membershipHistory}
+            membershipHistoryLoading={isMembershipHistoryLoading}
             membershipLoading={isMembershipLoading}
             onApproveMembershipClick={() => {
               setApproveMembershipError(null)
               setIsApproveMembershipDialogOpen(true)
+            }}
+            onDeactivateMembershipClick={() => {
+              setMembershipLifecycleError(null)
+              setMembershipLifecycleReason('')
+              setMembershipLifecycleMode('deactivate')
             }}
             onLifecycleClick={() => {
               setLifecycleError(null)
@@ -594,6 +764,11 @@ function PersonProfilePage() {
               setStartJourneyError(null)
               setStartedAt(getTodayInputValue())
               setIsStartJourneyDialogOpen(true)
+            }}
+            onReactivateMembershipClick={() => {
+              setMembershipLifecycleError(null)
+              setMembershipLifecycleReason('')
+              setMembershipLifecycleMode('reactivate')
             }}
             person={person}
             successMessage={successMessage}
@@ -624,6 +799,20 @@ function PersonProfilePage() {
             onConfirm={() => void handleApproveMembershipConfirm()}
             person={person}
           />
+          {membership && membershipLifecycleMode ? (
+            <MembershipLifecycleDialog
+              error={membershipLifecycleError}
+              isOpen={membershipLifecycleMode !== null}
+              isPending={deactivateMembership.isPending || reactivateMembership.isPending}
+              membership={membership}
+              mode={membershipLifecycleMode}
+              onClose={() => setMembershipLifecycleMode(null)}
+              onConfirm={() => void handleMembershipLifecycleConfirm()}
+              onReasonChange={setMembershipLifecycleReason}
+              person={person}
+              reason={membershipLifecycleReason}
+            />
+          ) : null}
         </>
       ) : null}
     </section>

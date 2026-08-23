@@ -935,6 +935,26 @@
   width: 100%;
 }
 
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-item {
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  gap: 4px;
+  padding-left: 12px;
+}
+
+.timeline-item strong {
+  color: var(--color-text);
+}
+
 .back-link {
   align-items: center;
   color: var(--color-primary);

@@ -67,13 +67,10 @@ def is_visitor(person):
 
 
 def get_membership(person):
-    if person is None:
+    if person is None or person.pk is None:
         return None
 
-    try:
-        return person.membership
-    except ObjectDoesNotExist:
-        return None
+    return Membership.objects.filter(person=person).first()
 
 
 def has_membership(person):

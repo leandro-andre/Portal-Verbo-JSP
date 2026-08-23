@@ -23,7 +23,10 @@ from .serializers import (
     DiscipleshipEnrollmentSerializer,
     DiscipleshipLessonSerializer,
     MembershipEligiblePersonSerializer,
+    MembershipLifecycleSerializer,
+    MembershipListSerializer,
     MembershipSerializer,
+    MembershipStatusHistorySerializer,
 )
 from .services import (
     ChurchJourneyError,
@@ -37,6 +40,8 @@ from .services import (
     enroll_person_in_discipleship_class,
     get_eligible_enrollments_for_lesson,
     record_discipleship_attendance_batch,
+    deactivate_membership,
+    reactivate_membership,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_class,
@@ -83,6 +88,24 @@ class CanApproveMembership(BasePermission):
             request.user.is_authenticated
             and request.user.is_active
             and request.user.has_perm("church_journey.approve_membership")
+        )
+
+
+class CanDeactivateMembership(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("church_journey.deactivate_membership")
+        )
+
+
+class CanReactivateMembership(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("church_journey.reactivate_membership")
         )
 
 
@@ -148,6 +171,74 @@ class MembershipEligibleListView(APIView):
 
     def get(self, request):
         return Response(MembershipEligiblePersonSerializer(get_membership_eligible_people(), many=True).data)
+
+
+class MembershipListView(APIView):
+    permission_classes = [CanViewMembership]
+
+    def get(self, request):
+        status_filter = (request.query_params.get("status") or "").upper()
+        queryset = Membership.objects.select_related("person", "approved_by").order_by(
+            "person__full_name",
+            "person_id",
+        )
+        if status_filter in Membership.Status.values:
+            queryset = queryset.filter(status=status_filter)
+        return Response(MembershipListSerializer(queryset, many=True).data)
+
+
+class PersonMembershipDeactivateView(APIView):
+    permission_classes = [CanDeactivateMembership]
+
+    def post(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        membership = get_object_or_404(Membership, person=person)
+        serializer = MembershipLifecycleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            membership = deactivate_membership(
+                membership,
+                changed_by=request.user,
+                reason=serializer.validated_data.get("reason", ""),
+            )
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(MembershipSerializer(membership).data)
+
+
+class PersonMembershipReactivateView(APIView):
+    permission_classes = [CanReactivateMembership]
+
+    def post(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        membership = get_object_or_404(Membership, person=person)
+        serializer = MembershipLifecycleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            membership = reactivate_membership(
+                membership,
+                changed_by=request.user,
+                reason=serializer.validated_data.get("reason", ""),
+            )
+        except ChurchJourneyError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(MembershipSerializer(membership).data)
+
+
+class PersonMembershipHistoryView(APIView):
+    permission_classes = [CanViewMembership]
+
+    def get(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        membership = get_object_or_404(Membership, person=person)
+        history = membership.status_history.select_related("changed_by")
+        return Response(MembershipStatusHistorySerializer(history, many=True).data)
 
 
 class HasDjangoPermission(BasePermission):

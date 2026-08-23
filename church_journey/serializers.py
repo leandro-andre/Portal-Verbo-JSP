@@ -11,6 +11,7 @@ from .models import (
     DiscipleshipEnrollment,
     DiscipleshipLesson,
     Membership,
+    MembershipStatusHistory,
 )
 
 
@@ -72,11 +73,52 @@ class MembershipSerializer(serializers.ModelSerializer):
         }
 
 
+class MembershipPersonSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    display_name = serializers.CharField()
+    full_name = serializers.CharField()
+
+
+class MembershipListSerializer(MembershipSerializer):
+    person = MembershipPersonSerializer(read_only=True)
+
+    class Meta(MembershipSerializer.Meta):
+        fields = MembershipSerializer.Meta.fields + ["person"]
+
+
 class MembershipEligiblePersonSerializer(serializers.Serializer):
     id = serializers.IntegerField(source="person.id")
     display_name = serializers.CharField(source="person.display_name")
     full_name = serializers.CharField(source="person.full_name")
     completed_at = serializers.DateField()
+
+
+class MembershipLifecycleSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True)
+
+
+class MembershipStatusHistorySerializer(serializers.ModelSerializer):
+    changed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MembershipStatusHistory
+        fields = [
+            "id",
+            "from_status",
+            "to_status",
+            "changed_by",
+            "changed_at",
+            "reason",
+        ]
+        read_only_fields = fields
+
+    def get_changed_by(self, obj):
+        if obj.changed_by_id is None:
+            return None
+        return {
+            "id": obj.changed_by_id,
+            "display_name": obj.changed_by.display_name,
+        }
 
 
 class DiscipleshipClassTeacherSerializer(serializers.Serializer):

@@ -49,6 +49,23 @@ export type Membership = {
   approved_at: string | null
   created_at: string
   updated_at: string
+  person?: {
+    id: number
+    display_name: string
+    full_name: string
+  }
+}
+
+export type MembershipStatusHistory = {
+  id: number
+  from_status: MembershipStatus
+  to_status: MembershipStatus
+  changed_by: {
+    id: number
+    display_name: string
+  } | null
+  changed_at: string
+  reason: string
 }
 
 export type EligibleMembershipPerson = {

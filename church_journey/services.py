@@ -10,6 +10,7 @@ from .models import (
     DiscipleshipEnrollment,
     DiscipleshipLesson,
     Membership,
+    MembershipStatusHistory,
 )
 from .selectors import get_discipleship_completion_eligibility, get_first_completed_discipleship
 
@@ -43,6 +44,7 @@ DISCIPLESHIP_ENROLLMENT_WITHDRAWN = "DISCIPLESHIP_ENROLLMENT_WITHDRAWN"
 DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED = "DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED"
 MEMBERSHIP_ALREADY_EXISTS = "MEMBERSHIP_ALREADY_EXISTS"
 DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP = "DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP"
+INVALID_MEMBERSHIP_TRANSITION = "INVALID_MEMBERSHIP_TRANSITION"
 
 COMPLETION_REASON_ERROR_CODES = {
     "CLASS_NOT_COMPLETED": DISCIPLESHIP_CLASS_NOT_COMPLETED,
@@ -482,3 +484,61 @@ def approve_membership(person, *, approved_by):
                 MEMBERSHIP_ALREADY_EXISTS,
                 "Esta pessoa ja possui membresia.",
             ) from exc
+
+
+def _change_membership_status(membership, *, to_status, changed_by, reason=""):
+    with transaction.atomic():
+        membership = Membership.objects.select_for_update().select_related(
+            "person",
+            "approved_by",
+        ).get(pk=membership.pk)
+        from_status = membership.status
+        if from_status == to_status:
+            raise ChurchJourneyError(
+                INVALID_MEMBERSHIP_TRANSITION,
+                "Esta transicao de membresia nao e valida.",
+            )
+        if {from_status, to_status} != {Membership.Status.ACTIVE, Membership.Status.INACTIVE}:
+            raise ChurchJourneyError(
+                INVALID_MEMBERSHIP_TRANSITION,
+                "Esta transicao de membresia nao e valida.",
+            )
+
+        membership.status = to_status
+        membership.save(update_fields=["status", "updated_at"])
+        MembershipStatusHistory.objects.create(
+            membership=membership,
+            from_status=from_status,
+            to_status=to_status,
+            changed_by=changed_by,
+            reason=(reason or "").strip(),
+        )
+        return membership
+
+
+def deactivate_membership(membership, *, changed_by, reason=""):
+    if membership.status != Membership.Status.ACTIVE:
+        raise ChurchJourneyError(
+            INVALID_MEMBERSHIP_TRANSITION,
+            "Somente membresias ativas podem ser inativadas.",
+        )
+    return _change_membership_status(
+        membership,
+        to_status=Membership.Status.INACTIVE,
+        changed_by=changed_by,
+        reason=reason,
+    )
+
+
+def reactivate_membership(membership, *, changed_by, reason=""):
+    if membership.status != Membership.Status.INACTIVE:
+        raise ChurchJourneyError(
+            INVALID_MEMBERSHIP_TRANSITION,
+            "Somente membresias inativas podem ser reativadas.",
+        )
+    return _change_membership_status(
+        membership,
+        to_status=Membership.Status.ACTIVE,
+        changed_by=changed_by,
+        reason=reason,
+    )

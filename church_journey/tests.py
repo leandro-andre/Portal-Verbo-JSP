@@ -20,7 +20,7 @@ from usuarios.roles import (
 )
 
 from .enums import ChurchStatus
-from .models import ChurchJourney, Membership
+from .models import ChurchJourney, Membership, MembershipStatusHistory
 from .models import (
     DiscipleshipAttendance,
     DiscipleshipClass,
@@ -59,6 +59,7 @@ from .services import (
     DISCIPLESHIP_ENROLLMENT_ALREADY_COMPLETED,
     DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP,
     DISCIPLESHIP_ENROLLMENT_WITHDRAWN,
+    INVALID_MEMBERSHIP_TRANSITION,
     MEMBERSHIP_ALREADY_EXISTS,
     DISCIPLESHIP_LESSON_DATE_CONFLICT,
     CANCELLED_DISCIPLESHIP_LESSON_DOES_NOT_ACCEPT_ATTENDANCE,
@@ -80,10 +81,12 @@ from .services import (
     complete_discipleship_enrollment,
     create_discipleship_class,
     create_discipleship_lesson,
+    deactivate_membership,
     enroll_person_in_discipleship_class,
     get_eligible_enrollments_for_lesson,
     record_discipleship_attendance,
     record_discipleship_attendance_batch,
+    reactivate_membership,
     start_church_journey,
     start_discipleship_class,
     update_discipleship_lesson,
@@ -2865,3 +2868,195 @@ class MembershipFoundationTests(APITestCase):
     def test_secretaria_recebe_approve_membership_e_pastor_nao(self):
         self.assertTrue(self.secretary.has_perm("church_journey.approve_membership"))
         self.assertFalse(self.pastor.has_perm("church_journey.approve_membership"))
+
+    def test_deactivate_membership_preserva_dados_e_cria_historico(self):
+        membership = self.create_membership()
+        original_id = membership.pk
+        original_member_since = membership.member_since
+        original_approved_by = membership.approved_by
+        original_approved_at = membership.approved_at
+
+        membership = deactivate_membership(
+            membership,
+            changed_by=self.secretary,
+            reason="Mudanca de cidade",
+        )
+
+        self.assertEqual(membership.pk, original_id)
+        self.assertEqual(membership.status, Membership.Status.INACTIVE)
+        self.assertEqual(membership.member_since, original_member_since)
+        self.assertEqual(membership.approved_by, original_approved_by)
+        self.assertEqual(membership.approved_at, original_approved_at)
+        self.assertEqual(get_church_status(self.person), ChurchStatus.INACTIVE_MEMBER)
+        history = MembershipStatusHistory.objects.get(membership=membership)
+        self.assertEqual(history.from_status, Membership.Status.ACTIVE)
+        self.assertEqual(history.to_status, Membership.Status.INACTIVE)
+        self.assertEqual(history.changed_by, self.secretary)
+        self.assertEqual(history.reason, "Mudanca de cidade")
+        self.assertIsNotNone(history.changed_at)
+
+    def test_reactivate_membership_preserva_dados_e_cria_historico(self):
+        membership = deactivate_membership(self.create_membership(), changed_by=self.secretary)
+        original_id = membership.pk
+        original_member_since = membership.member_since
+        original_approved_by = membership.approved_by
+        original_approved_at = membership.approved_at
+
+        membership = reactivate_membership(
+            membership,
+            changed_by=self.admin,
+            reason="Retorno a igreja",
+        )
+
+        self.assertEqual(membership.pk, original_id)
+        self.assertEqual(membership.status, Membership.Status.ACTIVE)
+        self.assertEqual(membership.member_since, original_member_since)
+        self.assertEqual(membership.approved_by, original_approved_by)
+        self.assertEqual(membership.approved_at, original_approved_at)
+        self.assertEqual(get_church_status(self.person), ChurchStatus.MEMBER)
+        history = MembershipStatusHistory.objects.order_by("-changed_at", "-id").first()
+        self.assertEqual(history.from_status, Membership.Status.INACTIVE)
+        self.assertEqual(history.to_status, Membership.Status.ACTIVE)
+        self.assertEqual(history.changed_by, self.admin)
+        self.assertEqual(history.reason, "Retorno a igreja")
+
+    def test_transicoes_invalidas_retornam_erro(self):
+        membership = self.create_membership()
+
+        with self.assertRaises(ChurchJourneyError) as deactivate_ctx:
+            reactivate_membership(membership, changed_by=self.admin)
+        self.assertEqual(deactivate_ctx.exception.code, INVALID_MEMBERSHIP_TRANSITION)
+
+        membership = deactivate_membership(membership, changed_by=self.admin)
+        with self.assertRaises(ChurchJourneyError) as reactivate_ctx:
+            deactivate_membership(membership, changed_by=self.admin)
+        self.assertEqual(reactivate_ctx.exception.code, INVALID_MEMBERSHIP_TRANSITION)
+
+    def test_membership_inactive_nao_vira_visitor_e_nao_pode_nova_approval(self):
+        membership = deactivate_membership(self.create_membership(), changed_by=self.admin)
+
+        self.assertEqual(get_church_status(self.person), ChurchStatus.INACTIVE_MEMBER)
+        self.assertFalse(can_create_membership(self.person))
+        with self.assertRaises(ChurchJourneyError) as ctx:
+            approve_membership(self.person, approved_by=self.admin)
+        self.assertEqual(ctx.exception.code, MEMBERSHIP_ALREADY_EXISTS)
+        self.assertEqual(Membership.objects.filter(person=self.person).count(), 1)
+        self.assertEqual(Membership.objects.get(person=self.person).pk, membership.pk)
+
+    def test_historico_registra_sequencia_de_transicoes(self):
+        membership = self.create_membership()
+        membership = deactivate_membership(membership, changed_by=self.admin, reason="Primeira inativacao")
+        membership = reactivate_membership(membership, changed_by=self.secretary, reason="Retorno")
+        membership = deactivate_membership(membership, changed_by=self.admin, reason="Segunda inativacao")
+
+        self.assertEqual(Membership.objects.filter(person=self.person).count(), 1)
+        history = list(MembershipStatusHistory.objects.filter(membership=membership).order_by("changed_at", "id"))
+        self.assertEqual(len(history), 3)
+        self.assertEqual(
+            [(item.from_status, item.to_status) for item in history],
+            [
+                (Membership.Status.ACTIVE, Membership.Status.INACTIVE),
+                (Membership.Status.INACTIVE, Membership.Status.ACTIVE),
+                (Membership.Status.ACTIVE, Membership.Status.INACTIVE),
+            ],
+        )
+
+    def test_api_deactivate_e_reactivate_membership(self):
+        membership = self.create_membership()
+        self.client.force_authenticate(self.secretary)
+
+        deactivate_response = self.client.post(
+            reverse("person-membership-deactivate", args=[self.person.pk]),
+            {"reason": "Mudanca de cidade", "status": "ACTIVE"},
+            format="json",
+        )
+
+        self.assertEqual(deactivate_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(deactivate_response.json()["id"], membership.pk)
+        self.assertEqual(deactivate_response.json()["status"], Membership.Status.INACTIVE)
+
+        reactivate_response = self.client.post(
+            reverse("person-membership-reactivate", args=[self.person.pk]),
+            {"reason": "Retorno"},
+            format="json",
+        )
+
+        self.assertEqual(reactivate_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(reactivate_response.json()["id"], membership.pk)
+        self.assertEqual(reactivate_response.json()["status"], Membership.Status.ACTIVE)
+        membership.refresh_from_db()
+        self.assertEqual(membership.member_since, date(2026, 8, 18))
+        self.assertEqual(membership.approved_by, self.admin)
+
+    def test_api_lifecycle_sem_membership_retorna_404(self):
+        self.client.force_authenticate(self.admin)
+
+        self.assertEqual(
+            self.client.post(reverse("person-membership-deactivate", args=[self.person.pk]), {}, format="json").status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertEqual(
+            self.client.post(reverse("person-membership-reactivate", args=[self.person.pk]), {}, format="json").status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_api_lifecycle_transicao_invalida(self):
+        self.create_membership()
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(reverse("person-membership-reactivate", args=[self.person.pk]), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], INVALID_MEMBERSHIP_TRANSITION)
+
+    def test_api_lifecycle_permissions(self):
+        self.create_membership()
+
+        for user in [self.admin, self.secretary]:
+            self.client.force_authenticate(user)
+            response = self.client.post(reverse("person-membership-deactivate", args=[self.person.pk]), {}, format="json")
+            self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_409_CONFLICT])
+
+        self.client.force_authenticate(self.pastor)
+        response = self.client.post(reverse("person-membership-reactivate", args=[self.person.pk]), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        comum = self.user_model.objects.create_user(username="membership.lifecycle.common", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+        response = self.client.post(reverse("person-membership-reactivate", args=[self.person.pk]), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_api_history_retorna_ordenado_e_read_only(self):
+        membership = self.create_membership()
+        membership = deactivate_membership(membership, changed_by=self.admin, reason="Inativacao")
+        reactivate_membership(membership, changed_by=self.secretary, reason="Retorno")
+        self.client.force_authenticate(self.admin)
+        url = reverse("person-membership-history", args=[self.person.pk])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.json()), 2)
+        self.assertEqual(response.json()[0]["to_status"], Membership.Status.ACTIVE)
+        self.assertEqual(response.json()[0]["changed_by"]["id"], self.secretary.pk)
+        self.assertEqual(self.client.post(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(self.client.patch(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(self.client.delete(url).status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_api_memberships_lista_por_status(self):
+        active = self.create_membership()
+        inactive_person = Person.objects.create(full_name="Inativo Lista Status", birth_date=date(1997, 1, 1))
+        inactive = deactivate_membership(self.create_membership(inactive_person), changed_by=self.admin)
+        self.client.force_authenticate(self.admin)
+
+        active_response = self.client.get(reverse("membership-list"), {"status": "ACTIVE"})
+        inactive_response = self.client.get(reverse("membership-list"), {"status": "INACTIVE"})
+
+        self.assertEqual({item["id"] for item in active_response.json()}, {active.pk})
+        self.assertEqual({item["id"] for item in inactive_response.json()}, {inactive.pk})
+
+    def test_secretaria_recebe_lifecycle_e_pastor_nao(self):
+        self.assertTrue(self.secretary.has_perm("church_journey.deactivate_membership"))
+        self.assertTrue(self.secretary.has_perm("church_journey.reactivate_membership"))
+        self.assertFalse(self.pastor.has_perm("church_journey.deactivate_membership"))
+        self.assertFalse(self.pastor.has_perm("church_journey.reactivate_membership"))

@@ -242,7 +242,8 @@ Membership — Pessoa X
 2026-01-15 → ACTIVE
 ```
 
-Uma estrutura como `MembershipStatusHistory` poderá ser utilizada para essa finalidade.
+A implementacao atual utiliza `MembershipStatusHistory` para registrar cada
+transicao entre `ACTIVE` e `INACTIVE`, preservando a mesma `Membership`.
 
 ## 8. Departamentos
 
