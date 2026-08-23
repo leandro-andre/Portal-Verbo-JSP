@@ -9,11 +9,12 @@ import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
 import {
   useChurchJourney,
+  useMembership,
   usePerson,
   useStartChurchJourney,
   useUpdatePerson,
 } from '../hooks/usePeople'
-import type { ChurchJourney, Person, PersonStatus } from '../types/person'
+import type { ChurchJourney, Membership, Person, PersonStatus } from '../types/person'
 import { formatBrazilianMobile } from '../utils/phone'
 
 function formatDate(value: string) {
@@ -222,6 +223,9 @@ function churchStatusLabel(status: ChurchJourney['church_status']) {
   if (status === 'MEMBER') {
     return 'Membro'
   }
+  if (status === 'INACTIVE_MEMBER') {
+    return 'Membro inativo'
+  }
   return 'Indefinida'
 }
 
@@ -233,6 +237,9 @@ function PersonProfile({
   churchJourney,
   churchJourneyError,
   churchJourneyLoading,
+  membership,
+  membershipError,
+  membershipLoading,
   onLifecycleClick,
   onStartChurchJourneyClick,
   person,
@@ -245,6 +252,9 @@ function PersonProfile({
   churchJourney: ChurchJourney | null | undefined
   churchJourneyError: boolean
   churchJourneyLoading: boolean
+  membership: Membership | null | undefined
+  membershipError: boolean
+  membershipLoading: boolean
   onLifecycleClick: () => void
   onStartChurchJourneyClick: () => void
   person: Person
@@ -331,14 +341,30 @@ function PersonProfile({
         {canViewChurchJourney ? (
           <section className="profile-section">
             <h2>Jornada na igreja</h2>
-            {churchJourneyLoading ? (
+            {churchJourneyLoading || membershipLoading ? (
               <p className="page-heading__description">Carregando jornada...</p>
-            ) : churchJourneyError ? (
+            ) : churchJourneyError || membershipError ? (
               <p className="page-heading__description">Nao foi possivel carregar a jornada da igreja.</p>
             ) : churchJourney ? (
               <dl className="profile-details">
                 <DetailItem label="Situacao" value={churchStatusLabel(churchJourney.church_status)} />
                 <DetailItem label="Inicio" value={formatDate(churchJourney.started_at)} />
+                {membership ? (
+                  <>
+                    <DetailItem
+                      label="Membership"
+                      value={membership.status === 'ACTIVE' ? 'Aprovada' : 'Inativa'}
+                    />
+                    <DetailItem label="Membro desde" value={formatDate(membership.member_since)} />
+                    <DetailItem label="Aprovado em" value={formatDate(membership.approved_at ?? '')} />
+                    <DetailItem label="Aprovado por" value={membership.approved_by?.display_name || '-'} />
+                  </>
+                ) : (
+                  <DetailItem
+                    label="Membership"
+                    value={person.discipleship.membership_can_create ? 'Ainda nao aprovada' : 'Nao disponivel'}
+                  />
+                )}
                 <DetailItem
                   label="Discipulado"
                   value={
@@ -349,7 +375,7 @@ function PersonProfile({
                 />
                 <DetailItem
                   label="Elegibilidade para membresia"
-                  value={person.discipleship.membership_eligible ? 'Elegivel' : 'Nao elegivel'}
+                  value={person.discipleship.membership_can_create ? 'Elegivel' : 'Nao elegivel'}
                 />
               </dl>
             ) : (
@@ -382,12 +408,18 @@ function PersonProfilePage() {
   const canChangePeople = useCan('PEOPLE_CHANGE')
   const canViewUsers = useCan('USER_VIEW')
   const canViewChurchJourney = useCan('CHURCH_JOURNEY_VIEW')
+  const canViewMembership = useCan('MEMBERSHIP_VIEW')
   const canCreateChurchJourney = useCan('CHURCH_JOURNEY_CREATE')
   const {
     data: churchJourney,
     isError: isChurchJourneyError,
     isLoading: isChurchJourneyLoading,
   } = useChurchJourney(personId, canViewChurchJourney && isValidId)
+  const {
+    data: membership,
+    isError: isMembershipError,
+    isLoading: isMembershipLoading,
+  } = useMembership(personId, canViewMembership && isValidId)
   const startChurchJourney = useStartChurchJourney(personId)
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
@@ -466,6 +498,9 @@ function PersonProfilePage() {
             churchJourney={churchJourney}
             churchJourneyError={isChurchJourneyError}
             churchJourneyLoading={isChurchJourneyLoading}
+            membership={membership}
+            membershipError={isMembershipError}
+            membershipLoading={isMembershipLoading}
             onLifecycleClick={() => {
               setLifecycleError(null)
               setIsLifecycleDialogOpen(true)

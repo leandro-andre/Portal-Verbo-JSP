@@ -24,6 +24,69 @@ class ChurchJourney(models.Model):
         return f"Jornada eclesiastica de {self.person}"
 
 
+class Membership(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Ativa"
+        INACTIVE = "INACTIVE", "Inativa"
+
+    person = models.OneToOneField(
+        "pessoas.Person",
+        verbose_name="Pessoa",
+        on_delete=models.CASCADE,
+        related_name="membership",
+    )
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    member_since = models.DateField("Membro desde")
+    approved_by = models.ForeignKey(
+        "usuarios.Usuario",
+        verbose_name="Aprovado por",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="memberships_approved",
+    )
+    approved_at = models.DateTimeField("Aprovado em", blank=True, null=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["person__full_name", "person_id"]
+        verbose_name = "Membresia"
+        verbose_name_plural = "Membresias"
+
+    def __str__(self):
+        return f"Membresia de {self.person}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        if not self.person_id:
+            errors["person"] = "Informe a pessoa."
+        elif not hasattr(self.person, "church_journey"):
+            errors["person"] = "Membership exige jornada eclesiastica."
+        else:
+            from .selectors import has_completed_discipleship
+
+            if not has_completed_discipleship(self.person):
+                errors["person"] = "Membership exige discipulado concluido."
+
+        if not self.member_since:
+            errors["member_since"] = "Informe a data oficial de membresia."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
 class DiscipleshipClass(models.Model):
     class Status(models.TextChoices):
         PLANNED = "PLANNED", "Planejada"

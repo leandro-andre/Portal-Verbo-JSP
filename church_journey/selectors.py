@@ -2,7 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from .enums import ChurchStatus
-from .models import DiscipleshipAttendance, DiscipleshipEnrollment, DiscipleshipLesson
+from .models import DiscipleshipAttendance, DiscipleshipEnrollment, DiscipleshipLesson, Membership
 
 
 MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE = 75
@@ -23,6 +23,12 @@ def get_legacy_user_account(person):
 
 
 def get_church_status(person):
+    membership = get_membership(person)
+    if membership is not None:
+        if membership.status == Membership.Status.ACTIVE:
+            return ChurchStatus.MEMBER
+        if membership.status == Membership.Status.INACTIVE:
+            return ChurchStatus.INACTIVE_MEMBER
     if has_church_journey(person):
         return ChurchStatus.VISITOR
     return get_church_status_for_user_account(get_legacy_user_account(person))
@@ -52,8 +58,46 @@ def is_member(person):
     return get_church_status(person) == ChurchStatus.MEMBER
 
 
+def is_inactive_church_member(person):
+    return get_church_status(person) == ChurchStatus.INACTIVE_MEMBER
+
+
 def is_visitor(person):
     return get_church_status(person) == ChurchStatus.VISITOR
+
+
+def get_membership(person):
+    if person is None:
+        return None
+
+    try:
+        return person.membership
+    except ObjectDoesNotExist:
+        return None
+
+
+def has_membership(person):
+    return get_membership(person) is not None
+
+
+def is_active_member(person):
+    membership = get_membership(person)
+    return bool(membership is not None and membership.status == Membership.Status.ACTIVE)
+
+
+def is_inactive_member(person):
+    membership = get_membership(person)
+    return bool(membership is not None and membership.status == Membership.Status.INACTIVE)
+
+
+def get_membership_status(person):
+    membership = get_membership(person)
+    return membership.status if membership is not None else None
+
+
+def get_member_since(person):
+    membership = get_membership(person)
+    return membership.member_since if membership is not None else None
 
 
 def has_completed_discipleship(person):
@@ -89,6 +133,10 @@ def get_completed_discipleship(person):
 
 def is_eligible_for_membership(person):
     return get_completed_discipleship(person) is not None
+
+
+def can_create_membership(person):
+    return is_eligible_for_membership(person) and not has_membership(person)
 
 
 def get_frequency_eligible_lessons(enrollment):

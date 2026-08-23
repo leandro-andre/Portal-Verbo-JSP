@@ -7,6 +7,7 @@ from .models import (
     DiscipleshipClassAssistant,
     DiscipleshipEnrollment,
     DiscipleshipLesson,
+    Membership,
 )
 
 
@@ -14,6 +15,14 @@ from .models import (
 class ChurchJourneyAdmin(admin.ModelAdmin):
     list_display = ("person", "started_at", "created_at", "updated_at")
     list_select_related = ("person",)
+    search_fields = ("person__full_name", "person__preferred_name", "person__email")
+
+
+@admin.register(Membership)
+class MembershipAdmin(admin.ModelAdmin):
+    list_display = ("person", "status", "member_since", "approved_by", "approved_at")
+    list_filter = ("status", "member_since", "approved_at")
+    list_select_related = ("person", "approved_by")
     search_fields = ("person__full_name", "person__preferred_name", "person__email")
 
 

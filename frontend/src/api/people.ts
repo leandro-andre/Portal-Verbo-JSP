@@ -2,6 +2,7 @@ import type {
   ApiValidationErrors,
   ChurchJourney,
   CreatePersonInput,
+  Membership,
   Person,
   PossibleDuplicateResponse,
   StartChurchJourneyInput,
@@ -181,6 +182,22 @@ export async function getChurchJourney(personId: number): Promise<ChurchJourney 
   }
 
   return response.json() as Promise<ChurchJourney>
+}
+
+export async function getMembership(personId: number): Promise<Membership | null> {
+  const response = await fetch(`/api/people/${personId}/membership/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar a membresia.')
+  }
+
+  return response.json() as Promise<Membership>
 }
 
 export async function startChurchJourney(

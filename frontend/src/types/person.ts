@@ -27,12 +27,29 @@ export type Person = {
       name: string
     } | null
     membership_eligible: boolean
+    membership_can_create: boolean
   }
   created_at: string
   updated_at: string
 }
 
-export type ChurchJourneyStatus = 'VISITOR' | 'MEMBER' | 'UNKNOWN'
+export type ChurchJourneyStatus = 'UNKNOWN' | 'VISITOR' | 'MEMBER' | 'INACTIVE_MEMBER'
+
+export type MembershipStatus = 'ACTIVE' | 'INACTIVE'
+
+export type Membership = {
+  id: number
+  person_id: number
+  status: MembershipStatus
+  member_since: string
+  approved_by: {
+    id: number
+    display_name: string
+  } | null
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
 
 export type ChurchJourney = {
   id: number

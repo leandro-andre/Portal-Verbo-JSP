@@ -13,6 +13,7 @@ from .models import (
     DiscipleshipClassAssistant,
     DiscipleshipEnrollment,
     DiscipleshipLesson,
+    Membership,
 )
 from .serializers import (
     ChurchJourneySerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     DiscipleshipClassSerializer,
     DiscipleshipEnrollmentSerializer,
     DiscipleshipLessonSerializer,
+    MembershipSerializer,
 )
 from .services import (
     ChurchJourneyError,
@@ -63,6 +65,15 @@ class CanUseChurchJourney(BasePermission):
         )
 
 
+class CanViewMembership(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("church_journey.view_membership")
+        )
+
+
 class PersonChurchJourneyView(APIView):
     permission_classes = [CanUseChurchJourney]
 
@@ -91,6 +102,18 @@ class PersonChurchJourneyView(APIView):
             )
 
         return Response(ChurchJourneySerializer(journey).data, status=status.HTTP_201_CREATED)
+
+
+class PersonMembershipView(APIView):
+    permission_classes = [CanViewMembership]
+
+    def get(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        membership = get_object_or_404(
+            Membership.objects.select_related("person", "approved_by"),
+            person=person,
+        )
+        return Response(MembershipSerializer(membership).data)
 
 
 class HasDjangoPermission(BasePermission):

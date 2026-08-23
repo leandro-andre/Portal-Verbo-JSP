@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
@@ -18,7 +19,7 @@ from usuarios.roles import (
 )
 
 from .enums import ChurchStatus
-from .models import ChurchJourney
+from .models import ChurchJourney, Membership
 from .models import (
     DiscipleshipAttendance,
     DiscipleshipClass,
@@ -32,8 +33,16 @@ from .selectors import (
     get_discipleship_attendance_summary,
     get_discipleship_completed_at,
     get_discipleship_completion_eligibility,
+    get_member_since,
+    get_membership,
+    get_membership_status,
     has_completed_discipleship,
+    has_membership,
+    can_create_membership,
+    is_active_member,
     is_eligible_for_membership,
+    is_inactive_member,
+    is_inactive_church_member,
     is_legacy_department_eligible,
     is_member,
     is_visitor,
@@ -2457,3 +2466,208 @@ class DiscipleshipCompletionApiTests(APITestCase):
         self.client.force_authenticate(comum)
         self.assertEqual(self.client.get(self.completion_url()).status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(pastor.has_perm("church_journey.view_discipleshipenrollment"))
+
+
+class MembershipFoundationTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.admin = self.user_model.objects.create_user(
+            username="membership.admin",
+            password="senha-forte-123",
+        )
+        self.admin.groups.add(Group.objects.get(name=PORTAL_ADMIN_GROUP))
+        self.secretary = self.user_model.objects.create_user(
+            username="membership.secretary",
+            password="senha-forte-123",
+        )
+        self.secretary.groups.add(Group.objects.get(name=SECRETARY_GROUP))
+        self.pastor = self.user_model.objects.create_user(
+            username="membership.pastor",
+            password="senha-forte-123",
+        )
+        self.pastor.groups.add(Group.objects.get(name=PASTOR_GROUP))
+        self.person = Person.objects.create(full_name="Pessoa Membership", birth_date=date(1990, 1, 1))
+        self.teacher = Person.objects.create(full_name="Professor Membership", birth_date=date(1980, 1, 1))
+
+    def create_completed_discipleship(self, person=None, completed_at=date(2026, 8, 18)):
+        person = person or self.person
+        discipleship_class = DiscipleshipClass.objects.create(
+            name=f"Discipulado {person.pk}",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=1,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        return DiscipleshipEnrollment.objects.create(
+            person=person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            completed_at=completed_at,
+        )
+
+    def prepare_membership_person(self, person=None, completed_at=date(2026, 8, 18)):
+        person = person or self.person
+        ChurchJourney.objects.create(person=person, started_at=date(2026, 8, 1))
+        self.create_completed_discipleship(person=person, completed_at=completed_at)
+        return person
+
+    def create_membership(self, person=None, status_value=Membership.Status.ACTIVE):
+        person = self.prepare_membership_person(person)
+        return Membership.objects.create(
+            person=person,
+            status=status_value,
+            member_since=date(2026, 8, 18),
+            approved_by=self.admin,
+            approved_at=timezone.datetime(2026, 8, 22, 12, 0, tzinfo=timezone.get_current_timezone()),
+        )
+
+    def test_person_pode_existir_sem_membership(self):
+        self.assertFalse(has_membership(self.person))
+        self.assertIsNone(get_membership(self.person))
+
+    def test_membership_exige_person(self):
+        membership = Membership(member_since=date(2026, 8, 18))
+
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
+    def test_membership_exige_church_journey(self):
+        self.create_completed_discipleship()
+        membership = Membership(person=self.person, member_since=date(2026, 8, 18))
+
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
+    def test_membership_exige_discipulado_concluido(self):
+        ChurchJourney.objects.create(person=self.person)
+        membership = Membership(person=self.person, member_since=date(2026, 8, 18))
+
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
+    def test_uma_person_tem_no_maximo_uma_membership(self):
+        self.create_membership()
+
+        with self.assertRaises(ValidationError):
+            Membership.objects.create(person=self.person, member_since=date(2026, 8, 18))
+
+    def test_campos_membership_active_inactive_member_since_e_aprovacao(self):
+        membership = self.create_membership(status_value=Membership.Status.ACTIVE)
+        inactive_person = Person.objects.create(full_name="Membro Inativo", birth_date=date(1992, 1, 1))
+        inactive = self.create_membership(inactive_person, Membership.Status.INACTIVE)
+
+        self.assertEqual(membership.status, Membership.Status.ACTIVE)
+        self.assertEqual(inactive.status, Membership.Status.INACTIVE)
+        self.assertEqual(membership.member_since, date(2026, 8, 18))
+        self.assertEqual(membership.approved_by, self.admin)
+        self.assertIsNotNone(membership.approved_at)
+
+    def test_apagar_membership_nao_apaga_person(self):
+        membership = self.create_membership()
+        person_id = self.person.pk
+
+        membership.delete()
+
+        self.assertTrue(Person.objects.filter(pk=person_id).exists())
+
+    def test_church_status_sem_membership(self):
+        ChurchJourney.objects.create(person=self.person)
+
+        self.assertEqual(get_church_status(self.person), ChurchStatus.VISITOR)
+
+    def test_church_status_membership_active(self):
+        self.create_membership()
+
+        self.assertEqual(get_church_status(self.person), ChurchStatus.MEMBER)
+
+    def test_church_status_membership_inactive_nao_vira_visitor(self):
+        self.create_membership(status_value=Membership.Status.INACTIVE)
+
+        self.assertEqual(get_church_status(self.person), ChurchStatus.INACTIVE_MEMBER)
+        self.assertTrue(is_inactive_church_member(self.person))
+        self.assertFalse(is_visitor(self.person))
+
+    def test_church_status_unknown_sem_jornada_e_membership(self):
+        self.assertEqual(get_church_status(self.person), ChurchStatus.UNKNOWN)
+
+    def test_membership_prioriza_novo_dominio_sobre_legado(self):
+        self.create_membership(status_value=Membership.Status.INACTIVE)
+        self.user_model.objects.create_user(
+            username="legacy.member.with.inactive.membership",
+            password="senha-forte-123",
+            person=self.person,
+            status_eclesiastico=self.user_model.StatusEclesiastico.MEMBRO,
+        )
+
+        self.assertEqual(get_church_status(self.person), ChurchStatus.INACTIVE_MEMBER)
+
+    def test_selectors_membership(self):
+        membership = self.create_membership(status_value=Membership.Status.ACTIVE)
+
+        self.assertEqual(get_membership(self.person), membership)
+        self.assertTrue(has_membership(self.person))
+        self.assertTrue(is_active_member(self.person))
+        self.assertFalse(is_inactive_member(self.person))
+        self.assertEqual(get_membership_status(self.person), Membership.Status.ACTIVE)
+        self.assertEqual(get_member_since(self.person), date(2026, 8, 18))
+
+    def test_can_create_membership_considera_membership_existente(self):
+        self.prepare_membership_person()
+
+        self.assertTrue(is_eligible_for_membership(self.person))
+        self.assertTrue(can_create_membership(self.person))
+
+        Membership.objects.create(person=self.person, member_since=date(2026, 8, 18))
+
+        self.assertTrue(is_eligible_for_membership(self.person))
+        self.assertFalse(can_create_membership(self.person))
+
+    def test_pastor_nao_vira_membro_sem_membership(self):
+        self.user_model.objects.create_user(
+            username="pastor.sem.membership",
+            password="senha-forte-123",
+            person=self.person,
+            eh_pastor=True,
+        )
+
+        self.assertNotEqual(get_church_status(self.person), ChurchStatus.MEMBER)
+
+    def test_get_membership_api_retorna_dados(self):
+        membership = self.create_membership()
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(reverse("person-membership", args=[self.person.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["id"], membership.pk)
+        self.assertEqual(response.json()["person_id"], self.person.pk)
+        self.assertEqual(response.json()["status"], Membership.Status.ACTIVE)
+        self.assertEqual(response.json()["approved_by"]["display_name"], self.admin.display_name)
+
+    def test_get_membership_api_sem_membership_retorna_404(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.get(reverse("person-membership", args=[self.person.pk]))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_membership_api_permissions(self):
+        for user in [self.admin, self.secretary, self.pastor]:
+            self.client.force_authenticate(user)
+            response = self.client.get(reverse("person-membership", args=[self.person.pk]))
+            self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_404_NOT_FOUND])
+
+        comum = self.user_model.objects.create_user(username="membership.common", password="senha-forte-123")
+        self.client.force_authenticate(comum)
+        response = self.client.get(reverse("person-membership", args=[self.person.pk]))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_membership_api_nao_aceita_mutations(self):
+        self.client.force_authenticate(self.admin)
+        url = reverse("person-membership", args=[self.person.pk])
+
+        self.assertEqual(self.client.post(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(self.client.patch(url, {}, format="json").status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(self.client.delete(url).status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

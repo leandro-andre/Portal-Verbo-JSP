@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPerson,
   getChurchJourney,
+  getMembership,
   getPeople,
   getPerson,
   startChurchJourney,
@@ -17,6 +18,10 @@ export function personQueryKey(id: number) {
 
 export function churchJourneyQueryKey(personId: number) {
   return ['people', personId, 'church-journey'] as const
+}
+
+export function membershipQueryKey(personId: number) {
+  return ['people', personId, 'membership'] as const
 }
 
 export function usePeople() {
@@ -47,6 +52,14 @@ export function useChurchJourney(personId: number, enabled: boolean) {
   return useQuery({
     queryKey: churchJourneyQueryKey(personId),
     queryFn: () => getChurchJourney(personId),
+    enabled: enabled && Number.isFinite(personId),
+  })
+}
+
+export function useMembership(personId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: membershipQueryKey(personId),
+    queryFn: () => getMembership(personId),
     enabled: enabled && Number.isFinite(personId),
   })
 }

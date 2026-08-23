@@ -3,12 +3,14 @@ from rest_framework import serializers
 from pessoas.models import Person
 
 from .enums import ChurchStatus
+from .selectors import get_church_status
 from .models import (
     ChurchJourney,
     DiscipleshipAttendance,
     DiscipleshipClass,
     DiscipleshipEnrollment,
     DiscipleshipLesson,
+    Membership,
 )
 
 
@@ -35,7 +37,39 @@ class ChurchJourneySerializer(serializers.ModelSerializer):
         )
 
     def get_church_status(self, obj):
-        return ChurchStatus.VISITOR.value
+        return get_church_status(obj.person).value
+
+
+class MembershipApprovedBySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    display_name = serializers.CharField()
+
+
+class MembershipSerializer(serializers.ModelSerializer):
+    person_id = serializers.IntegerField(read_only=True)
+    approved_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Membership
+        fields = [
+            "id",
+            "person_id",
+            "status",
+            "member_since",
+            "approved_by",
+            "approved_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_approved_by(self, obj):
+        if obj.approved_by_id is None:
+            return None
+        return {
+            "id": obj.approved_by_id,
+            "display_name": obj.approved_by.display_name,
+        }
 
 
 class DiscipleshipClassTeacherSerializer(serializers.Serializer):

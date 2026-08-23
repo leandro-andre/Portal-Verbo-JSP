@@ -7,6 +7,7 @@ from church_journey.selectors import (
     get_discipleship_completed_at,
     has_completed_discipleship,
     is_eligible_for_membership,
+    can_create_membership,
 )
 
 from .models import Person, validate_brazilian_mobile
@@ -69,6 +70,7 @@ class PersonSerializer(serializers.ModelSerializer):
                 else None
             ),
             "membership_eligible": is_eligible_for_membership(obj),
+            "membership_can_create": can_create_membership(obj),
         }
 
     def validate(self, attrs):

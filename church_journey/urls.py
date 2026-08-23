@@ -13,6 +13,7 @@ from .views import (
     DiscipleshipLessonDetailView,
     DiscipleshipLessonListCreateView,
     PersonChurchJourneyView,
+    PersonMembershipView,
 )
 
 
@@ -21,6 +22,11 @@ urlpatterns = [
         "people/<int:person_id>/church-journey/",
         PersonChurchJourneyView.as_view(),
         name="person-church-journey",
+    ),
+    path(
+        "people/<int:person_id>/membership/",
+        PersonMembershipView.as_view(),
+        name="person-membership",
     ),
     path(
         "discipleship/classes/",
