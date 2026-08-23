@@ -5,18 +5,22 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from pessoas.models import Person
+
 from .models import Departamento, DepartmentMembership, DepartmentRole
 from .selectors import (
     can_manage_department,
     can_manage_department_members,
     can_manage_department_roles,
     can_view_department,
+    get_department_entry_eligibility,
 )
 from .serializers import (
     DepartmentDetailSerializer,
     DepartmentMembershipCreateSerializer,
     DepartmentMembershipSerializer,
     DepartmentMembershipUpdateSerializer,
+    DepartmentPersonSerializer,
     DepartmentRoleCreateSerializer,
     DepartmentRoleSerializer,
     DepartmentRoleUpdateSerializer,
@@ -304,6 +308,28 @@ class DepartmentMembershipListCreateView(APIView):
         except DepartmentError as exc:
             return business_error_response(exc)
         return Response(DepartmentMembershipSerializer(membership).data, status=status.HTTP_201_CREATED)
+
+
+class DepartmentEligiblePeopleView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def get(self, request, department_id):
+        department = get_object_or_404(Departamento, pk=department_id)
+        ensure_or_403(
+            request.user.has_perm("departamentos.add_departmentmembership")
+            or can_manage_department_members(request.user, department)
+        )
+        candidates = (
+            Person.objects.filter(membership__status="ACTIVE")
+            .exclude(department_memberships__department=department)
+            .order_by("full_name", "id")
+        )
+        eligible_people = [
+            person
+            for person in candidates
+            if get_department_entry_eligibility(person, department).eligible
+        ]
+        return Response(DepartmentPersonSerializer(eligible_people, many=True).data)
 
 
 class DepartmentMembershipDetailView(APIView):

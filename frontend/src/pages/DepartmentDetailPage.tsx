@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowLeft, Edit3, Plus, RefreshCcw, Save } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -6,14 +6,14 @@ import { DepartmentBusinessError, DepartmentHttpError } from '../api/departments
 import { useCan } from '../hooks/useAuth'
 import {
   useDepartment,
+  useDepartmentEligiblePeople,
   useDepartmentLifecycle,
   useDepartmentMembershipMutations,
   useDepartmentMemberships,
   useDepartmentRoleMutations,
   useDepartmentRoles,
 } from '../hooks/useDepartments'
-import { usePeople } from '../hooks/usePeople'
-import type { Department, DepartmentMembership, DepartmentRole } from '../types/department'
+import type { Department, DepartmentRole } from '../types/department'
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -185,23 +185,17 @@ function RoleForm({
 
 function MembershipForm({
   activeRoles,
-  existingMemberships,
+  candidates,
   isPending,
   onSubmit,
 }: {
   activeRoles: DepartmentRole[]
-  existingMemberships: DepartmentMembership[]
+  candidates: Array<{ id: number; display_name: string }>
   isPending: boolean
   onSubmit: (payload: { person_id: number; role_id: number }) => void
 }) {
-  const { data: people = [] } = usePeople()
   const [personId, setPersonId] = useState('')
   const [roleId, setRoleId] = useState('')
-  const linkedPersonIds = useMemo(
-    () => new Set(existingMemberships.map((membership) => membership.person.id)),
-    [existingMemberships],
-  )
-  const selectablePeople = people.filter((person) => !linkedPersonIds.has(person.id))
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -219,7 +213,7 @@ function MembershipForm({
         <span>Pessoa</span>
         <select value={personId} onChange={(event) => setPersonId(event.target.value)} required>
           <option value="">Selecione</option>
-          {selectablePeople.map((person) => (
+          {candidates.map((person) => (
             <option key={person.id} value={person.id}>{person.display_name}</option>
           ))}
         </select>
@@ -250,6 +244,7 @@ function DepartmentDetailPage() {
   const { data: department, error, isError, isLoading, refetch } = useDepartment(departmentId)
   const rolesQuery = useDepartmentRoles(departmentId, Boolean(department))
   const membershipsQuery = useDepartmentMemberships(departmentId, Boolean(department))
+  const eligiblePeopleQuery = useDepartmentEligiblePeople(departmentId, Boolean(department?.permissions?.can_manage_members))
   const roleMutations = useDepartmentRoleMutations(departmentId)
   const membershipMutations = useDepartmentMembershipMutations(departmentId)
   const lifecycle = useDepartmentLifecycle(departmentId)
@@ -497,7 +492,7 @@ function DepartmentDetailPage() {
               {canManageMembers ? (
                 <MembershipForm
                   activeRoles={activeRoles}
-                  existingMemberships={memberships}
+                  candidates={eligiblePeopleQuery.data ?? []}
                   isPending={membershipMutations.create.isPending}
                   onSubmit={(payload) =>
                     void runAction(
@@ -546,7 +541,13 @@ function DepartmentDetailPage() {
                           </select>
                         </td>
                         <td>{membership.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}</td>
-                        <td>{membership.operationally_eligible ? 'Elegivel' : 'Nao elegivel'}</td>
+                        <td>
+                          {membership.eligibility.eligible ? 'Apta' : (
+                            <span title={membership.eligibility.reasons.map((reason) => reason.message).join('\n')}>
+                              Inelegivel - {membership.eligibility.reasons.map((reason) => reason.message).join(' ')}
+                            </span>
+                          )}
+                        </td>
                         <td>{formatDate(membership.joined_at)}</td>
                         {canManageMembers ? (
                           <td>

@@ -7,6 +7,7 @@ import {
   deactivateDepartmentMembership,
   deactivateDepartmentRole,
   getDepartment,
+  getDepartmentEligiblePeople,
   getDepartmentMemberships,
   getDepartmentRoles,
   getDepartments,
@@ -39,6 +40,10 @@ export function departmentRolesQueryKey(id: number) {
 
 export function departmentMembershipsQueryKey(id: number) {
   return ['departments', id, 'members'] as const
+}
+
+export function departmentEligiblePeopleQueryKey(id: number) {
+  return ['departments', id, 'eligible-people'] as const
 }
 
 export function useDepartments() {
@@ -111,6 +116,14 @@ export function useDepartmentMemberships(id: number, enabled = true) {
   })
 }
 
+export function useDepartmentEligiblePeople(id: number, enabled = true) {
+  return useQuery({
+    queryKey: departmentEligiblePeopleQueryKey(id),
+    queryFn: () => getDepartmentEligiblePeople(id),
+    enabled: enabled && Number.isFinite(id),
+  })
+}
+
 export function useDepartmentRoleMutations(id: number) {
   const queryClient = useQueryClient()
 
@@ -145,6 +158,7 @@ export function useDepartmentMembershipMutations(id: number) {
 
   const onSuccess = async () => {
     await queryClient.invalidateQueries({ queryKey: departmentMembershipsQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: departmentEligiblePeopleQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: departmentRolesQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: departmentQueryKey(id) })
   }

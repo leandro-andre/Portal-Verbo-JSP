@@ -3,6 +3,7 @@ import type {
   CreateDepartmentMembershipInput,
   CreateDepartmentRoleInput,
   Department,
+  DepartmentMemberPerson,
   DepartmentMembership,
   DepartmentRole,
   DepartmentValidationErrors,
@@ -284,6 +285,18 @@ export async function getDepartmentMemberships(departmentId: number): Promise<De
   }
 
   return response.json() as Promise<DepartmentMembership[]>
+}
+
+export async function getDepartmentEligiblePeople(departmentId: number): Promise<DepartmentMemberPerson[]> {
+  const response = await fetch(`/api/departments/${departmentId}/eligible-people/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DepartmentHttpError(response.status, 'Nao foi possivel carregar os candidatos.')
+  }
+
+  return response.json() as Promise<DepartmentMemberPerson[]>
 }
 
 export async function createDepartmentMembership(

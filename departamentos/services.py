@@ -1,9 +1,14 @@
 from django.db import IntegrityError
 from django.utils import timezone
 
-from church_journey.selectors import is_active_member
-
 from .models import Departamento, DepartmentMembership, DepartmentRole
+from .selectors import (
+    DEPARTMENT_INACTIVE,
+    DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS as ELIGIBILITY_MEMBERSHIP_ALREADY_EXISTS,
+    MEMBERSHIP_NOT_ACTIVE,
+    get_department_entry_eligibility,
+    person_has_active_membership,
+)
 
 
 INVALID_DEPARTMENT_TRANSITION = "INVALID_DEPARTMENT_TRANSITION"
@@ -72,11 +77,38 @@ def ensure_role_belongs_to_department(*, role, department):
 
 
 def ensure_person_is_active_member(person):
-    if not is_active_member(person):
+    if not person_has_active_membership(person):
         raise DepartmentError(
             PERSON_IS_NOT_ACTIVE_MEMBER,
             "A pessoa precisa ter membresia ativa.",
         )
+
+
+def raise_entry_eligibility_error(eligibility):
+    if eligibility.eligible:
+        return
+
+    reason_to_error = {
+        MEMBERSHIP_NOT_ACTIVE: (
+            PERSON_IS_NOT_ACTIVE_MEMBER,
+            "A pessoa precisa ter membresia ativa.",
+        ),
+        DEPARTMENT_INACTIVE: (
+            DEPARTMENT_NOT_ACTIVE,
+            "O departamento precisa estar ativo.",
+        ),
+        ELIGIBILITY_MEMBERSHIP_ALREADY_EXISTS: (
+            DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS,
+            "Esta pessoa ja esta vinculada a este departamento.",
+        ),
+    }
+    reason = eligibility.reasons[0]
+    code, message = reason_to_error.get(reason.code, (reason.code, reason.message))
+    raise DepartmentError(code, message)
+
+
+def ensure_person_can_enter_department(*, person, department):
+    raise_entry_eligibility_error(get_department_entry_eligibility(person, department))
 
 
 def create_department_role(
@@ -153,19 +185,13 @@ def reactivate_department_role(role):
 
 
 def validate_membership_inputs(*, person, department, role):
-    ensure_person_is_active_member(person)
-    ensure_department_active(department)
     ensure_role_belongs_to_department(role=role, department=department)
+    ensure_person_can_enter_department(person=person, department=department)
     ensure_role_active(role)
 
 
 def create_department_membership(*, person, department, role, joined_at=None):
     validate_membership_inputs(person=person, department=department, role=role)
-    if DepartmentMembership.objects.filter(person=person, department=department).exists():
-        raise DepartmentError(
-            DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS,
-            "Esta pessoa ja esta vinculada a este departamento.",
-        )
     try:
         return DepartmentMembership.objects.create(
             person=person,
@@ -188,11 +214,10 @@ def update_department_membership_role(department_membership, *, role):
             INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION,
             "Somente vinculos ativos podem ser alterados.",
         )
-    validate_membership_inputs(
-        person=department_membership.person,
-        department=department_membership.department,
-        role=role,
-    )
+    ensure_department_active(department_membership.department)
+    ensure_person_is_active_member(department_membership.person)
+    ensure_role_belongs_to_department(role=role, department=department_membership.department)
+    ensure_role_active(role)
     department_membership.role = role
     department_membership.save(update_fields=["role", "updated_at"])
     return department_membership
@@ -216,11 +241,9 @@ def reactivate_department_membership(department_membership):
             INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION,
             "Somente vinculos inativos podem ser reativados.",
         )
-    validate_membership_inputs(
-        person=department_membership.person,
-        department=department_membership.department,
-        role=department_membership.role,
-    )
+    ensure_department_active(department_membership.department)
+    ensure_person_is_active_member(department_membership.person)
+    ensure_role_active(department_membership.role)
     department_membership.status = DepartmentMembership.Status.ACTIVE
     department_membership.left_at = None
     department_membership.save(update_fields=["status", "left_at", "updated_at"])

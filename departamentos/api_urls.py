@@ -32,6 +32,11 @@ urlpatterns = [
         name="department-membership-list",
     ),
     path(
+        "departments/<int:department_id>/eligible-people/",
+        api_views.DepartmentEligiblePeopleView.as_view(),
+        name="department-eligible-people",
+    ),
+    path(
         "departments/<int:department_id>/members/<int:membership_id>/",
         api_views.DepartmentMembershipDetailView.as_view(),
         name="department-membership-detail",

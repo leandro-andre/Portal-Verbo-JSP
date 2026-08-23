@@ -4,6 +4,7 @@ from pessoas.models import Person
 
 from .models import Departamento, DepartmentMembership, DepartmentRole
 from .selectors import (
+    get_department_membership_eligibility,
     get_department_context_permissions,
     is_department_membership_operationally_eligible,
 )
@@ -165,6 +166,7 @@ class DepartmentPersonSerializer(serializers.ModelSerializer):
 class DepartmentMembershipSerializer(serializers.ModelSerializer):
     person = DepartmentPersonSerializer(read_only=True)
     role = DepartmentRoleSerializer(read_only=True)
+    eligibility = serializers.SerializerMethodField()
     operationally_eligible = serializers.SerializerMethodField()
 
     class Meta:
@@ -177,6 +179,7 @@ class DepartmentMembershipSerializer(serializers.ModelSerializer):
             "status",
             "joined_at",
             "left_at",
+            "eligibility",
             "operationally_eligible",
             "created_at",
             "updated_at",
@@ -185,6 +188,9 @@ class DepartmentMembershipSerializer(serializers.ModelSerializer):
 
     def get_operationally_eligible(self, obj):
         return is_department_membership_operationally_eligible(obj)
+
+    def get_eligibility(self, obj):
+        return get_department_membership_eligibility(obj).as_dict()
 
 
 class DepartmentMembershipCreateSerializer(serializers.ModelSerializer):

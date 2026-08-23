@@ -29,6 +29,16 @@ export type DepartmentValidationErrors = Partial<
   Record<string, string[]>
 >
 
+export type DepartmentEligibilityReason = {
+  code: string
+  message: string
+}
+
+export type DepartmentEligibilityResult = {
+  eligible: boolean
+  reasons: DepartmentEligibilityReason[]
+}
+
 export type DepartmentRole = {
   id: number
   department: number
@@ -72,6 +82,7 @@ export type DepartmentMembership = {
   status: DepartmentMembershipStatus
   joined_at: string
   left_at: string | null
+  eligibility: DepartmentEligibilityResult
   operationally_eligible: boolean
   created_at: string
   updated_at: string

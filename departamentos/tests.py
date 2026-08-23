@@ -51,8 +51,19 @@ from .services import (
     reactivate_department_membership,
     reactivate_department_role,
 )
+from .selectors import (
+    DEPARTMENT_INACTIVE as ELIGIBILITY_DEPARTMENT_INACTIVE,
+    DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS as ELIGIBILITY_MEMBERSHIP_ALREADY_EXISTS,
+    DEPARTMENT_MEMBERSHIP_INACTIVE,
+    DEPARTMENT_ROLE_INACTIVE,
+    MEMBERSHIP_NOT_ACTIVE,
+    NO_DEPARTMENT_MEMBERSHIP,
+    get_department_entry_eligibility,
+    get_department_membership_eligibility,
+    get_person_department_eligibility,
+)
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
-from church_journey.services import approve_membership, deactivate_membership
+from church_journey.services import approve_membership, deactivate_membership, reactivate_membership
 from pessoas.models import Person
 from .utils import gerar_escalas_do_mes_para_departamento, membro_esta_indisponivel
 from usuarios.roles import (
@@ -1590,3 +1601,171 @@ class DepartmentRoleMembershipTests(APITestCase):
         self.assertTrue(detail_response.json()["permissions"]["can_manage_department"])
         self.assertEqual(update_response.status_code, status.HTTP_200_OK)
         self.assertEqual(role_response.status_code, status.HTTP_201_CREATED)
+
+    def test_operational_eligibility_retorna_resultado_estruturado(self):
+        person = self.make_active_member_person("Elegivel Departamento")
+        role = create_department_role(department=self.department, name="Professor", code="professor")
+        membership = create_department_membership(person=person, department=self.department, role=role)
+
+        eligibility = get_department_membership_eligibility(membership)
+
+        self.assertTrue(eligibility.eligible)
+        self.assertEqual(eligibility.as_dict(), {"eligible": True, "reasons": []})
+
+    def test_operational_eligibility_acumula_multiplos_motivos(self):
+        person = self.make_active_member_person("Multiplos Motivos")
+        role = create_department_role(department=self.department, name="Auxiliar Motivos", code="auxiliar-motivos")
+        membership = create_department_membership(person=person, department=self.department, role=role)
+
+        membership = deactivate_department_membership(membership)
+        deactivate_department_role(role)
+        deactivate_department(self.department)
+        deactivate_membership(person.membership, changed_by=self.admin, reason="Homologacao")
+
+        reason_codes = {
+            reason.code
+            for reason in get_department_membership_eligibility(membership).reasons
+        }
+
+        self.assertEqual(
+            reason_codes,
+            {
+                DEPARTMENT_MEMBERSHIP_INACTIVE,
+                ELIGIBILITY_DEPARTMENT_INACTIVE,
+                DEPARTMENT_ROLE_INACTIVE,
+                MEMBERSHIP_NOT_ACTIVE,
+            },
+        )
+
+    def test_person_department_eligibility_sem_vinculo(self):
+        person = self.make_active_member_person("Sem Vinculo Departamento")
+
+        eligibility = get_person_department_eligibility(person, self.department)
+
+        self.assertFalse(eligibility.eligible)
+        self.assertEqual(eligibility.reasons[0].code, NO_DEPARTMENT_MEMBERSHIP)
+
+    def test_entry_eligibility_cobre_member_departamento_e_vinculo_existente(self):
+        active_person = self.make_active_member_person("Candidata Departamento")
+        visitor = self.make_person("Visitante Entry")
+        inactive_member = self.make_active_member_person("Membro Inativo Entry")
+        deactivate_membership(inactive_member.membership, changed_by=self.admin, reason="Homologacao")
+        role = create_department_role(department=self.department, name="Entrada", code="entrada")
+
+        self.assertTrue(get_department_entry_eligibility(active_person, self.department).eligible)
+        self.assertEqual(
+            get_department_entry_eligibility(visitor, self.department).reasons[0].code,
+            MEMBERSHIP_NOT_ACTIVE,
+        )
+        self.assertEqual(
+            get_department_entry_eligibility(inactive_member, self.department).reasons[0].code,
+            MEMBERSHIP_NOT_ACTIVE,
+        )
+
+        create_department_membership(person=active_person, department=self.department, role=role)
+        self.assertEqual(
+            get_department_entry_eligibility(active_person, self.department).reasons[0].code,
+            ELIGIBILITY_MEMBERSHIP_ALREADY_EXISTS,
+        )
+
+        inactive_department = Departamento.objects.create(nome="Departamento Entry Inativo", ativo=False)
+        self.assertEqual(
+            get_department_entry_eligibility(self.make_active_member_person("Entry Dept Inativo"), inactive_department)
+            .reasons[0]
+            .code,
+            ELIGIBILITY_DEPARTMENT_INACTIVE,
+        )
+
+    def test_api_membership_retorna_eligibility_e_endpoint_de_candidatos(self):
+        candidate = self.make_active_member_person("Candidata Sem Usuario")
+        linked_person = self.make_active_member_person("Pessoa Ja Vinculada")
+        visitor = self.make_person("Visitante Sem Membership")
+        role = create_department_role(department=self.department, name="Recepcao", code="recepcao")
+        membership = create_department_membership(person=linked_person, department=self.department, role=role)
+        deactivate_membership(linked_person.membership, changed_by=self.admin, reason="Homologacao")
+
+        self.client.force_authenticate(self.secretary)
+        candidates_response = self.client.get(reverse("department-eligible-people", args=[self.department.pk]))
+        members_response = self.client.get(reverse("department-membership-detail", args=[self.department.pk, membership.pk]))
+
+        candidate_ids = {item["id"] for item in candidates_response.json()}
+        self.assertEqual(candidates_response.status_code, status.HTTP_200_OK)
+        self.assertIn(candidate.pk, candidate_ids)
+        self.assertNotIn(linked_person.pk, candidate_ids)
+        self.assertNotIn(visitor.pk, candidate_ids)
+        self.assertEqual(members_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(members_response.json()["eligibility"]["eligible"])
+        self.assertEqual(members_response.json()["eligibility"]["reasons"][0]["code"], MEMBERSHIP_NOT_ACTIVE)
+
+    def test_lider_inelegivel_perde_autorizacao_contextual_e_recupera_ao_reativar_membership(self):
+        manager_person = self.make_active_member_person("Gestor Inelegivel")
+        manager_user = self.user_model.objects.create_user(
+            username="department.context.ineligible",
+            password="senha-forte-123",
+            person=manager_person,
+        )
+        manager_role = create_department_role(
+            department=self.department,
+            name="Gestor",
+            code="gestor",
+            can_manage_members=True,
+        )
+        create_department_membership(person=manager_person, department=self.department, role=manager_role)
+
+        self.client.force_authenticate(manager_user)
+        allowed_response = self.client.post(
+            reverse("department-role-list", args=[self.department.pk]),
+            {"name": "Criado Contexto", "code": "criado-contexto"},
+            format="json",
+        )
+        deactivate_membership(manager_person.membership, changed_by=self.admin, reason="Homologacao")
+        denied_response = self.client.post(
+            reverse("department-role-list", args=[self.department.pk]),
+            {"name": "Bloqueado Contexto", "code": "bloqueado-contexto"},
+            format="json",
+        )
+        manager_person.refresh_from_db()
+        reactivate_membership(manager_person.membership, changed_by=self.admin, reason="Homologacao")
+        restored_response = self.client.post(
+            reverse("department-role-list", args=[self.department.pk]),
+            {"name": "Restaurado Contexto", "code": "restaurado-contexto"},
+            format="json",
+        )
+
+        self.assertEqual(allowed_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(denied_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(restored_response.status_code, status.HTTP_201_CREATED)
+
+    def test_lider_perde_contexto_com_role_ou_departamento_inativo(self):
+        manager_person = self.make_active_member_person("Gestor Role Inativo")
+        manager_user = self.user_model.objects.create_user(
+            username="department.context.role.inactive",
+            password="senha-forte-123",
+            person=manager_person,
+        )
+        manager_role = create_department_role(
+            department=self.department,
+            name="Gestor Role",
+            code="gestor-role",
+            can_manage_members=True,
+        )
+        membership = create_department_membership(person=manager_person, department=self.department, role=manager_role)
+        deactivate_department_role(manager_role)
+
+        self.client.force_authenticate(manager_user)
+        role_inactive_response = self.client.get(reverse("department-role-list", args=[self.department.pk]))
+
+        manager_role = reactivate_department_role(manager_role)
+        membership.refresh_from_db()
+        deactivate_department(self.department)
+        department_inactive_response = self.client.get(reverse("department-role-list", args=[self.department.pk]))
+
+        self.assertEqual(membership.status, DepartmentMembership.Status.ACTIVE)
+        self.assertEqual(role_inactive_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(department_inactive_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(self.secretary)
+        self.assertEqual(
+            self.client.get(reverse("department-role-list", args=[self.department.pk])).status_code,
+            status.HTTP_200_OK,
+        )

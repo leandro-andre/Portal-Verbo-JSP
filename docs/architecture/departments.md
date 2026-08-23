@@ -46,8 +46,75 @@ nao depende do nome "Lider"; depende das flags do cargo.
   `church_journey`.
 - Pessoa sem `Usuario` pode ser vinculada, desde que tenha `Membership ACTIVE`.
 - Se a membresia eclesiastica ficar inativa depois, o vinculo departamental nao
-  e alterado automaticamente; a API passa a marcar `operationally_eligible` como
-  falso.
+  e alterado automaticamente; a API passa a marcar a elegibilidade operacional
+  como falsa.
+
+## Elegibilidade
+
+Elegibilidade departamental e derivada. Nao existe campo persistido
+`eligible`, `operationally_eligible` ou `eligibility_status` no banco.
+
+O dominio separa dois conceitos:
+
+- Entry eligibility: se uma pessoa pode entrar em um departamento.
+- Operational eligibility: se uma pessoa ja vinculada esta apta a atuar.
+
+Status do vinculo nao e a mesma coisa que elegibilidade. Uma
+`DepartmentMembership` pode continuar `ACTIVE` e ainda assim estar
+operacionalmente inelegivel porque a `Membership`, o cargo ou o departamento
+ficaram inativos depois.
+
+### Entry Eligibility
+
+`get_department_entry_eligibility(person, department)` retorna um resultado
+estruturado:
+
+- `eligible`: booleano derivado.
+- `reasons`: lista de motivos com `code` e `message`.
+
+Regras atuais:
+
+- `Membership ACTIVE` no dominio `church_journey`.
+- `Departamento.ativo=True`.
+- ausencia de `DepartmentMembership` existente para a mesma pessoa e
+  departamento.
+
+Motivos atuais:
+
+- `MEMBERSHIP_NOT_ACTIVE`
+- `DEPARTMENT_INACTIVE`
+- `DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS`
+
+Pessoa sem `Usuario` pode ser elegivel, desde que tenha `Membership ACTIVE`.
+Superuser, Admin ou Pastor nao ficam elegiveis por causa do papel global.
+
+### Operational Eligibility
+
+`get_department_membership_eligibility(department_membership)` retorna o mesmo
+formato estruturado.
+
+Regras atuais:
+
+- `DepartmentMembership.status=ACTIVE`.
+- `Departamento.ativo=True`.
+- `DepartmentRole.active=True`.
+- `Membership ACTIVE` da `Person`.
+
+Motivos atuais:
+
+- `DEPARTMENT_MEMBERSHIP_INACTIVE`
+- `DEPARTMENT_INACTIVE`
+- `DEPARTMENT_ROLE_INACTIVE`
+- `MEMBERSHIP_NOT_ACTIVE`
+
+Uma pessoa pode ter varios motivos simultaneamente; consultas de elegibilidade
+nao param no primeiro erro.
+
+`is_department_membership_operationally_eligible(...)` e apenas um atalho
+booleano que delega para o resultado estruturado.
+
+`get_person_department_eligibility(person, department)` localiza o vinculo
+existente e retorna `NO_DEPARTMENT_MEMBERSHIP` quando nao houver vinculo.
 
 ## Codigo
 
@@ -127,6 +194,16 @@ Permissoes contextuais nao criam Global Role. Um usuario com `person` vinculada
 a uma `DepartmentMembership ACTIVE` no departamento pode receber acesso ao
 proprio departamento conforme as flags do seu `DepartmentRole`.
 
+A autorizacao contextual tambem exige elegibilidade operacional do proprio
+gestor. Se a `Membership` do lider ficar `INACTIVE`, se seu cargo ficar
+`INACTIVE` ou se o departamento ficar `INACTIVE`, o vinculo permanece, mas ele
+perde gestao contextual. Administrador e Secretaria continuam administrando por
+permissoes globais.
+
+Elegibilidade nao e autorizacao. Secretaria pode administrar um membro
+inelegivel; a inelegibilidade responde se a pessoa pode servir, nao quem pode
+gerenciar o cadastro.
+
 ## Secretaria E Midia
 
 Departamento Secretaria continua sendo uma estrutura operacional. Ele nao
@@ -150,3 +227,8 @@ PVV-028 nao executa dual-write, backfill ou migracao automatica de
 
 Uma feature futura pode tratar migracao assistida do legado, historico de cargos
 ou selectors especificos de elegibilidade para Escalas.
+
+Criterios adicionais poderao surgir quando houver requisito real, como faixa
+etaria, treinamento especifico, perfil ministerial ou requisitos do Infantil.
+Nao ha rule engine, JSON arbitrario de criterios, DSL ou configuracao vazia de
+regras nesta etapa.
