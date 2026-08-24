@@ -128,10 +128,9 @@ function RoleForm({
   onSubmit,
 }: {
   isPending: boolean
-  onSubmit: (payload: { name: string; code: string; can_manage_department: boolean; can_manage_members: boolean }) => void
+  onSubmit: (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean }) => void
 }) {
   const [name, setName] = useState('')
-  const [code, setCode] = useState('')
   const [canManageDepartment, setCanManageDepartment] = useState(false)
   const [canManageMembers, setCanManageMembers] = useState(false)
 
@@ -139,12 +138,10 @@ function RoleForm({
     event.preventDefault()
     onSubmit({
       name,
-      code,
       can_manage_department: canManageDepartment,
       can_manage_members: canManageMembers,
     })
     setName('')
-    setCode('')
     setCanManageDepartment(false)
     setCanManageMembers(false)
   }
@@ -154,10 +151,6 @@ function RoleForm({
       <label className="form-field">
         <span>Nome do cargo</span>
         <input value={name} onChange={(event) => setName(event.target.value)} required />
-      </label>
-      <label className="form-field">
-        <span>Codigo</span>
-        <input value={code} onChange={(event) => setCode(event.target.value)} required />
       </label>
       <label className="checkbox-field">
         <input

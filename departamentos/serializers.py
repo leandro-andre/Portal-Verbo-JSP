@@ -102,11 +102,11 @@ class DepartmentRoleSerializer(serializers.ModelSerializer):
 class DepartmentRoleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DepartmentRole
-        fields = ["name", "code", "can_manage_department", "can_manage_members"]
+        fields = ["name", "can_manage_department", "can_manage_members"]
 
     def validate(self, attrs):
         extra_fields = set(self.initial_data).difference(
-            {"name", "code", "can_manage_department", "can_manage_members"}
+            {"name", "can_manage_department", "can_manage_members"}
         )
         if extra_fields:
             raise serializers.ValidationError(
@@ -119,15 +119,6 @@ class DepartmentRoleCreateSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Informe o nome do cargo.")
         return value
-
-    def validate_code(self, value):
-        code = Departamento.normalizar_codigo(value)
-        if not code:
-            raise serializers.ValidationError("Informe o codigo do cargo.")
-        department = self.context["department"]
-        if DepartmentRole.objects.filter(department=department, code__iexact=code).exists():
-            raise serializers.ValidationError("Este codigo ja esta em uso neste departamento.")
-        return code
 
 
 class DepartmentRoleUpdateSerializer(serializers.ModelSerializer):

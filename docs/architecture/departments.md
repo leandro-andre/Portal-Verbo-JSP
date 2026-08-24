@@ -31,8 +31,20 @@ migrado.
 - `can_manage_members`: permite gerenciar cargos e pessoas do proprio
   departamento.
 
-O codigo do cargo e imutavel pela API depois da criacao. A regra de lideranca
-nao depende do nome "Lider"; depende das flags do cargo.
+O codigo do cargo e tecnico e nao e informado pelo usuario. Na criacao, o
+backend gera `code` automaticamente a partir de `name`, usando slugificacao:
+
+- `Professor` -> `professor`
+- `Lider de Sala` -> `lider-de-sala`
+- `Operador de Camera` -> `operador-de-camera`
+
+O codigo permanece unico dentro do departamento. Em caso de colisao, o backend
+gera sufixos incrementais como `professor-2` e `professor-3`. O mesmo codigo
+pode existir em departamentos diferentes.
+
+O codigo do cargo e imutavel pela API depois da criacao. Renomear um cargo nao
+altera o `code` originalmente criado. A regra de lideranca nao depende do nome
+"Lider"; depende das flags do cargo.
 
 ## Pessoas No Departamento
 

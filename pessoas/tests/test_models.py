@@ -1,10 +1,21 @@
-from datetime import date
+from datetime import date, time
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from pessoas.models import Person
+from pessoas.availability import (
+    INVALID_UNAVAILABILITY_DATE_RANGE,
+    INVALID_UNAVAILABILITY_TIME_RANGE,
+    UNAVAILABILITY_OVERLAP,
+    UNAVAILABILITY_TIME_REQUIRES_SINGLE_DAY,
+    UnavailabilityError,
+    create_person_unavailability,
+    deactivate_unavailability,
+    get_person_availability,
+    is_person_available,
+)
+from pessoas.models import Person, PersonUnavailability
 
 
 class PersonModelTests(TestCase):
@@ -215,3 +226,162 @@ class PersonModelTests(TestCase):
         )
 
         self.assertEqual(usuario.display_name, "Mari")
+
+
+class PersonUnavailabilityModelTests(TestCase):
+    def setUp(self):
+        self.person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.other_person = Person.objects.create(full_name="Ana Souza", birth_date=date(1991, 6, 20))
+
+    def test_cria_indisponibilidade_de_um_dia(self):
+        unavailability = create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+        )
+
+        self.assertEqual(unavailability.person, self.person)
+        self.assertEqual(unavailability.status, PersonUnavailability.Status.ACTIVE)
+        self.assertTrue(unavailability.is_full_day)
+
+    def test_cria_periodo_de_varios_dias_sem_horario(self):
+        unavailability = create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 15),
+        )
+
+        self.assertEqual(unavailability.end_date, date(2026, 9, 15))
+
+    def test_cria_faixa_horaria_em_um_dia(self):
+        unavailability = create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+            start_time=time(18, 0),
+            end_time=time(22, 0),
+        )
+
+        self.assertEqual(unavailability.start_time, time(18, 0))
+        self.assertEqual(unavailability.end_time, time(22, 0))
+
+    def test_valida_datas_e_horarios(self):
+        cases = [
+            (
+                {"start_date": date(2026, 9, 11), "end_date": date(2026, 9, 10)},
+                INVALID_UNAVAILABILITY_DATE_RANGE,
+            ),
+            (
+                {"start_date": date(2026, 9, 10), "end_date": date(2026, 9, 10), "start_time": time(18, 0)},
+                INVALID_UNAVAILABILITY_TIME_RANGE,
+            ),
+            (
+                {
+                    "start_date": date(2026, 9, 10),
+                    "end_date": date(2026, 9, 15),
+                    "start_time": time(18, 0),
+                    "end_time": time(22, 0),
+                },
+                UNAVAILABILITY_TIME_REQUIRES_SINGLE_DAY,
+            ),
+            (
+                {
+                    "start_date": date(2026, 9, 10),
+                    "end_date": date(2026, 9, 10),
+                    "start_time": time(18, 0),
+                    "end_time": time(18, 0),
+                },
+                INVALID_UNAVAILABILITY_TIME_RANGE,
+            ),
+        ]
+
+        for payload, code in cases:
+            with self.subTest(code=code):
+                with self.assertRaises(UnavailabilityError) as ctx:
+                    create_person_unavailability(person=self.person, **payload)
+                self.assertEqual(ctx.exception.code, code)
+
+    def test_overlap_periodo_integral_e_horario(self):
+        create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 15),
+        )
+
+        with self.assertRaises(UnavailabilityError) as ctx:
+            create_person_unavailability(
+                person=self.person,
+                start_date=date(2026, 9, 12),
+                end_date=date(2026, 9, 12),
+                start_time=time(18, 0),
+                end_time=time(20, 0),
+            )
+
+        self.assertEqual(ctx.exception.code, UNAVAILABILITY_OVERLAP)
+
+    def test_overlap_horario_real_bloqueia_e_adjacente_permite(self):
+        create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+            start_time=time(18, 0),
+            end_time=time(20, 0),
+        )
+
+        with self.assertRaises(UnavailabilityError):
+            create_person_unavailability(
+                person=self.person,
+                start_date=date(2026, 9, 10),
+                end_date=date(2026, 9, 10),
+                start_time=time(19, 0),
+                end_time=time(21, 0),
+            )
+
+        adjacent = create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+            start_time=time(20, 0),
+            end_time=time(22, 0),
+        )
+
+        self.assertEqual(adjacent.start_time, time(20, 0))
+
+    def test_inactive_e_outra_person_nao_conflitam(self):
+        inactive = create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 12),
+        )
+        deactivate_unavailability(inactive)
+
+        self.assertTrue(
+            create_person_unavailability(
+                person=self.person,
+                start_date=date(2026, 9, 10),
+                end_date=date(2026, 9, 12),
+            )
+        )
+        self.assertTrue(
+            create_person_unavailability(
+                person=self.other_person,
+                start_date=date(2026, 9, 10),
+                end_date=date(2026, 9, 12),
+            )
+        )
+
+    def test_selectors_de_disponibilidade(self):
+        self.assertTrue(is_person_available(self.person, date(2026, 9, 10)))
+        create_person_unavailability(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+            start_time=time(18, 0),
+            end_time=time(22, 0),
+        )
+
+        self.assertFalse(is_person_available(self.person, date(2026, 9, 10)))
+        self.assertTrue(is_person_available(self.person, date(2026, 9, 10), time(10, 0)))
+        self.assertFalse(is_person_available(self.person, date(2026, 9, 10), time(19, 0)))
+        self.assertTrue(is_person_available(self.person, date(2026, 9, 11)))
+        self.assertFalse(get_person_availability(self.person, date(2026, 9, 10)).available)

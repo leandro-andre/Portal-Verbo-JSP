@@ -10,7 +10,7 @@ from church_journey.selectors import (
     can_create_membership,
 )
 
-from .models import Person, validate_brazilian_mobile
+from .models import Person, PersonUnavailability, validate_brazilian_mobile
 
 
 class PersonPortalUserSerializer(serializers.Serializer):
@@ -111,3 +111,48 @@ class PersonSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         validated_data.pop("allow_possible_duplicate", None)
         return super().update(instance, validated_data)
+
+
+class PersonUnavailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonUnavailability
+        fields = [
+            "id",
+            "person",
+            "start_date",
+            "end_date",
+            "start_time",
+            "end_time",
+            "reason",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "person", "status", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        allowed_fields = {"start_date", "end_date", "start_time", "end_time", "reason"}
+        extra_fields = set(self.initial_data).difference(allowed_fields)
+        if extra_fields:
+            raise serializers.ValidationError(
+                {field: "Este campo nao pode ser enviado neste endpoint." for field in sorted(extra_fields)}
+            )
+
+        values = {}
+        if self.instance is not None:
+            values = {
+                "start_date": self.instance.start_date,
+                "end_date": self.instance.end_date,
+                "start_time": self.instance.start_time,
+                "end_time": self.instance.end_time,
+                "reason": self.instance.reason,
+            }
+        values.update(attrs)
+        attrs.update(values)
+        return attrs
+
+
+class OperationalUnavailabilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonUnavailability
+        fields = ["id", "start_date", "end_date", "start_time", "end_time", "status"]

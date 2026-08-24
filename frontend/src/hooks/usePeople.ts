@@ -1,20 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createPerson,
+  createMyUnavailability,
+  createPersonUnavailability,
   approveMembership,
   deactivateMembership,
+  deactivateMyUnavailability,
+  deactivatePersonUnavailability,
   getEligibleMembershipPeople,
   getChurchJourney,
   getMembership,
   getMembershipHistory,
   getMemberships,
+  getMyUnavailability,
   getPeople,
   getPerson,
+  getPersonUnavailability,
   reactivateMembership,
+  reactivateMyUnavailability,
+  reactivatePersonUnavailability,
   startChurchJourney,
+  updateMyUnavailability,
   updatePerson,
+  updatePersonUnavailability,
 } from '../api/people'
-import type { CreatePersonInput, MembershipStatus, StartChurchJourneyInput, UpdatePersonInput } from '../types/person'
+import type {
+  CreatePersonInput,
+  MembershipStatus,
+  PersonUnavailabilityInput,
+  StartChurchJourneyInput,
+  UpdatePersonInput,
+} from '../types/person'
 
 export const peopleQueryKey = ['people']
 
@@ -35,9 +51,14 @@ export function membershipHistoryQueryKey(personId: number) {
 }
 
 export const eligibleMembershipPeopleQueryKey = ['membership', 'eligible'] as const
+export const myUnavailabilityQueryKey = ['me', 'unavailability'] as const
 
 export function membershipsQueryKey(status?: MembershipStatus) {
   return ['memberships', status ?? 'ALL'] as const
+}
+
+export function personUnavailabilityQueryKey(personId: number) {
+  return ['people', personId, 'unavailability'] as const
 }
 
 export function usePeople() {
@@ -91,6 +112,21 @@ export function useMemberships(status?: MembershipStatus) {
   return useQuery({
     queryKey: membershipsQueryKey(status),
     queryFn: () => getMemberships(status),
+  })
+}
+
+export function useMyUnavailability() {
+  return useQuery({
+    queryKey: myUnavailabilityQueryKey,
+    queryFn: getMyUnavailability,
+  })
+}
+
+export function usePersonUnavailability(personId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: personUnavailabilityQueryKey(personId),
+    queryFn: () => getPersonUnavailability(personId),
+    enabled: enabled && Number.isFinite(personId),
   })
 }
 
@@ -160,6 +196,47 @@ export function useCreatePerson() {
       await queryClient.invalidateQueries({ queryKey: peopleQueryKey })
     },
   })
+}
+
+export function useMyUnavailabilityMutations() {
+  const queryClient = useQueryClient()
+
+  const onSuccess = async () => {
+    await queryClient.invalidateQueries({ queryKey: myUnavailabilityQueryKey })
+  }
+
+  return {
+    create: useMutation({ mutationFn: (payload: PersonUnavailabilityInput) => createMyUnavailability(payload), onSuccess }),
+    update: useMutation({
+      mutationFn: ({ id, payload }: { id: number; payload: PersonUnavailabilityInput }) =>
+        updateMyUnavailability(id, payload),
+      onSuccess,
+    }),
+    deactivate: useMutation({ mutationFn: (id: number) => deactivateMyUnavailability(id), onSuccess }),
+    reactivate: useMutation({ mutationFn: (id: number) => reactivateMyUnavailability(id), onSuccess }),
+  }
+}
+
+export function usePersonUnavailabilityMutations(personId: number) {
+  const queryClient = useQueryClient()
+
+  const onSuccess = async () => {
+    await queryClient.invalidateQueries({ queryKey: personUnavailabilityQueryKey(personId) })
+  }
+
+  return {
+    create: useMutation({
+      mutationFn: (payload: PersonUnavailabilityInput) => createPersonUnavailability(personId, payload),
+      onSuccess,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, payload }: { id: number; payload: PersonUnavailabilityInput }) =>
+        updatePersonUnavailability(personId, id, payload),
+      onSuccess,
+    }),
+    deactivate: useMutation({ mutationFn: (id: number) => deactivatePersonUnavailability(personId, id), onSuccess }),
+    reactivate: useMutation({ mutationFn: (id: number) => reactivatePersonUnavailability(personId, id), onSuccess }),
+  }
 }
 
 export function useUpdatePerson(id: number) {

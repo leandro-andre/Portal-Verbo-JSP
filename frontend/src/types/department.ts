@@ -53,7 +53,6 @@ export type DepartmentRole = {
 
 export type CreateDepartmentRoleInput = {
   name: string
-  code: string
   can_manage_department: boolean
   can_manage_members: boolean
 }

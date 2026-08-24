@@ -17,6 +17,7 @@ import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import DiscipleshipAttendancePage from './pages/DiscipleshipAttendancePage'
 import LoginPage from './pages/LoginPage'
 import MembershipPage from './pages/MembershipPage'
+import MyUnavailabilityPage from './pages/MyUnavailabilityPage'
 import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
@@ -109,6 +110,7 @@ function AdminRoutes() {
         <Route path="/usuarios/:id" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
+        <Route path="/minhas-indisponibilidades" element={<MyUnavailabilityPage />} />
         <Route path="/departamentos" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentsPage /></AuthorizedRoute>} />
         <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />

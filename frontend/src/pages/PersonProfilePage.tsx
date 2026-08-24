@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, Edit3, Play, RefreshCcw } from 'lucide-react'
-import type { ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiHttpError } from '../api/people'
 import PersonAvatar from '../components/people/PersonAvatar'
@@ -13,12 +13,22 @@ import {
   useDeactivateMembership,
   useMembership,
   useMembershipHistory,
+  usePersonUnavailability,
+  usePersonUnavailabilityMutations,
   usePerson,
   useReactivateMembership,
   useStartChurchJourney,
   useUpdatePerson,
 } from '../hooks/usePeople'
-import type { ChurchJourney, Membership, MembershipStatusHistory, Person, PersonStatus } from '../types/person'
+import type {
+  ChurchJourney,
+  Membership,
+  MembershipStatusHistory,
+  Person,
+  PersonStatus,
+  PersonUnavailability,
+  PersonUnavailabilityInput,
+} from '../types/person'
 import { formatBrazilianMobile } from '../utils/phone'
 
 function formatDate(value: string) {
@@ -42,6 +52,19 @@ function getTodayInputValue() {
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function formatTime(value: string | null) {
+  return value ? value.slice(0, 5) : null
+}
+
+function unavailabilityPeriodLabel(unavailability: PersonUnavailability) {
+  const dateLabel = unavailability.start_date === unavailability.end_date
+    ? formatDate(unavailability.start_date)
+    : `${formatDate(unavailability.start_date)} a ${formatDate(unavailability.end_date)}`
+  const startTime = formatTime(unavailability.start_time)
+  const endTime = formatTime(unavailability.end_time)
+  return startTime && endTime ? `${dateLabel}, ${startTime} a ${endTime}` : `${dateLabel}, periodo integral`
 }
 
 function DetailItem({ label, value }: { label: string; value: ReactNode }) {
@@ -347,6 +370,137 @@ function MembershipLifecycleDialog({
   )
 }
 
+function AdminUnavailabilityForm({
+  isPending,
+  onSubmit,
+}: {
+  isPending: boolean
+  onSubmit: (payload: PersonUnavailabilityInput) => void
+}) {
+  const [startDate, setStartDate] = useState(getTodayInputValue)
+  const [endDate, setEndDate] = useState(getTodayInputValue)
+  const [hasTime, setHasTime] = useState(false)
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
+  const [reason, setReason] = useState('')
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    onSubmit({
+      start_date: startDate,
+      end_date: hasTime ? startDate : endDate,
+      start_time: hasTime ? startTime : null,
+      end_time: hasTime ? endTime : null,
+      reason,
+    })
+    setStartDate(getTodayInputValue())
+    setEndDate(getTodayInputValue())
+    setHasTime(false)
+    setStartTime('')
+    setEndTime('')
+    setReason('')
+  }
+
+  return (
+    <form className="department-inline-form" onSubmit={handleSubmit}>
+      <label className="form-field">
+        <span>Data inicial</span>
+        <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+      </label>
+      {!hasTime ? (
+        <label className="form-field">
+          <span>Data final</span>
+          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
+        </label>
+      ) : null}
+      <label className="checkbox-field">
+        <input type="checkbox" checked={hasTime} onChange={(event) => setHasTime(event.target.checked)} />
+        <span>Informar horario especifico</span>
+      </label>
+      {hasTime ? (
+        <>
+          <label className="form-field">
+            <span>Hora inicial</span>
+            <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} required />
+          </label>
+          <label className="form-field">
+            <span>Hora final</span>
+            <input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} required />
+          </label>
+        </>
+      ) : null}
+      <label className="form-field">
+        <span>Motivo</span>
+        <input value={reason} placeholder="Opcional" onChange={(event) => setReason(event.target.value)} />
+      </label>
+      <button className="button button--primary" type="submit" disabled={isPending}>
+        {isPending ? 'Salvando...' : 'Salvar indisponibilidade'}
+      </button>
+    </form>
+  )
+}
+
+function AdminUnavailabilitySection({
+  canManage,
+  error,
+  isLoading,
+  onCreate,
+  onLifecycle,
+  unavailabilities,
+  isPending,
+}: {
+  canManage: boolean
+  error: string | null
+  isLoading: boolean
+  onCreate: (payload: PersonUnavailabilityInput) => void
+  onLifecycle: (unavailability: PersonUnavailability) => void
+  unavailabilities: PersonUnavailability[]
+  isPending: boolean
+}) {
+  return (
+    <section className="profile-section">
+      <h2>Indisponibilidades</h2>
+      {error ? <div className="form-alert form-alert--error" role="alert">{error}</div> : null}
+      {canManage ? <AdminUnavailabilityForm isPending={isPending} onSubmit={onCreate} /> : null}
+      {isLoading ? (
+        <p className="page-heading__description">Carregando indisponibilidades...</p>
+      ) : (
+        <div className="table-shell table-shell--section">
+          <table className="people-table">
+            <thead>
+              <tr>
+                <th>Periodo</th>
+                <th>Status</th>
+                <th>Motivo</th>
+                {canManage ? <th className="people-table__actions-header">Acao</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {unavailabilities.map((item) => (
+                <tr key={item.id}>
+                  <td>{unavailabilityPeriodLabel(item)}</td>
+                  <td>{item.status === 'ACTIVE' ? 'Ativa' : 'Inativa'}</td>
+                  <td>{item.reason || '-'}</td>
+                  {canManage ? (
+                    <td>
+                      <button className="button button--secondary" type="button" onClick={() => onLifecycle(item)}>
+                        {item.status === 'ACTIVE' ? 'Inativar' : 'Reativar'}
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+              {unavailabilities.length === 0 ? (
+                <tr><td colSpan={canManage ? 4 : 3} className="table-muted">Nenhuma indisponibilidade cadastrada.</td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function churchStatusLabel(status: ChurchJourney['church_status']) {
   if (status === 'VISITOR') {
     return 'Visitante'
@@ -377,12 +531,20 @@ function PersonProfile({
   membershipHistoryLoading,
   membershipLoading,
   onLifecycleClick,
+  onUnavailabilityCreate,
+  onUnavailabilityLifecycle,
   onApproveMembershipClick,
   onDeactivateMembershipClick,
   onReactivateMembershipClick,
   onStartChurchJourneyClick,
   person,
   successMessage,
+  unavailabilityError,
+  unavailabilityLoading,
+  unavailabilityMutationPending,
+  unavailabilities,
+  canManageUnavailability,
+  canViewUnavailability,
 }: {
   canChangePeople: boolean
   canCreateChurchJourney: boolean
@@ -400,12 +562,20 @@ function PersonProfile({
   membershipHistoryLoading: boolean
   membershipLoading: boolean
   onLifecycleClick: () => void
+  onUnavailabilityCreate: (payload: PersonUnavailabilityInput) => void
+  onUnavailabilityLifecycle: (unavailability: PersonUnavailability) => void
   onApproveMembershipClick: () => void
   onDeactivateMembershipClick: () => void
   onReactivateMembershipClick: () => void
   onStartChurchJourneyClick: () => void
   person: Person
   successMessage: string | null
+  unavailabilityError: string | null
+  unavailabilityLoading: boolean
+  unavailabilityMutationPending: boolean
+  unavailabilities: PersonUnavailability[]
+  canManageUnavailability: boolean
+  canViewUnavailability: boolean
 }) {
   const hasDifferentFullName = person.full_name !== person.display_name
   const lifecycleLabel = person.status === 'ACTIVE' ? 'Inativar pessoa' : 'Reativar pessoa'
@@ -585,6 +755,18 @@ function PersonProfile({
             )}
           </section>
         ) : null}
+
+        {canViewUnavailability ? (
+          <AdminUnavailabilitySection
+            canManage={canManageUnavailability}
+            error={unavailabilityError}
+            isLoading={unavailabilityLoading}
+            isPending={unavailabilityMutationPending}
+            onCreate={onUnavailabilityCreate}
+            onLifecycle={onUnavailabilityLifecycle}
+            unavailabilities={unavailabilities}
+          />
+        ) : null}
       </div>
     </>
   )
@@ -601,6 +783,8 @@ function PersonProfilePage() {
   const canViewUsers = useCan('USER_VIEW')
   const canViewChurchJourney = useCan('CHURCH_JOURNEY_VIEW')
   const canViewMembership = useCan('MEMBERSHIP_VIEW')
+  const canViewUnavailability = useCan('UNAVAILABILITY_VIEW')
+  const canManageUnavailability = useCan('UNAVAILABILITY_MANAGE')
   const canApproveMembership = useCan('MEMBERSHIP_APPROVE')
   const canDeactivateMembership = useCan('MEMBERSHIP_DEACTIVATE')
   const canReactivateMembership = useCan('MEMBERSHIP_REACTIVATE')
@@ -623,6 +807,11 @@ function PersonProfilePage() {
   const deactivateMembership = useDeactivateMembership(personId)
   const reactivateMembership = useReactivateMembership(personId)
   const startChurchJourney = useStartChurchJourney(personId)
+  const { data: unavailabilities = [], isLoading: isUnavailabilityLoading } = usePersonUnavailability(
+    personId,
+    canViewUnavailability && isValidId,
+  )
+  const unavailabilityMutations = usePersonUnavailabilityMutations(personId)
   const [isLifecycleDialogOpen, setIsLifecycleDialogOpen] = useState(false)
   const [lifecycleError, setLifecycleError] = useState<string | null>(null)
   const [lifecycleSuccessMessage, setLifecycleSuccessMessage] = useState<string | null>(null)
@@ -633,6 +822,7 @@ function PersonProfilePage() {
   const [membershipLifecycleMode, setMembershipLifecycleMode] = useState<'deactivate' | 'reactivate' | null>(null)
   const [membershipLifecycleReason, setMembershipLifecycleReason] = useState('')
   const [membershipLifecycleError, setMembershipLifecycleError] = useState<string | null>(null)
+  const [unavailabilityError, setUnavailabilityError] = useState<string | null>(null)
   const [startedAt, setStartedAt] = useState(getTodayInputValue)
   const navigationState = location.state as { successMessage?: string } | null
   const successMessage = lifecycleSuccessMessage ?? navigationState?.successMessage ?? null
@@ -705,6 +895,31 @@ function PersonProfilePage() {
     }
   }
 
+  const handleUnavailabilityCreate = async (payload: PersonUnavailabilityInput) => {
+    setUnavailabilityError(null)
+    try {
+      await unavailabilityMutations.create.mutateAsync(payload)
+      setLifecycleSuccessMessage('Indisponibilidade cadastrada com sucesso.')
+    } catch (submitError) {
+      setUnavailabilityError(submitError instanceof Error ? submitError.message : 'Nao foi possivel salvar.')
+    }
+  }
+
+  const handleUnavailabilityLifecycle = async (unavailability: PersonUnavailability) => {
+    setUnavailabilityError(null)
+    try {
+      if (unavailability.status === 'ACTIVE') {
+        await unavailabilityMutations.deactivate.mutateAsync(unavailability.id)
+        setLifecycleSuccessMessage('Indisponibilidade inativada com sucesso.')
+      } else {
+        await unavailabilityMutations.reactivate.mutateAsync(unavailability.id)
+        setLifecycleSuccessMessage('Indisponibilidade reativada com sucesso.')
+      }
+    } catch (submitError) {
+      setUnavailabilityError(submitError instanceof Error ? submitError.message : 'Nao foi possivel alterar.')
+    }
+  }
+
   return (
     <section className="person-profile-page">
       {isLoading && isValidId ? (
@@ -760,6 +975,8 @@ function PersonProfilePage() {
               setLifecycleError(null)
               setIsLifecycleDialogOpen(true)
             }}
+            onUnavailabilityCreate={(payload) => void handleUnavailabilityCreate(payload)}
+            onUnavailabilityLifecycle={(unavailability) => void handleUnavailabilityLifecycle(unavailability)}
             onStartChurchJourneyClick={() => {
               setStartJourneyError(null)
               setStartedAt(getTodayInputValue())
@@ -772,6 +989,16 @@ function PersonProfilePage() {
             }}
             person={person}
             successMessage={successMessage}
+            unavailabilityError={unavailabilityError}
+            unavailabilityLoading={isUnavailabilityLoading}
+            unavailabilityMutationPending={
+              unavailabilityMutations.create.isPending
+              || unavailabilityMutations.deactivate.isPending
+              || unavailabilityMutations.reactivate.isPending
+            }
+            unavailabilities={unavailabilities}
+            canManageUnavailability={canManageUnavailability}
+            canViewUnavailability={canViewUnavailability}
           />
           <LifecycleDialog
             error={lifecycleError}

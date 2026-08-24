@@ -7,6 +7,8 @@ import type {
   MembershipStatus,
   MembershipStatusHistory,
   Person,
+  PersonUnavailability,
+  PersonUnavailabilityInput,
   PossibleDuplicateResponse,
   StartChurchJourneyInput,
   UpdatePersonInput,
@@ -339,4 +341,152 @@ export async function startChurchJourney(
   }
 
   return data as ChurchJourney
+}
+
+function throwUnavailabilityError(data: unknown): never {
+  if (isRecord(data) && typeof data.message === 'string') {
+    throw new ApiHttpError(
+      typeof data.code === 'string' ? 409 : 400,
+      data.message,
+    )
+  }
+  throw new Error('Nao foi possivel salvar a indisponibilidade.')
+}
+
+async function parseResponse(response: Response) {
+  return response.json().catch(() => null) as Promise<unknown>
+}
+
+export async function getMyUnavailability(): Promise<PersonUnavailability[]> {
+  const response = await fetch('/api/people/me/unavailability/', {
+    credentials: 'same-origin',
+  })
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar suas indisponibilidades.')
+  }
+  return response.json() as Promise<PersonUnavailability[]>
+}
+
+export async function createMyUnavailability(payload: PersonUnavailabilityInput): Promise<PersonUnavailability> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch('/api/people/me/unavailability/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+export async function updateMyUnavailability(
+  id: number,
+  payload: PersonUnavailabilityInput,
+): Promise<PersonUnavailability> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/me/unavailability/${id}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+async function runMyUnavailabilityLifecycle(id: number, action: 'deactivate' | 'reactivate') {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/me/unavailability/${id}/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+export function deactivateMyUnavailability(id: number) {
+  return runMyUnavailabilityLifecycle(id, 'deactivate')
+}
+
+export function reactivateMyUnavailability(id: number) {
+  return runMyUnavailabilityLifecycle(id, 'reactivate')
+}
+
+export async function getPersonUnavailability(personId: number): Promise<PersonUnavailability[]> {
+  const response = await fetch(`/api/people/${personId}/unavailability/`, {
+    credentials: 'same-origin',
+  })
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar indisponibilidades.')
+  }
+  return response.json() as Promise<PersonUnavailability[]>
+}
+
+export async function createPersonUnavailability(
+  personId: number,
+  payload: PersonUnavailabilityInput,
+): Promise<PersonUnavailability> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/unavailability/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+export async function updatePersonUnavailability(
+  personId: number,
+  id: number,
+  payload: PersonUnavailabilityInput,
+): Promise<PersonUnavailability> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/unavailability/${id}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+async function runPersonUnavailabilityLifecycle(personId: number, id: number, action: 'deactivate' | 'reactivate') {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/people/${personId}/unavailability/${id}/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+  if (!response.ok) {
+    throwUnavailabilityError(data)
+  }
+  return data as PersonUnavailability
+}
+
+export function deactivatePersonUnavailability(personId: number, id: number) {
+  return runPersonUnavailabilityLifecycle(personId, id, 'deactivate')
+}
+
+export function reactivatePersonUnavailability(personId: number, id: number) {
+  return runPersonUnavailabilityLifecycle(personId, id, 'reactivate')
 }

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -6,8 +6,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from pessoas.models import Person
-from usuarios.roles import PORTAL_ADMIN_GROUP, setup_portal_roles
+from pessoas.models import Person, PersonUnavailability
+from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
 
 
 class PersonApiTests(APITestCase):
@@ -437,3 +437,173 @@ class PersonApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Person.objects.filter(full_name="Maria Silva").count(), 2)
+
+
+class PersonUnavailabilityApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.other_person = Person.objects.create(full_name="Ana Souza", birth_date=date(1991, 6, 20))
+        self.admin = self.make_user("unavailability.admin", PORTAL_ADMIN_GROUP)
+        self.secretary = self.make_user("unavailability.secretary", SECRETARY_GROUP)
+        self.pastor = self.make_user("unavailability.pastor", PASTOR_GROUP)
+        self.self_user = self.user_model.objects.create_user(
+            username="unavailability.self",
+            password="senha-forte-123",
+            person=self.person,
+        )
+        self.common = self.user_model.objects.create_user(
+            username="unavailability.common",
+            password="senha-forte-123",
+        )
+
+    def make_user(self, username, group_name):
+        user = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        user.groups.add(Group.objects.get(name=group_name))
+        return user
+
+    def valid_payload(self):
+        return {
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-10",
+            "start_time": "18:00",
+            "end_time": "22:00",
+            "reason": "Viagem",
+        }
+
+    def test_self_service_cria_lista_edita_e_lifecycle(self):
+        self.client.force_authenticate(self.self_user)
+
+        create_response = self.client.post(reverse("my-unavailability-list"), self.valid_payload(), format="json")
+        unavailability_id = create_response.json()["id"]
+        list_response = self.client.get(reverse("my-unavailability-list"))
+        update_response = self.client.patch(
+            reverse("my-unavailability-detail", args=[unavailability_id]),
+            {"reason": "Compromisso"},
+            format="json",
+        )
+        deactivate_response = self.client.post(reverse("my-unavailability-deactivate", args=[unavailability_id]))
+        reactivate_response = self.client.post(reverse("my-unavailability-reactivate", args=[unavailability_id]))
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.json()["person"], self.person.pk)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.json()["reason"], "Compromisso")
+        self.assertEqual(deactivate_response.json()["status"], PersonUnavailability.Status.INACTIVE)
+        self.assertEqual(reactivate_response.json()["status"], PersonUnavailability.Status.ACTIVE)
+
+    def test_self_service_nao_acessa_indisponibilidade_de_outra_person(self):
+        other_unavailability = PersonUnavailability.objects.create(
+            person=self.other_person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+        )
+        self.client.force_authenticate(self.self_user)
+
+        response = self.client.patch(
+            reverse("my-unavailability-detail", args=[other_unavailability.pk]),
+            {"reason": "Tentativa"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_e_secretaria_gerenciam_person_sem_usuario(self):
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(
+            reverse("person-unavailability-list", args=[self.other_person.pk]),
+            {"start_date": "2026-09-10", "end_date": "2026-09-15", "reason": "Historico"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(hasattr(self.other_person, "user_account"))
+        self.assertEqual(PersonUnavailability.objects.get(person=self.other_person).reason, "Historico")
+
+        self.client.force_authenticate(self.admin)
+        admin_list = self.client.get(reverse("person-unavailability-list", args=[self.other_person.pk]))
+        self.assertEqual(admin_list.status_code, status.HTTP_200_OK)
+
+    def test_pastor_visualiza_mas_nao_gerencia(self):
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=date(2026, 9, 10),
+            end_date=date(2026, 9, 10),
+            reason="Privado",
+        )
+        self.client.force_authenticate(self.pastor)
+
+        list_response = self.client.get(reverse("person-unavailability-list", args=[self.person.pk]))
+        post_response = self.client.post(
+            reverse("person-unavailability-list", args=[self.person.pk]),
+            self.valid_payload(),
+            format="json",
+        )
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.json()[0]["reason"], "Privado")
+        self.assertEqual(post_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_comum_sem_person_nao_possui_self_service_nem_admin(self):
+        self.client.force_authenticate(self.common)
+
+        self.assertEqual(self.client.get(reverse("my-unavailability-list")).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            self.client.get(reverse("person-unavailability-list", args=[self.person.pk])).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_api_valida_regras_e_overlap(self):
+        self.client.force_authenticate(self.self_user)
+
+        invalid_time = self.client.post(
+            reverse("my-unavailability-list"),
+            {
+                "start_date": "2026-09-10",
+                "end_date": "2026-09-15",
+                "start_time": "18:00",
+                "end_time": "22:00",
+            },
+            format="json",
+        )
+        valid = self.client.post(reverse("my-unavailability-list"), self.valid_payload(), format="json")
+        overlap = self.client.post(
+            reverse("my-unavailability-list"),
+            {
+                "start_date": "2026-09-10",
+                "end_date": "2026-09-10",
+                "start_time": "19:00",
+                "end_time": "21:00",
+            },
+            format="json",
+        )
+        adjacent = self.client.post(
+            reverse("my-unavailability-list"),
+            {
+                "start_date": "2026-09-10",
+                "end_date": "2026-09-10",
+                "start_time": "22:00",
+                "end_time": "23:00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(invalid_time.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(invalid_time.json()["code"], "UNAVAILABILITY_TIME_REQUIRES_SINGLE_DAY")
+        self.assertEqual(valid.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(overlap.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(overlap.json()["code"], "UNAVAILABILITY_OVERLAP")
+        self.assertEqual(adjacent.status_code, status.HTTP_201_CREATED)
+
+    def test_inactive_nao_bloqueia_nova_criacao(self):
+        self.client.force_authenticate(self.self_user)
+        first = self.client.post(reverse("my-unavailability-list"), self.valid_payload(), format="json")
+        self.client.post(reverse("my-unavailability-deactivate", args=[first.json()["id"]]))
+
+        second = self.client.post(reverse("my-unavailability-list"), self.valid_payload(), format="json")
+
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)

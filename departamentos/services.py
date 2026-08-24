@@ -115,17 +115,11 @@ def create_department_role(
     *,
     department,
     name,
-    code,
     can_manage_department=False,
     can_manage_members=False,
 ):
     ensure_department_active(department)
-    code = Departamento.normalizar_codigo(code or name)
-    if DepartmentRole.objects.filter(department=department, code__iexact=code).exists():
-        raise DepartmentError(
-            "DEPARTMENT_ROLE_ALREADY_EXISTS",
-            "Ja existe um cargo com este codigo neste departamento.",
-        )
+    code = generate_department_role_code(department=department, name=name)
     role = DepartmentRole(
         department=department,
         name=name,
@@ -142,6 +136,19 @@ def create_department_role(
             "Ja existe um cargo com este codigo neste departamento.",
         ) from exc
     return role
+
+
+def generate_department_role_code(*, department, name):
+    base_code = Departamento.normalizar_codigo(name)
+    if not base_code:
+        base_code = "cargo"
+
+    code = base_code
+    counter = 2
+    while DepartmentRole.objects.filter(department=department, code__iexact=code).exists():
+        code = f"{base_code}-{counter}"
+        counter += 1
+    return code
 
 
 def update_department_role(

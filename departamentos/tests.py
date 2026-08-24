@@ -1396,27 +1396,34 @@ class DepartmentRoleMembershipTests(APITestCase):
         approve_membership(person, approved_by=self.admin)
         return person
 
-    def test_role_codigo_unico_por_departamento_e_permite_mesmo_codigo_em_outro(self):
-        role = create_department_role(
+    def test_role_code_eh_gerado_do_nome_e_unico_por_departamento(self):
+        first = create_department_role(
             department=self.department,
-            name="Lider",
-            code="lider",
+            name="Professor",
             can_manage_department=True,
             can_manage_members=True,
         )
+        second = create_department_role(department=self.department, name="Professor")
+        third = create_department_role(department=self.department, name="Professor")
         same_code_other_department = create_department_role(
             department=self.other_department,
-            name="Lider",
-            code="lider",
+            name="Professor",
         )
 
-        self.assertEqual(role.code, "lider")
-        self.assertEqual(same_code_other_department.code, "lider")
-        with self.assertRaises(DepartmentError):
-            create_department_role(department=self.department, name="Outro Lider", code="lider")
+        self.assertEqual(first.code, "professor")
+        self.assertEqual(second.code, "professor-2")
+        self.assertEqual(third.code, "professor-3")
+        self.assertEqual(same_code_other_department.code, "professor")
+
+    def test_role_code_normaliza_acentos_e_nomes_compostos(self):
+        leader = create_department_role(department=self.department, name="Líder de Sala")
+        camera = create_department_role(department=self.department, name="Operador de Câmera")
+
+        self.assertEqual(leader.code, "lider-de-sala")
+        self.assertEqual(camera.code, "operador-de-camera")
 
     def test_role_lifecycle_e_codigo_imutavel_pela_api(self):
-        role = create_department_role(department=self.department, name="Voluntario", code="voluntario")
+        role = create_department_role(department=self.department, name="Voluntario")
         self.client.force_authenticate(self.admin)
 
         code_response = self.client.patch(
@@ -1441,10 +1448,35 @@ class DepartmentRoleMembershipTests(APITestCase):
         self.assertEqual(invalid_deactivate.json()["code"], INVALID_DEPARTMENT_ROLE_TRANSITION)
         self.assertEqual(reactivate_response.status_code, status.HTTP_200_OK)
 
+    def test_api_cria_role_sem_code_e_renomear_nao_altera_code(self):
+        self.client.force_authenticate(self.admin)
+
+        create_response = self.client.post(
+            reverse("department-role-list", args=[self.department.pk]),
+            {
+                "name": "Lider",
+                "can_manage_department": False,
+                "can_manage_members": True,
+            },
+            format="json",
+        )
+        role_id = create_response.json()["id"]
+        update_response = self.client.patch(
+            reverse("department-role-detail", args=[self.department.pk, role_id]),
+            {"name": "Coordenador"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.json()["code"], "lider")
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.json()["name"], "Coordenador")
+        self.assertEqual(update_response.json()["code"], "lider")
+
     def test_membership_exige_membresia_ativa_e_aceita_person_sem_usuario(self):
         person = self.make_active_member_person("Maria Sem Usuario")
         visitor = self.make_person("Visitante Departamento")
-        role = create_department_role(department=self.department, name="Auxiliar", code="auxiliar")
+        role = create_department_role(department=self.department, name="Auxiliar")
 
         membership = create_department_membership(
             person=person,
@@ -1460,8 +1492,8 @@ class DepartmentRoleMembershipTests(APITestCase):
 
     def test_membership_valida_departamento_role_e_unicidade(self):
         person = self.make_active_member_person("Joao Departamento")
-        role = create_department_role(department=self.department, name="Equipe", code="equipe")
-        other_role = create_department_role(department=self.other_department, name="Equipe", code="equipe")
+        role = create_department_role(department=self.department, name="Equipe")
+        other_role = create_department_role(department=self.other_department, name="Equipe")
 
         create_department_membership(person=person, department=self.department, role=role)
 
@@ -1482,7 +1514,7 @@ class DepartmentRoleMembershipTests(APITestCase):
 
     def test_membership_bloqueia_role_inativo_e_departamento_inativo(self):
         person = self.make_active_member_person("Ana Departamento")
-        role = create_department_role(department=self.department, name="Equipe", code="equipe")
+        role = create_department_role(department=self.department, name="Equipe")
 
         deactivate_department_role(role)
         with self.assertRaises(DepartmentError) as role_ctx:
@@ -1498,7 +1530,7 @@ class DepartmentRoleMembershipTests(APITestCase):
 
     def test_membership_lifecycle_preserva_joined_at_e_elegibilidade_operacional(self):
         person = self.make_active_member_person("Pedro Departamento")
-        role = create_department_role(department=self.department, name="Equipe", code="equipe")
+        role = create_department_role(department=self.department, name="Equipe")
         membership = create_department_membership(
             person=person,
             department=self.department,
@@ -1524,7 +1556,7 @@ class DepartmentRoleMembershipTests(APITestCase):
         self.assertFalse(response.json()[0]["operationally_eligible"])
 
     def test_api_global_roles_e_delete_405(self):
-        role = create_department_role(department=self.department, name="Equipe", code="equipe")
+        role = create_department_role(department=self.department, name="Equipe")
         person = self.make_active_member_person("Clara Departamento")
 
         self.client.force_authenticate(self.pastor)
@@ -1569,7 +1601,6 @@ class DepartmentRoleMembershipTests(APITestCase):
         manager_role = create_department_role(
             department=self.department,
             name="Coordenador",
-            code="coordenador",
             can_manage_department=True,
             can_manage_members=True,
         )
@@ -1590,7 +1621,6 @@ class DepartmentRoleMembershipTests(APITestCase):
             reverse("department-role-list", args=[self.department.pk]),
             {
                 "name": "Novo cargo local",
-                "code": "novo-cargo-local",
                 "can_manage_department": False,
                 "can_manage_members": False,
             },
@@ -1604,7 +1634,7 @@ class DepartmentRoleMembershipTests(APITestCase):
 
     def test_operational_eligibility_retorna_resultado_estruturado(self):
         person = self.make_active_member_person("Elegivel Departamento")
-        role = create_department_role(department=self.department, name="Professor", code="professor")
+        role = create_department_role(department=self.department, name="Professor")
         membership = create_department_membership(person=person, department=self.department, role=role)
 
         eligibility = get_department_membership_eligibility(membership)
@@ -1614,7 +1644,7 @@ class DepartmentRoleMembershipTests(APITestCase):
 
     def test_operational_eligibility_acumula_multiplos_motivos(self):
         person = self.make_active_member_person("Multiplos Motivos")
-        role = create_department_role(department=self.department, name="Auxiliar Motivos", code="auxiliar-motivos")
+        role = create_department_role(department=self.department, name="Auxiliar Motivos")
         membership = create_department_membership(person=person, department=self.department, role=role)
 
         membership = deactivate_department_membership(membership)
@@ -1650,7 +1680,7 @@ class DepartmentRoleMembershipTests(APITestCase):
         visitor = self.make_person("Visitante Entry")
         inactive_member = self.make_active_member_person("Membro Inativo Entry")
         deactivate_membership(inactive_member.membership, changed_by=self.admin, reason="Homologacao")
-        role = create_department_role(department=self.department, name="Entrada", code="entrada")
+        role = create_department_role(department=self.department, name="Entrada")
 
         self.assertTrue(get_department_entry_eligibility(active_person, self.department).eligible)
         self.assertEqual(
@@ -1680,7 +1710,7 @@ class DepartmentRoleMembershipTests(APITestCase):
         candidate = self.make_active_member_person("Candidata Sem Usuario")
         linked_person = self.make_active_member_person("Pessoa Ja Vinculada")
         visitor = self.make_person("Visitante Sem Membership")
-        role = create_department_role(department=self.department, name="Recepcao", code="recepcao")
+        role = create_department_role(department=self.department, name="Recepcao")
         membership = create_department_membership(person=linked_person, department=self.department, role=role)
         deactivate_membership(linked_person.membership, changed_by=self.admin, reason="Homologacao")
 
@@ -1707,7 +1737,6 @@ class DepartmentRoleMembershipTests(APITestCase):
         manager_role = create_department_role(
             department=self.department,
             name="Gestor",
-            code="gestor",
             can_manage_members=True,
         )
         create_department_membership(person=manager_person, department=self.department, role=manager_role)
@@ -1715,20 +1744,20 @@ class DepartmentRoleMembershipTests(APITestCase):
         self.client.force_authenticate(manager_user)
         allowed_response = self.client.post(
             reverse("department-role-list", args=[self.department.pk]),
-            {"name": "Criado Contexto", "code": "criado-contexto"},
+            {"name": "Criado Contexto"},
             format="json",
         )
         deactivate_membership(manager_person.membership, changed_by=self.admin, reason="Homologacao")
         denied_response = self.client.post(
             reverse("department-role-list", args=[self.department.pk]),
-            {"name": "Bloqueado Contexto", "code": "bloqueado-contexto"},
+            {"name": "Bloqueado Contexto"},
             format="json",
         )
         manager_person.refresh_from_db()
         reactivate_membership(manager_person.membership, changed_by=self.admin, reason="Homologacao")
         restored_response = self.client.post(
             reverse("department-role-list", args=[self.department.pk]),
-            {"name": "Restaurado Contexto", "code": "restaurado-contexto"},
+            {"name": "Restaurado Contexto"},
             format="json",
         )
 
@@ -1746,7 +1775,6 @@ class DepartmentRoleMembershipTests(APITestCase):
         manager_role = create_department_role(
             department=self.department,
             name="Gestor Role",
-            code="gestor-role",
             can_manage_members=True,
         )
         membership = create_department_membership(person=manager_person, department=self.department, role=manager_role)

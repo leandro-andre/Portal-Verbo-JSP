@@ -68,6 +68,29 @@ export type MembershipStatusHistory = {
   reason: string
 }
 
+export type PersonUnavailabilityStatus = 'ACTIVE' | 'INACTIVE'
+
+export type PersonUnavailability = {
+  id: number
+  person: number
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  reason: string
+  status: PersonUnavailabilityStatus
+  created_at: string
+  updated_at: string
+}
+
+export type PersonUnavailabilityInput = {
+  start_date: string
+  end_date: string
+  start_time?: string | null
+  end_time?: string | null
+  reason?: string
+}
+
 export type EligibleMembershipPerson = {
   id: number
   display_name: string

@@ -79,3 +79,45 @@ class Person(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class PersonUnavailability(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Ativa"
+        INACTIVE = "INACTIVE", "Inativa"
+
+    person = models.ForeignKey(
+        Person,
+        verbose_name="Pessoa",
+        on_delete=models.CASCADE,
+        related_name="unavailabilities",
+    )
+    start_date = models.DateField("Data inicial")
+    end_date = models.DateField("Data final")
+    start_time = models.TimeField("Hora inicial", blank=True, null=True)
+    end_time = models.TimeField("Hora final", blank=True, null=True)
+    reason = models.TextField("Motivo", blank=True)
+    status = models.CharField(
+        "Status",
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["-start_date", "-id"]
+        verbose_name = "Indisponibilidade da pessoa"
+        verbose_name_plural = "Indisponibilidades das pessoas"
+        permissions = [
+            ("deactivate_personunavailability", "Can deactivate person unavailability"),
+            ("reactivate_personunavailability", "Can reactivate person unavailability"),
+        ]
+
+    def __str__(self):
+        return f"{self.person} indisponivel de {self.start_date} a {self.end_date}"
+
+    @property
+    def is_full_day(self):
+        return self.start_time is None and self.end_time is None
