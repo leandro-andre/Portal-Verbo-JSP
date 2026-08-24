@@ -14,7 +14,7 @@ function LoginPage() {
   const [password, setPassword] = useState('')
   const [fieldError, setFieldError] = useState<string | null>(null)
   const [generalError, setGeneralError] = useState<string | null>(null)
-  const nextPath = searchParams.get('next') || '/pessoas'
+  const nextPath = searchParams.get('next') || '/'
 
   if (!isLoading && currentUser?.is_authenticated) {
     return <Navigate to={nextPath} replace />

@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from pessoas.models import Person
 from pessoas.serializers import get_photo_url
+from usuarios.dashboard import get_user_dashboard
 from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
@@ -509,6 +510,13 @@ class MyProfileView(APIView):
         if serializer.validated_data:
             person.save(update_fields=[*serializer.validated_data.keys(), "updated_at"])
         return Response(my_profile_payload(request.user, request))
+
+
+class MyDashboardView(APIView):
+    permission_classes = [IsActiveAuthenticatedUser]
+
+    def get(self, request):
+        return Response(get_user_dashboard(request.user, request))
 
 
 class MyProfilePhotoView(APIView):

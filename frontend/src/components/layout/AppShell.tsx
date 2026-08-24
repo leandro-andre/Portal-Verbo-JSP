@@ -10,9 +10,13 @@ type AppShellProps = {
 function AppShell({ children }: AppShellProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const location = useLocation()
-  const topbarTitle = location.pathname.startsWith('/usuarios') || location.pathname.endsWith('/acesso')
-    ? 'Usuarios'
-    : location.pathname.startsWith('/solicitacoes-acesso')
+  const topbarTitle = location.pathname === '/'
+    ? 'Inicio'
+    : location.pathname.startsWith('/meu-perfil') || location.pathname.startsWith('/minhas-')
+      ? 'Minha Area'
+    : location.pathname.startsWith('/usuarios') || location.pathname.endsWith('/acesso')
+      ? 'Usuarios'
+      : location.pathname.startsWith('/solicitacoes-acesso')
       ? 'Solicitacoes'
       : location.pathname.startsWith('/agenda-cultos')
         ? 'Agenda de Cultos'

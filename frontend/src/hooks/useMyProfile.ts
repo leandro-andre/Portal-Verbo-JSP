@@ -6,6 +6,7 @@ import {
   uploadMyProfilePhoto,
 } from '../api/profile'
 import type { MyProfileUpdateInput } from '../types/person'
+import { myDashboardQueryKey } from './useDashboard'
 import { currentUserQueryKey } from './useAuth'
 
 export const myProfileQueryKey = ['me', 'profile'] as const
@@ -21,6 +22,7 @@ export function useMyProfileMutations() {
   const queryClient = useQueryClient()
   const onSuccess = async () => {
     await queryClient.invalidateQueries({ queryKey: myProfileQueryKey })
+    await queryClient.invalidateQueries({ queryKey: myDashboardQueryKey })
     await queryClient.invalidateQueries({ queryKey: currentUserQueryKey })
   }
 

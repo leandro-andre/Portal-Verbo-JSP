@@ -15,6 +15,7 @@ import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
 import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
 import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import DiscipleshipAttendancePage from './pages/DiscipleshipAttendancePage'
+import HomePage from './pages/HomePage'
 import LoginPage from './pages/LoginPage'
 import MembershipPage from './pages/MembershipPage'
 import MyProfilePage from './pages/MyProfilePage'
@@ -104,7 +105,7 @@ function AdminRoutes() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<Navigate to="/pessoas" replace />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/pessoas" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PeoplePage /></AuthorizedRoute>} />
         <Route path="/pessoas/nova" element={<AuthorizedRoute capability="PEOPLE_CREATE"><PersonCreatePage /></AuthorizedRoute>} />
         <Route path="/pessoas/:id/acesso" element={<AuthorizedRoute capability="USER_VIEW"><PersonAccessRedirect /></AuthorizedRoute>} />

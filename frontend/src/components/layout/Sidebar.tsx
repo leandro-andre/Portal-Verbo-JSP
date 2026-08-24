@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -50,14 +50,16 @@ function Sidebar({ isCollapsed }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav" aria-label="Modulos do portal">
-        {!isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
         <NavLink
           className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-          to="/meu-perfil"
+          to="/"
+          end
         >
-          <UserRound size={18} aria-hidden="true" />
-          {!isCollapsed ? <span>Meu Perfil</span> : null}
+          <House size={18} aria-hidden="true" />
+          {!isCollapsed ? <span>Inicio</span> : null}
         </NavLink>
+
+        {!isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
         {hasPerson ? (
           <>
             <NavLink
@@ -76,6 +78,13 @@ function Sidebar({ isCollapsed }: SidebarProps) {
             </NavLink>
           </>
         ) : null}
+        <NavLink
+          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          to="/meu-perfil"
+        >
+          <UserRound size={18} aria-hidden="true" />
+          {!isCollapsed ? <span>Meu Perfil</span> : null}
+        </NavLink>
 
         {canViewPeople ? (
           <>

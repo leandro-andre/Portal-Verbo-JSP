@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time, timedelta
 from io import BytesIO, StringIO
 from os import environ
 import shutil
@@ -14,16 +14,20 @@ from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from PIL import Image
 
-from church_journey.models import ChurchJourney
+from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartamentoMembro, DepartmentMembership, DepartmentRole
+from escalas.models import Escala, EscalaItem, IndisponibilidadeMembro
 from departamentos.permissions import usuario_pode_acessar_departamentos
 from escalas.permissions import usuario_pode_acessar_escalas
 from ministros.models import Ministro
-from pessoas.models import Person
+from pessoas.models import Person, PersonUnavailability
+from scheduling.models import Schedule, ScheduleAssignment
+from worship.models import WorshipService
 from usuarios.context_processors import internal_permissions
 from usuarios.roles import (
     PASTOR_GROUP,
@@ -900,6 +904,246 @@ class MyProfileApiTests(TestCase):
         self.assertFalse(self.person.photo)
         self.assertTrue(Person.objects.filter(pk=self.person.pk).exists())
         self.assertFalse(self.person.photo.storage.exists(photo_name))
+
+
+class MyDashboardApiTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.today = timezone.localdate()
+        self.person = Person.objects.create(full_name="Leandro Viana", preferred_name="Leandro", birth_date=date(1990, 5, 10))
+        self.user = self.user_model.objects.create_user(
+            username="dashboard.user",
+            password="Senha-forte-123",
+            person=self.person,
+        )
+        self.department = Departamento.objects.create(nome="Juniores Dashboard", codigo="juniores-dashboard")
+        self.role = DepartmentRole.objects.create(
+            department=self.department,
+            name="Professor",
+            code="professor",
+            active=True,
+        )
+        self.membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=self.department,
+            role=self.role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+
+    def create_service(self, name, days, status_value=WorshipService.Status.SCHEDULED):
+        return WorshipService.objects.create(
+            name=name,
+            date=self.today + timedelta(days=days),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=status_value,
+        )
+
+    def create_assignment(self, service, status_value=Schedule.Status.PUBLISHED, membership=None):
+        schedule = Schedule.objects.create(
+            department=(membership or self.membership).department,
+            worship_service=service,
+            status=status_value,
+        )
+        return ScheduleAssignment.objects.create(
+            schedule=schedule,
+            department_membership=membership or self.membership,
+        )
+
+    def complete_discipleship(self, person):
+        teacher = Person.objects.create(full_name=f"Professor {person.pk}", birth_date=date(1980, 1, 1))
+        discipleship_class = DiscipleshipClass.objects.create(
+            name=f"Discipulado {person.pk}",
+            teacher=teacher,
+            start_date=self.today - timedelta(days=30),
+            expected_end_date=self.today - timedelta(days=1),
+            planned_sessions=1,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        return DiscipleshipEnrollment.objects.create(
+            person=person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            completed_at=self.today - timedelta(days=1),
+        )
+
+    def test_dashboard_exige_autenticacao(self):
+        response = self.client.get(reverse("my-dashboard"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_dashboard_usuario_sem_person_nao_quebra_e_mantem_admin_por_current_user(self):
+        admin = self.user_model.objects.create_user(username="dashboard.admin", password="Senha-forte-123")
+        assign_role(admin, PORTAL_ADMIN_GROUP)
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("my-dashboard"))
+        current_user = self.client.get(reverse("auth-current-user")).json()["user"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["person_linked"])
+        self.assertIn("Procure a Secretaria", response.json()["message"])
+        self.assertIn("PEOPLE_VIEW", current_user["capabilities"])
+
+    def test_dashboard_visitante_e_membro_com_departamento_membership_e_member_since(self):
+        ChurchJourney.objects.create(person=self.person, started_at=self.today - timedelta(days=40))
+        self.client.force_login(self.user)
+
+        visitor_response = self.client.get(reverse("my-dashboard"))
+        self.assertEqual(visitor_response.json()["profile"]["church_status"], "VISITOR")
+        self.assertEqual(visitor_response.json()["journey"]["departments"][0]["role"]["name"], "Professor")
+
+        self.complete_discipleship(self.person)
+        Membership.objects.create(
+            person=self.person,
+            status=Membership.Status.ACTIVE,
+            member_since=date(2022, 3, 12),
+            approved_by=self.user,
+            approved_at=timezone.now(),
+        )
+
+        member_response = self.client.get(reverse("my-dashboard"))
+        self.assertEqual(member_response.json()["profile"]["church_status"], "MEMBER")
+        self.assertEqual(member_response.json()["profile"]["member_since"], "2022-03-12")
+        self.assertTrue(member_response.json()["journey"]["discipleship_completed"])
+
+    def test_dashboard_membro_inativo_sem_departamentos(self):
+        person = Person.objects.create(full_name="Membro Inativo", birth_date=date(1988, 1, 1))
+        ChurchJourney.objects.create(person=person, started_at=self.today - timedelta(days=40))
+        self.complete_discipleship(person)
+        Membership.objects.create(
+            person=person,
+            status=Membership.Status.INACTIVE,
+            member_since=date(2020, 1, 1),
+            approved_by=self.user,
+            approved_at=timezone.now(),
+        )
+        user = self.user_model.objects.create_user(username="dashboard.inactive", password="Senha-forte-123", person=person)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("my-dashboard"))
+
+        self.assertEqual(response.json()["profile"]["church_status"], "INACTIVE_MEMBER")
+        self.assertEqual(response.json()["journey"]["departments"], [])
+
+    def test_dashboard_next_schedule_e_counts_ignoram_draft_cancelled_e_passado_como_proxima(self):
+        past = self.create_assignment(self.create_service("Culto Passado", -1))
+        visible = self.create_assignment(self.create_service("Culto Publicado", 1))
+        self.create_assignment(self.create_service("Culto Rascunho", 2), Schedule.Status.DRAFT)
+        self.create_assignment(self.create_service("Culto Escala Cancelada", 3), Schedule.Status.CANCELLED)
+        self.create_assignment(self.create_service("Culto Cancelado", 4, WorshipService.Status.CANCELLED))
+        month_future = self.create_assignment(self.create_service("Culto Mes", 5))
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-dashboard"))
+        body = response.json()
+
+        self.assertEqual(body["next_schedule"]["schedule_id"], visible.schedule_id)
+        self.assertEqual(body["next_schedule"]["worship_service"]["name"], "Culto Publicado")
+        self.assertEqual(body["schedules_summary"]["upcoming_count"], 2)
+        expected_month_count = sum(
+            1
+            for assignment in (past, visible, month_future)
+            if assignment.schedule.worship_service.date.year == self.today.year
+            and assignment.schedule.worship_service.date.month == self.today.month
+        )
+        self.assertEqual(body["schedules_summary"]["month_count"], expected_month_count)
+        self.assertNotIn("Culto Rascunho", str(body))
+        self.assertNotIn("Culto Cancelado", str(body))
+
+    def test_dashboard_next_schedule_inclui_warning_sem_motivo(self):
+        assignment = self.create_assignment(self.create_service("Culto com Alerta", 1))
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=assignment.schedule.worship_service.date,
+            end_date=assignment.schedule.worship_service.date,
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            reason="Motivo privado",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-dashboard"))
+
+        self.assertEqual(response.json()["next_schedule"]["warnings"][0]["code"], "MY_SCHEDULE_PERSON_UNAVAILABLE")
+        self.assertNotIn("Motivo privado", str(response.json()))
+
+    def test_dashboard_unavailability_futura_sem_reason_e_ignora_inativa_passada(self):
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=self.today - timedelta(days=5),
+            end_date=self.today - timedelta(days=1),
+            reason="Passada",
+        )
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=self.today + timedelta(days=3),
+            end_date=self.today + timedelta(days=4),
+            status=PersonUnavailability.Status.INACTIVE,
+            reason="Inativa",
+        )
+        future = PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=self.today + timedelta(days=1),
+            end_date=self.today + timedelta(days=2),
+            reason="Privado",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-dashboard"))
+        body = response.json()["unavailability"]
+
+        self.assertEqual(body["future_count"], 1)
+        self.assertEqual(body["next"]["id"], future.id)
+        self.assertNotIn("Privado", str(body))
+
+    def test_dashboard_nao_usa_legado(self):
+        legacy_user = self.user
+        legacy_membership = DepartamentoMembro.objects.create(
+            membro=legacy_user,
+            departamento=self.department,
+            papel=DepartamentoMembro.Papel.VOLUNTARIO,
+        )
+        legacy_schedule = Escala.objects.create(
+            departamento=self.department,
+            titulo="Escala Legada",
+            data=self.today + timedelta(days=10),
+            horario=time(18, 0),
+            ativa=True,
+        )
+        EscalaItem.objects.create(
+            escala=legacy_schedule,
+            participacao=legacy_membership,
+            funcao="Funcao legada",
+        )
+        IndisponibilidadeMembro.objects.create(
+            membro=legacy_user,
+            data_inicio=self.today + timedelta(days=1),
+            data_fim=self.today + timedelta(days=2),
+            motivo="Legado privado",
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-dashboard"))
+
+        self.assertIsNone(response.json()["next_schedule"])
+        self.assertEqual(response.json()["unavailability"]["future_count"], 0)
+        self.assertNotIn("Escala Legada", str(response.json()))
+        self.assertNotIn("Funcao legada", str(response.json()))
+        self.assertNotIn("Legado privado", str(response.json()))
+
+    def test_dashboard_lideranca_contextual_nao_concede_capability_global(self):
+        self.role.can_manage_schedules = True
+        self.role.save(update_fields=["can_manage_schedules", "updated_at"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-dashboard"))
+        current_user = self.client.get(reverse("auth-current-user")).json()["user"]
+
+        self.assertTrue(response.json()["contextual_access"]["can_manage_schedules"])
+        self.assertEqual(response.json()["contextual_access"]["schedule_departments"][0]["name"], "Juniores Dashboard")
+        self.assertNotIn("SCHEDULE_MANAGE", current_user["capabilities"])
 
 
 class LocalSettingsCsrfTests(TestCase):
