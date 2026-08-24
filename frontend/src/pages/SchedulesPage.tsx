@@ -1,171 +1,248 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
-import { CalendarDays, Plus } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useDepartments } from '../hooks/useDepartments'
-import { useCreateSchedule, useSchedules } from '../hooks/useScheduling'
-import { useWorshipServices } from '../hooks/useWorship'
+import { useEffect, useState } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useCan } from '../hooks/useAuth'
+import { useCreateSchedule, useMonthlySchedule, useSchedulingDepartments } from '../hooks/useScheduling'
+import type { MonthlyScheduleItem, ScheduleStatus } from '../types/scheduling'
 
 const months = ['Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const weekdays = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado']
 
 function initialMonth() {
   const today = new Date()
   return { year: today.getFullYear(), month: today.getMonth() + 1 }
 }
 
+function shiftMonth(year: number, month: number, delta: number) {
+  const next = new Date(year, month - 1 + delta, 1)
+  return { year: next.getFullYear(), month: next.getMonth() + 1 }
+}
+
+function parseLocalDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 function formatDate(value: string) {
-  const [year, month, day] = value.split('-')
-  return `${day}/${month}/${year}`
+  const date = parseLocalDate(value)
+  return `${weekdays[date.getDay()]}, ${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`
 }
 
 function formatTime(value: string) {
   return value.slice(0, 5)
 }
 
-function statusLabel(status: string) {
-  return status === 'DRAFT' ? 'Rascunho' : status === 'PUBLISHED' ? 'Publicada' : 'Cancelada'
+function monthTitle(year: number, month: number) {
+  return `${months[month - 1]} ${year}`
+}
+
+function statusLabel(status: ScheduleStatus | null) {
+  if (status === 'DRAFT') return 'Rascunho'
+  if (status === 'PUBLISHED') return 'Publicada'
+  if (status === 'CANCELLED') return 'Cancelada'
+  return 'Sem escala'
+}
+
+function statusClass(status: ScheduleStatus | null) {
+  if (status === 'PUBLISHED') return 'status-badge--active'
+  if (status === 'CANCELLED') return 'access-status-badge--rejected'
+  if (status === 'DRAFT') return 'lesson-status-badge--scheduled'
+  return 'status-badge--inactive'
+}
+
+function isPastService(date: string) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return parseLocalDate(date) < today
+}
+
+function ScheduleCard({
+  canManage,
+  contextQuery,
+  isPending,
+  item,
+  onCreate,
+}: {
+  canManage: boolean
+  contextQuery: string
+  isPending: boolean
+  item: MonthlyScheduleItem
+  onCreate: (worshipServiceId: number) => void
+}) {
+  const { worship_service: service, schedule } = item
+  const disabled = service.status === 'CANCELLED' || isPastService(service.date)
+
+  return (
+    <section className="profile-section">
+      <div className="section-heading-row">
+        <div>
+          <h2>{formatDate(service.date)}</h2>
+          <p className="page-heading__description">{formatTime(service.time)} - {service.name}</p>
+        </div>
+        <div className="table-actions">
+          <span className={`status-badge ${service.status === 'CANCELLED' ? 'access-status-badge--rejected' : 'status-badge--active'}`}>
+            <span className="status-badge__dot" aria-hidden="true" />
+            Culto {service.status === 'CANCELLED' ? 'cancelado' : 'agendado'}
+          </span>
+          <span className={`status-badge ${statusClass(schedule?.status ?? null)}`}>
+            <span className="status-badge__dot" aria-hidden="true" />
+            {statusLabel(schedule?.status ?? null)}
+          </span>
+          <span className="status-badge status-badge--inactive">{service.kind === 'EXTRAORDINARY' ? 'Extraordinario' : 'Regular'}</span>
+        </div>
+      </div>
+
+      {schedule ? (
+        <div className="section-heading-row">
+          <p className="page-heading__description">{schedule.assignments_count} pessoas escaladas</p>
+          <Link className="button button--primary" to={`/escalas/${schedule.id}?${contextQuery}`}>
+            {schedule.permissions.can_manage ? 'Editar escala' : 'Ver escala'}
+          </Link>
+        </div>
+      ) : (
+        <div className="section-heading-row">
+          <p className="page-heading__description">
+            {disabled ? 'Nao e possivel montar escala para culto cancelado ou passado.' : 'Nenhuma escala criada para este departamento.'}
+          </p>
+          {canManage && !disabled ? (
+            <button className="button button--primary" disabled={isPending} type="button" onClick={() => onCreate(service.id)}>
+              <Plus size={17} aria-hidden="true" />
+              Montar escala
+            </button>
+          ) : null}
+        </div>
+      )}
+    </section>
+  )
 }
 
 function SchedulesPage() {
   const initial = initialMonth()
-  const [year, setYear] = useState(initial.year)
-  const [month, setMonth] = useState(initial.month)
-  const [departmentId, setDepartmentId] = useState('')
-  const [status, setStatus] = useState('')
-  const [newDepartmentId, setNewDepartmentId] = useState('')
-  const [newWorshipServiceId, setNewWorshipServiceId] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { data: schedules = [], isError, isLoading, refetch } = useSchedules(year, month, departmentId, status)
-  const { data: departments = [] } = useDepartments()
-  const { data: worshipServices = [] } = useWorshipServices(year, month)
-  const createMutation = useCreateSchedule(year, month, departmentId, status)
-  const activeDepartments = departments.filter((department) => department.ativo)
-  const scheduledServices = worshipServices.filter((service) => service.status === 'SCHEDULED')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [year, setYear] = useState(Number(searchParams.get('year')) || initial.year)
+  const [month, setMonth] = useState(Number(searchParams.get('month')) || initial.month)
+  const [departmentId, setDepartmentId] = useState(searchParams.get('department') ?? '')
+  const [onlyPending, setOnlyPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const canOpenWorshipSchedule = useCan('WORSHIP_SCHEDULE_VIEW')
+  const { data: departments = [], isLoading: departmentsLoading } = useSchedulingDepartments()
+  const selectedDepartmentId = departmentId || (departments[0]?.id ? String(departments[0].id) : '')
+  const { data: monthly, isError, isLoading, refetch } = useMonthlySchedule(year, month, selectedDepartmentId)
+  const createMutation = useCreateSchedule(year, month, selectedDepartmentId, '')
+  const contextQuery = new URLSearchParams({ year: String(year), month: String(month), department: selectedDepartmentId }).toString()
 
-  const handleCreate = async (event: FormEvent) => {
-    event.preventDefault()
+  useEffect(() => {
+    const params = new URLSearchParams({ year: String(year), month: String(month) })
+    if (selectedDepartmentId) {
+      params.set('department', selectedDepartmentId)
+    }
+    setSearchParams(params, { replace: true })
+  }, [year, month, selectedDepartmentId, setSearchParams])
+
+  const goToMonth = (delta: number) => {
+    const next = shiftMonth(year, month, delta)
+    setYear(next.year)
+    setMonth(next.month)
+    setError(null)
+  }
+
+  const handleCreate = async (worshipServiceId: number) => {
     setError(null)
     try {
       const schedule = await createMutation.mutateAsync({
-        department_id: Number(newDepartmentId),
-        worship_service_id: Number(newWorshipServiceId),
+        department_id: Number(selectedDepartmentId),
+        worship_service_id: worshipServiceId,
       })
-      navigate(`/escalas/${schedule.id}`)
+      navigate(`/escalas/${schedule.id}?${contextQuery}`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Nao foi possivel criar a escala.')
+      setError(caught instanceof Error ? caught.message : 'Nao foi possivel montar a escala.')
     }
   }
+
+  const items = (monthly?.items ?? []).filter((item) => {
+    if (!onlyPending) return true
+    return item.worship_service.status !== 'CANCELLED' && item.schedule?.status !== 'PUBLISHED'
+  })
+  const ready = monthly ? `${monthly.summary.published} / ${monthly.summary.operational_services}` : '0 / 0'
 
   return (
     <section className="people-page">
       <div className="page-heading">
         <div>
           <h1>Escalas</h1>
-          <p className="page-heading__description">Fundacao operacional de escalas por culto e departamento.</p>
+          <p className="page-heading__description">Montagem mensal por culto, departamento, cargo e pessoa.</p>
         </div>
       </div>
 
       {error ? <div className="form-alert form-alert--error">{error}</div> : null}
 
       <div className="people-toolbar">
-        <label className="status-filter">
-          Mes
-          <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>
-            {months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
-          </select>
-        </label>
-        <label className="status-filter">
-          Ano
-          <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
-            {[2026, 2027, 2028].map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
+        <button className="button button--secondary" type="button" onClick={() => goToMonth(-1)}>
+          <ChevronLeft size={17} aria-hidden="true" />
+          {monthTitle(shiftMonth(year, month, -1).year, shiftMonth(year, month, -1).month)}
+        </button>
+        <strong className="people-summary">{monthTitle(year, month)}</strong>
+        <button className="button button--secondary" type="button" onClick={() => goToMonth(1)}>
+          {monthTitle(shiftMonth(year, month, 1).year, shiftMonth(year, month, 1).month)}
+          <ChevronRight size={17} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="people-toolbar">
         <label className="status-filter">
           Departamento
-          <select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
-            <option value="">Todos</option>
+          <select value={selectedDepartmentId} onChange={(event) => setDepartmentId(event.target.value)} disabled={departmentsLoading}>
             {departments.map((department) => <option key={department.id} value={department.id}>{department.nome}</option>)}
           </select>
         </label>
-        <label className="status-filter">
-          Status
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Todos</option>
-            <option value="DRAFT">Rascunho</option>
-            <option value="PUBLISHED">Publicada</option>
-            <option value="CANCELLED">Cancelada</option>
-          </select>
+        <label className="checkbox-field">
+          <input type="checkbox" checked={onlyPending} onChange={(event) => setOnlyPending(event.target.checked)} />
+          <span>Somente pendentes</span>
         </label>
       </div>
 
-      <div className="profile-content">
-        <section className="profile-section">
-          <h2>Nova escala</h2>
-          <form className="department-inline-form" onSubmit={handleCreate}>
-            <label className="field-group">
-              <span>Culto</span>
-              <select required value={newWorshipServiceId} onChange={(event) => setNewWorshipServiceId(event.target.value)}>
-                <option value="">Selecione</option>
-                {scheduledServices.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {formatDate(service.date)} - {formatTime(service.time)} - {service.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field-group">
-              <span>Departamento</span>
-              <select required value={newDepartmentId} onChange={(event) => setNewDepartmentId(event.target.value)}>
-                <option value="">Selecione</option>
-                {activeDepartments.map((department) => <option key={department.id} value={department.id}>{department.nome}</option>)}
-              </select>
-            </label>
-            <button className="button button--primary" disabled={createMutation.isPending} type="submit">
-              <Plus size={17} aria-hidden="true" />
-              Nova escala
-            </button>
-          </form>
-        </section>
-      </div>
+      {monthly ? (
+        <div className="people-toolbar">
+          <span className="people-summary">{monthly.summary.services} cultos</span>
+          <span className="people-summary">Prontas {ready}</span>
+          <span className="people-summary">{monthly.summary.published} publicadas</span>
+          <span className="people-summary">{monthly.summary.draft} rascunhos</span>
+          <span className="people-summary">{monthly.summary.without_schedule} sem escala</span>
+        </div>
+      ) : null}
 
-      {isLoading ? (
-        <div className="state-panel"><h2>Carregando escalas...</h2><p>Aguarde enquanto buscamos os dados.</p></div>
+      {!selectedDepartmentId ? (
+        <div className="state-panel">
+          <h2>Nenhum departamento disponivel</h2>
+          <p>Sua sessao nao possui departamentos disponiveis para montagem de escalas.</p>
+        </div>
+      ) : isLoading ? (
+        <div className="state-panel"><h2>Carregando mes...</h2><p>Aguarde enquanto buscamos os cultos e escalas.</p></div>
       ) : isError ? (
         <div className="state-panel state-panel--error">
           <CalendarDays size={26} aria-hidden="true" />
-          <h2>Nao foi possivel carregar as escalas.</h2>
+          <h2>Nao foi possivel carregar o mes.</h2>
           <button className="button button--secondary" type="button" onClick={() => void refetch()}>Tentar novamente</button>
         </div>
-      ) : schedules.length === 0 ? (
-        <div className="state-panel"><h2>Nenhuma escala encontrada</h2><p>Crie uma escala para um culto futuro e departamento ativo.</p></div>
+      ) : items.length === 0 ? (
+        <div className="state-panel">
+          <h2>Nenhum culto cadastrado neste mes.</h2>
+          <p>A Secretaria precisa cadastrar ou gerar os cultos na Agenda de Cultos antes da montagem das escalas.</p>
+          {canOpenWorshipSchedule ? <Link className="button button--primary" to="/agenda-cultos">Ir para Agenda de Cultos</Link> : null}
+        </div>
       ) : (
-        <div className="table-shell">
-          <table className="people-table">
-            <thead>
-              <tr>
-                <th>Culto</th>
-                <th>Departamento</th>
-                <th>Status</th>
-                <th>Pessoas</th>
-                <th aria-label="Acao" />
-              </tr>
-            </thead>
-            <tbody>
-              {schedules.map((schedule) => (
-                <tr key={schedule.id}>
-                  <td>
-                    <strong>{formatDate(schedule.worship_service.date)} - {formatTime(schedule.worship_service.time)}</strong>
-                    <span className="table-muted">{schedule.worship_service.name}</span>
-                  </td>
-                  <td>{schedule.department.nome}</td>
-                  <td>{statusLabel(schedule.status)}</td>
-                  <td>{schedule.assignments_count} pessoas</td>
-                  <td><Link className="button button--secondary" to={`/escalas/${schedule.id}`}>Ver</Link></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="profile-content">
+          {items.map((item) => (
+            <ScheduleCard
+              canManage={Boolean(monthly?.permissions.can_manage)}
+              contextQuery={contextQuery}
+              isPending={createMutation.isPending}
+              item={item}
+              key={item.worship_service.id}
+              onCreate={(worshipServiceId) => void handleCreate(worshipServiceId)}
+            />
+          ))}
         </div>
       )}
     </section>

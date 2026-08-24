@@ -208,3 +208,96 @@ class SchedulingApiTests(TestCase):
         body = str(response.json())
         self.assertIn("PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE", body)
         self.assertNotIn("Motivo privado", body)
+
+    def test_monthly_projection_includes_services_without_creating_schedule_and_summary(self):
+        self.login(self.admin)
+        cancelled = WorshipService.objects.create(
+            name="Culto Cancelado",
+            date=self.worship_service.date + timedelta(days=1),
+            time=time(18, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.CANCELLED,
+        )
+
+        response = self.client.get(
+            f"/api/scheduling/monthly/?year={self.worship_service.date.year}&month={self.worship_service.date.month}&department_id={self.department.pk}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["summary"]["services"], 2)
+        self.assertEqual(data["summary"]["cancelled_services"], 1)
+        self.assertEqual(data["summary"]["operational_services"], 1)
+        self.assertEqual(data["summary"]["without_schedule"], 1)
+        self.assertEqual(Schedule.objects.count(), 0)
+        self.assertEqual([item["worship_service"]["id"] for item in data["items"]], [self.worship_service.id, cancelled.id])
+
+    def test_monthly_projection_includes_existing_schedule(self):
+        self.login(self.admin)
+        schedule = self.create_schedule_via_api()
+
+        response = self.client.get(
+            f"/api/scheduling/monthly/?year={self.worship_service.date.year}&month={self.worship_service.date.month}&department_id={self.department.pk}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        self.assertEqual(item["schedule"]["id"], schedule["id"])
+        self.assertEqual(response.json()["summary"]["draft"], 1)
+        self.assertEqual(response.json()["summary"]["without_schedule"], 0)
+
+    def test_monthly_projection_exposes_manage_permission_for_ui(self):
+        self.login(self.pastor)
+
+        pastor_response = self.client.get(
+            f"/api/scheduling/monthly/?year={self.worship_service.date.year}&month={self.worship_service.date.month}&department_id={self.department.pk}"
+        )
+
+        self.assertEqual(pastor_response.status_code, 200)
+        self.assertFalse(pastor_response.json()["permissions"]["can_manage"])
+
+        self.login(self.secretary)
+        secretary_response = self.client.get(
+            f"/api/scheduling/monthly/?year={self.worship_service.date.year}&month={self.worship_service.date.month}&department_id={self.department.pk}"
+        )
+
+        self.assertEqual(secretary_response.status_code, 200)
+        self.assertTrue(secretary_response.json()["permissions"]["can_manage"])
+
+    def test_candidates_can_be_filtered_by_role_and_multiple_same_role_allowed(self):
+        second_person = self.create_member_person("Geysika")
+        second_membership = DepartmentMembership.objects.create(
+            person=second_person,
+            department=self.department,
+            role=self.role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        other_role = DepartmentRole.objects.create(department=self.department, name="Auxiliar", code="auxiliar", active=True)
+        other_membership = DepartmentMembership.objects.create(
+            person=self.create_member_person("Auxiliar"),
+            department=self.department,
+            role=other_role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        self.login(self.admin)
+        schedule = self.create_schedule_via_api()
+
+        candidates = self.client.get(f"/api/scheduling/schedules/{schedule['id']}/eligible-members/?role_id={self.role.pk}")
+        self.assertEqual(candidates.status_code, 200)
+        candidate_ids = {item["department_membership"]["id"] for item in candidates.json()}
+        self.assertIn(self.department_membership.pk, candidate_ids)
+        self.assertIn(second_membership.pk, candidate_ids)
+        self.assertNotIn(other_membership.pk, candidate_ids)
+
+        first = self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": self.department_membership.pk},
+            content_type="application/json",
+        )
+        second = self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": second_membership.pk},
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)

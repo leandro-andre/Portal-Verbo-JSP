@@ -27,6 +27,7 @@ export type ScheduleAssignment = {
 
 export type ScheduleDetail = ScheduleSummary & {
   assignments: ScheduleAssignment[]
+  active_roles: DepartmentMembership['role'][]
 }
 
 export type ScheduleCreateInput = {
@@ -38,4 +39,30 @@ export type ScheduleCandidate = {
   department_membership: DepartmentMembership
   eligible: boolean
   reasons: Array<{ code: string; message: string }>
+}
+
+export type MonthlyScheduleSummary = {
+  services: number
+  cancelled_services: number
+  operational_services: number
+  published: number
+  draft: number
+  cancelled_schedules: number
+  without_schedule: number
+}
+
+export type MonthlyScheduleItem = {
+  worship_service: ScheduleSummary['worship_service']
+  schedule: ScheduleSummary | null
+}
+
+export type MonthlySchedule = {
+  year: number
+  month: number
+  department: ScheduleSummary['department']
+  permissions: {
+    can_manage: boolean
+  }
+  summary: MonthlyScheduleSummary
+  items: MonthlyScheduleItem[]
 }

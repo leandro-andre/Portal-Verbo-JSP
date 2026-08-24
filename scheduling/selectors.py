@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from departamentos.models import DepartmentMembership
+from departamentos.models import Departamento, DepartmentRole
 from departamentos.selectors import get_department_membership_eligibility
 from pessoas.availability import is_person_available
 from worship.models import WorshipService
@@ -143,3 +144,77 @@ def get_assignment_candidates(schedule):
         }
         for membership in memberships
     ]
+
+
+def get_schedule_departments_for_user(user):
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return Departamento.objects.none()
+    if user.has_perm("scheduling.view_schedule"):
+        return Departamento.objects.filter(ativo=True).order_by("nome", "id")
+    person_id = getattr(user, "person_id", None)
+    if not person_id:
+        return Departamento.objects.none()
+    return (
+        Departamento.objects.filter(
+            ativo=True,
+            department_memberships__person_id=person_id,
+            department_memberships__status=DepartmentMembership.Status.ACTIVE,
+            department_memberships__role__active=True,
+            department_memberships__role__can_manage_schedules=True,
+        )
+        .distinct()
+        .order_by("nome", "id")
+    )
+
+
+def get_department_monthly_schedule(*, department, year, month, user):
+    services = list(
+        WorshipService.objects.filter(date__year=year, date__month=month)
+        .select_related("template")
+        .order_by("date", "time", "id")
+    )
+    schedules_by_service = {
+        schedule.worship_service_id: schedule
+        for schedule in Schedule.objects.filter(department=department, worship_service__in=services)
+        .select_related("department", "worship_service", "created_by")
+        .annotate(assignments_count=Count("assignments", distinct=True))
+        .prefetch_related("assignments")
+    }
+
+    items = []
+    summary = {
+        "services": len(services),
+        "cancelled_services": 0,
+        "operational_services": 0,
+        "published": 0,
+        "draft": 0,
+        "cancelled_schedules": 0,
+        "without_schedule": 0,
+    }
+    for service in services:
+        schedule = schedules_by_service.get(service.id)
+        if service.status == WorshipService.Status.CANCELLED:
+            summary["cancelled_services"] += 1
+        else:
+            summary["operational_services"] += 1
+            if schedule is None:
+                summary["without_schedule"] += 1
+            elif schedule.status == Schedule.Status.PUBLISHED:
+                summary["published"] += 1
+            elif schedule.status == Schedule.Status.DRAFT:
+                summary["draft"] += 1
+        if schedule is not None and schedule.status == Schedule.Status.CANCELLED:
+            summary["cancelled_schedules"] += 1
+        items.append({"worship_service": service, "schedule": schedule})
+
+    return {
+        "year": year,
+        "month": month,
+        "department": department,
+        "summary": summary,
+        "items": items,
+    }
+
+
+def get_active_schedule_roles(schedule):
+    return DepartmentRole.objects.filter(department=schedule.department, active=True).order_by("name", "id")

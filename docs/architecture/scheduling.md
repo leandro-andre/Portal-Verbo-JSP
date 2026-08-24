@@ -139,6 +139,8 @@ projeto deve decidir se precisa de snapshot historico.
 
 ## API
 
+- `GET /api/scheduling/departments/`
+- `GET /api/scheduling/monthly/`
 - `GET /api/scheduling/schedules/`
 - `POST /api/scheduling/schedules/`
 - `GET /api/scheduling/schedules/{id}/`
@@ -151,6 +153,22 @@ projeto deve decidir se precisa de snapshot historico.
 - `DELETE /api/scheduling/schedules/{id}/assignments/{assignment_id}/`
 - `GET /api/scheduling/schedules/{id}/eligible-members/`
 
+`GET /api/scheduling/monthly/?year=YYYY&month=M&department_id=ID` retorna a
+projecao mensal para montagem: todos os `WorshipService` do mes, a `Schedule`
+do departamento quando existir e um resumo operacional. Esse GET nao cria
+Schedule e nao executa backfill. Cultos sem Schedule aparecem como pendentes
+para criacao explicita via `POST /api/scheduling/schedules/`.
+
+Resumo mensal:
+
+- `services`
+- `cancelled_services`
+- `operational_services`
+- `published`
+- `draft`
+- `cancelled_schedules`
+- `without_schedule`
+
 Filtros de listagem:
 
 - `department_id`
@@ -161,8 +179,10 @@ Filtros de listagem:
 
 ## UI minima
 
-- `/escalas`: listagem, filtros simples e criacao minima
-- `/escalas/:id`: detail, assignments, candidatos e lifecycle
+- `/escalas`: montagem mensal por ano, mes e departamento, baseada na Agenda
+  de Cultos. Cultos cancelados permanecem visiveis, mas nao editaveis.
+- `/escalas/:id`: detail agrupado pelos cargos ativos do departamento,
+  assignments, candidatos filtraveis por cargo e lifecycle.
 
-PVV-033+ deve evoluir a experiencia de montagem, substituicao, publicacao em
-lote, notificacoes e confirmacao/recusa.
+Nao ha autoescala, drag and drop, publicacao em lote, slots fixos,
+substituicao, notificacoes ou confirmacao/recusa nesta etapa.

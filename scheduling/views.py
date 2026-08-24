@@ -9,6 +9,7 @@ from departamentos.models import DepartmentMembership
 from departamentos.selectors import can_manage_department_schedules
 from .models import Schedule, ScheduleAssignment
 from .serializers import (
+    MonthlyScheduleSerializer,
     ScheduleAssignmentCreateSerializer,
     ScheduleAssignmentSerializer,
     ScheduleCreateSerializer,
@@ -16,6 +17,7 @@ from .serializers import (
     ScheduleSerializer,
     serialize_assignment_candidates,
 )
+from .selectors import get_department_monthly_schedule, get_schedule_departments_for_user
 from .services import (
     SchedulingError,
     cancel_schedule,
@@ -129,6 +131,36 @@ class ScheduleListCreateView(APIView):
         return Response(ScheduleSerializer(schedule, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
+class ScheduleDepartmentListView(APIView):
+    def get(self, request):
+        ensure_authenticated(request.user)
+        departments = get_schedule_departments_for_user(request.user)
+        from .serializers import ScheduleDepartmentSerializer
+
+        return Response(ScheduleDepartmentSerializer(departments, many=True).data)
+
+
+class MonthlyScheduleView(APIView):
+    def get(self, request):
+        ensure_authenticated(request.user)
+        try:
+            year = int(request.query_params.get("year", ""))
+            month = int(request.query_params.get("month", ""))
+        except ValueError:
+            return Response({"message": "Informe ano e mes validos."}, status=status.HTTP_400_BAD_REQUEST)
+        if not 1 <= month <= 12:
+            return Response({"message": "Informe um mes entre 1 e 12."}, status=status.HTTP_400_BAD_REQUEST)
+        department_id = request.query_params.get("department_id")
+        from departamentos.models import Departamento
+
+        department = get_object_or_404(Departamento, pk=department_id)
+        if not can_view_schedules(request.user) and not can_manage_schedule(request.user, department):
+            raise PermissionDenied("Sem permissao para visualizar escalas deste departamento.")
+        projection = get_department_monthly_schedule(department=department, year=year, month=month, user=request.user)
+        projection["permissions"] = {"can_manage": can_manage_schedule(request.user, department)}
+        return Response(MonthlyScheduleSerializer(projection, context={"request": request}).data)
+
+
 class ScheduleDetailView(APIView):
     def get(self, request, pk):
         ensure_authenticated(request.user)
@@ -225,4 +257,12 @@ class ScheduleEligibleMembersView(APIView):
         schedule = get_schedule_or_404(schedule_id)
         if not can_view_schedules(request.user) and not can_manage_schedule(request.user, schedule.department):
             raise PermissionDenied("Sem permissao para visualizar candidatos.")
-        return Response(serialize_assignment_candidates(schedule))
+        candidates = serialize_assignment_candidates(schedule)
+        role_id = request.query_params.get("role_id")
+        if role_id:
+            candidates = [
+                candidate
+                for candidate in candidates
+                if str(candidate["department_membership"]["role"]["id"]) == str(role_id)
+            ]
+        return Response(candidates)

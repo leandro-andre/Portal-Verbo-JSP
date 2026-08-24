@@ -1,11 +1,13 @@
 from rest_framework import serializers
 
 from departamentos.models import Departamento, DepartmentMembership
+from departamentos.models import DepartmentRole
 from departamentos.serializers import DepartmentRoleSerializer
+from pessoas.models import Person
 from worship.models import WorshipService
 
 from .models import Schedule, ScheduleAssignment
-from .selectors import get_assignment_candidates, get_schedule_assignments
+from .selectors import get_active_schedule_roles, get_assignment_candidates, get_schedule_assignments
 
 
 class ScheduleDepartmentSerializer(serializers.ModelSerializer):
@@ -26,9 +28,12 @@ class ScheduleUserSerializer(serializers.Serializer):
     display_name = serializers.CharField()
 
 
-class AssignmentPersonSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField(source="display_name")
+class AssignmentPersonSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Person
+        fields = ["id", "display_name"]
 
 
 class AssignmentDepartmentMembershipSerializer(serializers.ModelSerializer):
@@ -84,12 +89,16 @@ class ScheduleSerializer(serializers.ModelSerializer):
 
 class ScheduleDetailSerializer(ScheduleSerializer):
     assignments = serializers.SerializerMethodField()
+    active_roles = serializers.SerializerMethodField()
 
     class Meta(ScheduleSerializer.Meta):
-        fields = ScheduleSerializer.Meta.fields + ["assignments"]
+        fields = ScheduleSerializer.Meta.fields + ["assignments", "active_roles"]
 
     def get_assignments(self, obj):
         return ScheduleAssignmentSerializer(get_schedule_assignments(obj), many=True).data
+
+    def get_active_roles(self, obj):
+        return DepartmentRoleSerializer(get_active_schedule_roles(obj), many=True).data
 
 
 class ScheduleCreateSerializer(serializers.Serializer):
@@ -115,3 +124,26 @@ class ScheduleCandidateSerializer(serializers.Serializer):
 
 def serialize_assignment_candidates(schedule):
     return ScheduleCandidateSerializer(get_assignment_candidates(schedule), many=True).data
+
+
+class MonthlyScheduleItemSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        request = self.context.get("request")
+        return {
+            "worship_service": ScheduleWorshipServiceSerializer(instance["worship_service"]).data,
+            "schedule": ScheduleSerializer(instance["schedule"], context={"request": request}).data
+            if instance["schedule"] is not None
+            else None,
+        }
+
+
+class MonthlyScheduleSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        return {
+            "year": instance["year"],
+            "month": instance["month"],
+            "department": ScheduleDepartmentSerializer(instance["department"]).data,
+            "permissions": instance.get("permissions", {"can_manage": False}),
+            "summary": instance["summary"],
+            "items": MonthlyScheduleItemSerializer(instance["items"], many=True, context=self.context).data,
+        }
