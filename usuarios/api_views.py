@@ -95,6 +95,11 @@ def csrf_view(request):
 
 
 @require_GET
+def health_view(request):
+    return JsonResponse({"status": "ok"})
+
+
+@require_GET
 def current_user_view(request):
     if request.user.is_authenticated and not request.user.is_active:
         logout(request)

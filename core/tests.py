@@ -1,18 +1,77 @@
 from datetime import timedelta
+from pathlib import Path
+import os
+import subprocess
+import sys
+import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from config.env import env_bool, env_list
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
 from escalas.models import Escala
 from pessoas.models import Person
 from scheduling.models import Schedule, ScheduleAssignment
 from worship.models import WorshipService
 
+from .views import react_app
 from .models import ContatoMensagem, SiteConfig
+
+
+class ProductionReadinessTests(TestCase):
+    def test_health_check_publico_nao_expoe_detalhes(self):
+        response = self.client.get(reverse("api-health"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_env_bool_e_lista_tem_parsing_seguro(self):
+        with patch.dict(os.environ, {"FLAG_FALSE": "False", "FLAG_TRUE": "sim", "HOSTS": "localhost, 127.0.0.1,,testserver"}):
+            self.assertFalse(env_bool("FLAG_FALSE", True))
+            self.assertTrue(env_bool("FLAG_TRUE", False))
+            self.assertEqual(env_list("HOSTS"), ["localhost", "127.0.0.1", "testserver"])
+
+    def test_production_settings_exigem_database_url(self):
+        env = os.environ.copy()
+        env.update(
+            {
+                "DJANGO_ENV": "production",
+                "DJANGO_DEBUG": "False",
+                "DJANGO_SECRET_KEY": "not-a-real-secret-for-test-only",
+                "DJANGO_ALLOWED_HOSTS": "example.com",
+            }
+        )
+        env.pop("DATABASE_URL", None)
+        env.pop("DJANGO_DATABASE_URL", None)
+
+        result = subprocess.run(
+            [sys.executable, "manage.py", "check"],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DATABASE_URL", result.stderr + result.stdout)
+
+    def test_react_app_serve_index_do_build(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "index.html").write_text("<div id=\"root\"></div>", encoding="utf-8")
+            request = RequestFactory().get("/meu-perfil")
+            with override_settings(REACT_BUILD_DIR=build_dir):
+                response = react_app(request, "meu-perfil")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), b"<div id=\"root\"></div>")
+            response.close()
 
 
 class ContatoViewTests(TestCase):

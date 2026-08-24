@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from .env import env, env_list, load_env_file
+import dj_database_url
+
+from .env import env, env_bool, env_list, load_env_file
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,6 +43,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -72,23 +75,33 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 
-db_engine = env("DJANGO_DB_ENGINE", "django.db.backends.sqlite3")
-db_name = env("DJANGO_DB_NAME", "db.sqlite3")
+DATABASE_URL = env("DATABASE_URL") or env("DJANGO_DATABASE_URL", "")
+DB_CONN_MAX_AGE = int(env("DJANGO_DB_CONN_MAX_AGE", "60"))
 
-if db_engine == "django.db.backends.sqlite3":
-    db_name = str(BASE_DIR / db_name)
-
-DATABASES = {
-    "default": {
-        "ENGINE": db_engine,
-        "NAME": db_name,
-        "USER": env("DJANGO_DB_USER", ""),
-        "PASSWORD": env("DJANGO_DB_PASSWORD", ""),
-        "HOST": env("DJANGO_DB_HOST", ""),
-        "PORT": env("DJANGO_DB_PORT", ""),
-        "CONN_MAX_AGE": int(env("DJANGO_DB_CONN_MAX_AGE", "60")),
+if DATABASE_URL:
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=DB_CONN_MAX_AGE,
+            ssl_require=env_bool("DJANGO_DB_SSL_REQUIRE", False),
+        )
     }
-}
+else:
+    db_engine = env("DJANGO_DB_ENGINE", "django.db.backends.sqlite3")
+    db_name = env("DJANGO_DB_NAME", "db.sqlite3")
+    if db_engine == "django.db.backends.sqlite3":
+        db_name = str(BASE_DIR / db_name)
+    DATABASES = {
+        "default": {
+            "ENGINE": db_engine,
+            "NAME": db_name,
+            "USER": env("DJANGO_DB_USER", ""),
+            "PASSWORD": env("DJANGO_DB_PASSWORD", ""),
+            "HOST": env("DJANGO_DB_HOST", ""),
+            "PORT": env("DJANGO_DB_PORT", ""),
+            "CONN_MAX_AGE": DB_CONN_MAX_AGE,
+        }
+    }
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -122,10 +135,24 @@ LOGOUT_REDIRECT_URL = "core:home"
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
+if FRONTEND_DIST_DIR.exists():
+    STATICFILES_DIRS.append(FRONTEND_DIST_DIR)
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+REACT_BUILD_DIR = FRONTEND_DIST_DIR
+SERVE_REACT_APP = env_bool("DJANGO_SERVE_REACT_APP", False)
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

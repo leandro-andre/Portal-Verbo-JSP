@@ -17,6 +17,12 @@ db.sqlite3-journal
 media/
 staticfiles/
 
+# Frontend/build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
 # Test and coverage artifacts
 .coverage
 htmlcov/

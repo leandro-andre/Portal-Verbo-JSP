@@ -5,6 +5,7 @@ Portal Django para igreja/comunidade, com site publico, area de usuarios, evento
 ## Requisitos
 
 - Python 3.13
+- Node 24.14.1 para build do frontend React
 - Git
 - SQLite para desenvolvimento local
 
@@ -32,6 +33,8 @@ DJANGO_DEBUG=True
 DJANGO_SECRET_KEY=django-insecure-dev-only-key-change-me
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,testserver
 DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+DJANGO_SERVE_REACT_APP=False
+DATABASE_URL=
 ```
 
 Prepare o banco local:
@@ -100,18 +103,32 @@ O arquivo `config/settings.py` escolhe a configuracao usando `DJANGO_ENV`:
 Em producao, defina pelo menos:
 
 ```env
-DJANGO_ENV=prod
+DJANGO_ENV=production
 DJANGO_DEBUG=False
 DJANGO_SECRET_KEY=uma-chave-segura
-DJANGO_ALLOWED_HOSTS=seudominio.com,www.seudominio.com
-DJANGO_CSRF_TRUSTED_ORIGINS=https://seudominio.com,https://www.seudominio.com
-```
-
-Se usar proxy/reverse proxy com HTTPS:
-
-```env
+DJANGO_ALLOWED_HOSTS=seudominio.com,.up.railway.app
+DJANGO_CSRF_TRUSTED_ORIGINS=https://seudominio.com,https://app.up.railway.app
+DJANGO_SERVE_REACT_APP=True
+DATABASE_URL=postgresql://...
 DJANGO_USE_X_FORWARDED_PROTO=True
 ```
+
+Sem `DATABASE_URL`, o desenvolvimento local continua usando SQLite. Em producao,
+`DATABASE_URL` e obrigatorio para evitar fallback acidental para SQLite.
+
+Build/execucao esperados para producao:
+
+```powershell
+cd frontend
+npm ci
+npm run build
+cd ..
+python manage.py collectstatic --noinput
+python manage.py migrate
+gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+Mais detalhes: `docs/deployment/production-readiness.md`.
 
 ## Arquivos locais
 

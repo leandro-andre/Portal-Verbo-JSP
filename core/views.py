@@ -1,4 +1,6 @@
 from django.contrib import messages
+from django.conf import settings
+from django.http import FileResponse, Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -75,3 +77,10 @@ def ao_vivo(request):
             "youtube_watch_url": youtube_watch_url,
         },
     )
+
+
+def react_app(request, path=""):
+    index_path = settings.REACT_BUILD_DIR / "index.html"
+    if not index_path.exists():
+        raise Http404("React build nao encontrado. Execute npm run build.")
+    return FileResponse(index_path.open("rb"), content_type="text/html")

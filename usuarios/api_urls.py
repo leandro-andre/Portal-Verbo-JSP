@@ -17,6 +17,7 @@ from .api_views import (
     activate_account_view,
     csrf_view,
     current_user_view,
+    health_view,
     login_view,
     logout_view,
 )
@@ -24,6 +25,7 @@ from scheduling.views import MySchedulesView
 
 
 urlpatterns = [
+    path("health/", health_view, name="api-health"),
     path("auth/csrf/", csrf_view, name="auth-csrf"),
     path("auth/current-user/", current_user_view, name="auth-current-user"),
     path("auth/login/", login_view, name="auth-login"),

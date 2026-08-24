@@ -4,6 +4,12 @@ from .settings_base import *
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
 
+MIDDLEWARE = [
+    middleware
+    for middleware in MIDDLEWARE
+    if middleware != "whitenoise.middleware.WhiteNoiseMiddleware"
+]
+
 ALLOWED_HOSTS = env_list(
     "DJANGO_ALLOWED_HOSTS",
     ["127.0.0.1", "localhost", "testserver"],

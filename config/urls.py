@@ -15,9 +15,10 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from core.views import react_app
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,6 +35,16 @@ urlpatterns = [
     path("", include("ministros.urls")),
     path("financeiro/", include("financeiro.urls")),
 ]
+
+if settings.SERVE_REACT_APP:
+    urlpatterns.insert(1, path("", react_app, name="react-app"))
+    urlpatterns.append(
+        re_path(
+            r"^(?!(api|admin|static|media)(/|$)).*$",
+            react_app,
+            name="react-app-fallback",
+        )
+    )
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
