@@ -67,7 +67,7 @@ from church_journey.services import approve_membership, deactivate_membership, r
 from pessoas.models import Person
 from scheduling.models import Schedule, ScheduleAssignment
 from worship.models import WorshipService
-from .utils import gerar_escalas_do_mes_para_departamento, membro_esta_indisponivel
+from .utils import membro_esta_indisponivel
 from usuarios.roles import (
     PASTOR_GROUP,
     PORTAL_ADMIN_GROUP,
@@ -309,34 +309,6 @@ class DepartamentosModelsTests(TestCase):
 
         with self.assertRaises(ValidationError):
             escala.full_clean()
-
-    def test_geracao_mensal_evita_duplicidade(self):
-        departamento = Departamento.objects.create(nome="Midia Mensal")
-        culto = CultoPadrao.objects.create(
-            nome="Quinta-feira",
-            dia_semana=CultoPadrao.DiaSemana.QUINTA,
-            horario="20:00",
-            ativo=True,
-        )
-        Escala.objects.create(
-            departamento=departamento,
-            culto_padrao=culto,
-            titulo="Quinta-feira",
-            data="2026-05-07",
-            horario="20:00",
-            ativa=True,
-        )
-
-        resultado = gerar_escalas_do_mes_para_departamento(
-            departamento=departamento,
-            ano=2026,
-            mes=5,
-            cultos_padroes=[culto],
-        )
-
-        self.assertEqual(len(resultado["criadas"]), 3)
-        self.assertEqual(len(resultado["ignoradas"]), 1)
-
 
 class DepartamentosDashboardTests(TestCase):
     def setUp(self):

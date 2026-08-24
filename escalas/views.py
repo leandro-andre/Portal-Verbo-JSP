@@ -1,29 +1,16 @@
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
-from django.http import HttpResponseRedirect
-from django.shortcuts import get_object_or_404
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse
 from django.views import View
-from django.views.generic import CreateView, DetailView, ListView, UpdateView
-from django.views.generic.edit import FormView
+from django.views.generic import DetailView, ListView
 
-from departamentos.models import Departamento
 from departamentos.permissions import (
     get_departamentos_gerenciaveis,
     usuario_pode_gerenciar_cultos_padrao,
 )
 from usuarios.permissions import usuario_tem_acesso_total_sistema
 
-from .forms import (
-    CultoPadraoForm,
-    EscalaForm,
-    EscalaItemForm,
-    GerarEscalasMesForm,
-    IndisponibilidadeMembroForm,
-)
 from .legacy_freeze import LegacySchedulingReadOnlyMixin, legacy_scheduling_read_only_response
-from .models import CultoPadrao, Escala, EscalaItem, IndisponibilidadeMembro
+from .models import CultoPadrao, Escala, IndisponibilidadeMembro
 from .permissions import (
     CultoPadraoManagerRequiredMixin,
     EscalaLeaderRequiredMixin,
@@ -32,24 +19,11 @@ from .permissions import (
     usuario_pode_acessar_escalas,
 )
 from .services import (
-    alternar_status_culto_padrao,
-    atualizar_culto_padrao,
-    atualizar_escala,
-    atualizar_indisponibilidade,
-    cancelar_indisponibilidade,
-    criar_culto_padrao,
-    criar_escala,
-    criar_indisponibilidade,
-    gerar_escalas_do_mes,
-    get_cultos_padrao_data,
-    get_item_escala_or_none,
     get_itens_da_escala,
     get_indisponiveis_da_escala,
     listar_cultos_padrao,
     listar_escalas_gerenciaveis,
     listar_indisponibilidades_do_membro,
-    remover_item_da_escala,
-    salvar_item_escala,
 )
 
 
@@ -87,58 +61,12 @@ class MinhasIndisponibilidadesListView(LoginRequiredMixin, ListView):
         return context
 
 
-class IndisponibilidadeCreateView(LoginRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
-    model = IndisponibilidadeMembro
-    form_class = IndisponibilidadeMembroForm
-    template_name = "departamentos/indisponibilidade_form.html"
-
-    def form_valid(self, form):
-        criar_indisponibilidade(form, self.request.user)
-        messages.success(self.request, "Indisponibilidade cadastrada com sucesso.")
-        return HttpResponseRedirect(self.get_success_url())
-
-    def get_success_url(self):
-        return reverse("usuarios:departamentos:minhas_indisponibilidades")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "indisponibilidades",
-                "page_title": "Nova indisponibilidade",
-                "page_eyebrow": "Minhas indisponibilidades",
-                "page_text": "Informe os dias e horarios em que voce nao podera servir para ajudar a lideranca a montar escalas melhores.",
-                "submit_label": "Salvar indisponibilidade",
-            }
-        )
-        return context
+class IndisponibilidadeCreateView(LoginRequiredMixin, LegacySchedulingReadOnlyMixin, View):
+    legacy_target_url = "/minhas-indisponibilidades"
 
 
-class IndisponibilidadeUpdateView(OwnIndisponibilidadeRequiredMixin, LegacySchedulingReadOnlyMixin, UpdateView):
-    model = IndisponibilidadeMembro
-    form_class = IndisponibilidadeMembroForm
-    template_name = "departamentos/indisponibilidade_form.html"
-
-    def get_success_url(self):
-        return reverse("usuarios:departamentos:minhas_indisponibilidades")
-
-    def form_valid(self, form):
-        atualizar_indisponibilidade(form)
-        messages.success(self.request, "Indisponibilidade atualizada com sucesso.")
-        return HttpResponseRedirect(self.get_success_url())
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "indisponibilidades",
-                "page_title": "Editar indisponibilidade",
-                "page_eyebrow": "Minhas indisponibilidades",
-                "page_text": "Ajuste o periodo informado sempre que sua agenda mudar.",
-                "submit_label": "Salvar alteracoes",
-            }
-        )
-        return context
+class IndisponibilidadeUpdateView(OwnIndisponibilidadeRequiredMixin, LegacySchedulingReadOnlyMixin, View):
+    legacy_target_url = "/minhas-indisponibilidades"
 
 
 class IndisponibilidadeCancelView(OwnIndisponibilidadeRequiredMixin, View):
@@ -168,56 +96,12 @@ class CultoPadraoListView(CultoPadraoManagerRequiredMixin, ListView):
         return context
 
 
-class CultoPadraoCreateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
-    model = CultoPadrao
-    form_class = CultoPadraoForm
-    template_name = "departamentos/culto_padrao_form.html"
-    success_url = reverse_lazy("usuarios:departamentos:cultos_padrao_lista")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "escalas",
-                "page_title": "Novo culto padrao",
-                "page_eyebrow": "Cultos padrao",
-                "page_text": "Cadastre os horarios fixos da igreja para acelerar a criacao de escalas e a geracao mensal.",
-                "submit_label": "Criar culto padrao",
-            }
-        )
-        return context
-
-    def form_valid(self, form):
-        criar_culto_padrao(form)
-        messages.success(self.request, "Culto padrao criado com sucesso.")
-        return HttpResponseRedirect(self.success_url)
+class CultoPadraoCreateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, View):
+    legacy_target_url = "/agenda-cultos/padroes"
 
 
-class CultoPadraoUpdateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, UpdateView):
-    model = CultoPadrao
-    form_class = CultoPadraoForm
-    template_name = "departamentos/culto_padrao_form.html"
-
-    def get_success_url(self):
-        return reverse("usuarios:departamentos:cultos_padrao_lista")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "escalas",
-                "page_title": f"Editar {self.object.nome}",
-                "page_eyebrow": "Cultos padrao",
-                "page_text": "Ajuste dia da semana, horario e status do culto padrao para manter a base das escalas atualizada.",
-                "submit_label": "Salvar alteracoes",
-            }
-        )
-        return context
-
-    def form_valid(self, form):
-        atualizar_culto_padrao(form)
-        messages.success(self.request, "Culto padrao atualizado com sucesso.")
-        return HttpResponseRedirect(self.get_success_url())
+class CultoPadraoUpdateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, View):
+    legacy_target_url = "/agenda-cultos/padroes"
 
 
 class CultoPadraoStatusView(CultoPadraoManagerRequiredMixin, View):
@@ -266,142 +150,18 @@ class EscalaListView(EscalaLeaderRequiredMixin, ListView):
         return context
 
 
-class GerarEscalasMesView(EscalaManagerRequiredMixin, LegacySchedulingReadOnlyMixin, FormView):
-    form_class = GerarEscalasMesForm
-    template_name = "departamentos/gerar_escalas_mes.html"
-    success_url = reverse_lazy("usuarios:departamentos:escala_lista")
-
-    def get_manageable_departamentos(self):
-        if not hasattr(self, "_manageable_departamentos"):
-            self._manageable_departamentos = get_departamentos_gerenciaveis(self.request.user)
-        return self._manageable_departamentos
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["departamentos_queryset"] = (
-            Departamento.objects.all()
-            if usuario_tem_acesso_total_sistema(self.request.user)
-            else self.get_manageable_departamentos()
-        )
-        kwargs["cultos_queryset"] = CultoPadrao.objects.filter(ativo=True)
-        return kwargs
-
-    def get_initial(self):
-        initial = super().get_initial()
-        initial.setdefault("ano", self.request.GET.get("ano") or "")
-        initial.setdefault("mes", self.request.GET.get("mes") or "")
-        return initial
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "escalas",
-                "page_title": "Gerar escalas do mes",
-                "page_eyebrow": "Escalas",
-                "page_text": "Selecione o departamento, o mes e os cultos padrao ativos para criar a base mensal sem duplicar escalas existentes.",
-                "submit_label": "Gerar escalas",
-            }
-        )
-        return context
-
-    def form_valid(self, form):
-        resultado = gerar_escalas_do_mes(
-            departamento=form.cleaned_data["departamento"],
-            ano=form.cleaned_data["ano"],
-            mes=form.cleaned_data["mes"],
-            cultos_padroes=form.cleaned_data["cultos_padrao"],
-        )
-        messages.success(
-            self.request,
-            (
-                f"Geracao concluida: {len(resultado['criadas'])} escala(s) criada(s) e "
-                f"{len(resultado['ignoradas'])} ja existente(s) ignorada(s)."
-            ),
-        )
-        return super().form_valid(form)
-
-
-class EscalaCreateView(EscalaLeaderRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
-    model = Escala
-    form_class = EscalaForm
-    template_name = "departamentos/escala_form.html"
-    success_url = reverse_lazy("usuarios:departamentos:escala_lista")
-
-    def get_manageable_departamentos(self):
-        if not hasattr(self, "_manageable_departamentos"):
-            self._manageable_departamentos = get_departamentos_gerenciaveis(self.request.user)
-        return self._manageable_departamentos
-
+class GerarEscalasMesView(EscalaManagerRequiredMixin, LegacySchedulingReadOnlyMixin, View):
     def test_func(self):
         return usuario_pode_acessar_escalas(self.request.user)
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["departamentos_queryset"] = self.get_manageable_departamentos()
-        kwargs["cultos_queryset"] = CultoPadrao.objects.filter(ativo=True)
-        return kwargs
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "active_section": "escalas",
-                "page_title": "Nova escala",
-                "page_eyebrow": "Escalas",
-                "page_text": "Crie escalas apenas para os departamentos em que voce e lider, preparando a operacao do ministerio.",
-                "submit_label": "Criar escala",
-                "cultos_padrao_data": get_cultos_padrao_data(
-                    CultoPadrao.objects.filter(ativo=True)
-                ),
-            }
-        )
-        return context
-
-    def form_valid(self, form):
-        criar_escala(form)
-        messages.success(self.request, "Escala criada com sucesso.")
-        return HttpResponseRedirect(self.success_url)
+class EscalaCreateView(EscalaLeaderRequiredMixin, LegacySchedulingReadOnlyMixin, View):
+    def test_func(self):
+        return usuario_pode_acessar_escalas(self.request.user)
 
 
-class EscalaUpdateView(EscalaQuerysetMixin, LegacySchedulingReadOnlyMixin, UpdateView):
-    model = Escala
-    form_class = EscalaForm
-    template_name = "departamentos/escala_form.html"
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["departamentos_queryset"] = self.get_manageable_departamentos()
-        kwargs["cultos_queryset"] = CultoPadrao.objects.filter(ativo=True) | CultoPadrao.objects.filter(
-            pk=getattr(self.object, "culto_padrao_id", None)
-        )
-        return kwargs
-
-    def get_success_url(self):
-        return reverse("usuarios:departamentos:escala_lista")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        cultos_queryset = (
-            CultoPadrao.objects.filter(ativo=True)
-            | CultoPadrao.objects.filter(pk=getattr(self.object, "culto_padrao_id", None))
-        ).distinct()
-        context.update(
-            {
-                "active_section": "escalas",
-                "page_title": f"Editar {self.object.titulo}",
-                "page_eyebrow": "Escalas",
-                "page_text": "Atualize data, horario e departamento da escala respeitando as permissoes de lideranca.",
-                "submit_label": "Salvar alteracoes",
-                "cultos_padrao_data": get_cultos_padrao_data(cultos_queryset),
-            }
-        )
-        return context
-
-    def form_valid(self, form):
-        atualizar_escala(form)
-        messages.success(self.request, "Escala atualizada com sucesso.")
-        return HttpResponseRedirect(self.get_success_url())
+class EscalaUpdateView(EscalaQuerysetMixin, LegacySchedulingReadOnlyMixin, View):
+    pass
 
 
 class EscalaItensView(EscalaQuerysetMixin, DetailView):
@@ -432,6 +192,7 @@ class EscalaItensView(EscalaQuerysetMixin, DetailView):
 
     def get_success_url(self):
         return reverse("usuarios:departamentos:escala_itens", args=[self.object.pk])
+
 
 class EscalaItemDeleteView(EscalaQuerysetMixin, View):
     def post(self, request, pk, item_id):

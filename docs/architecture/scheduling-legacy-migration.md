@@ -135,13 +135,9 @@ Templates antigos ainda apontam para essas rotas:
 - `templates/usuarios/_sidebar.html`
 - `templates/usuarios/dashboard.html`
 - `templates/departamentos/escalas_lista.html`
-- `templates/departamentos/escala_form.html`
 - `templates/departamentos/escala_itens.html`
-- `templates/departamentos/gerar_escalas_mes.html`
 - `templates/departamentos/cultos_padrao_lista.html`
-- `templates/departamentos/culto_padrao_form.html`
 - `templates/departamentos/minhas_indisponibilidades.html`
-- `templates/departamentos/indisponibilidade_form.html`
 
 `templates/admin/index.html` tambem aponta para o admin legado de `Escala`.
 
@@ -520,3 +516,122 @@ Proximo passo recomendado:
 
 Nenhuma migracao de dados, backfill, dual-write, remocao de model ou remocao de
 tabela foi executada na PVV-038.
+
+## PVV-039 - Cleanup Implementado
+
+A PVV-039 removeu codigo operacional morto do legado congelado, sem remover
+models, tabelas ou historico. O legado ficou reduzido a:
+
+- models historicos;
+- listas e detalhe read-only;
+- admin read-only;
+- rotas de transicao para URLs antigas conhecidas;
+- relatorio read-only `legacy_scheduling_report`.
+
+### Inventario Antes Da Limpeza
+
+Referencias encontradas e classificadas:
+
+| Area | Referencia | Classificacao |
+| --- | --- | --- |
+| `escalas.models` | `Escala`, `EscalaItem`, `CultoPadrao`, `IndisponibilidadeMembro` | HISTORICO NECESSARIO |
+| `escalas.admin` | ModelAdmins legados | ADMIN READ-ONLY |
+| `escalas.views` | listas, detalhe e rotas de transicao | TEMPLATE READ-ONLY / COMPATIBILIDADE |
+| `escalas.services` | listagens e helpers de consulta | HISTORICO NECESSARIO |
+| `escalas.utils` | indisponibilidade legada para validacao historica | HISTORICO NECESSARIO |
+| `escalas.forms` | forms de criacao/edicao legada | CODIGO MORTO |
+| templates de formulario legado | escala, gerar mes, culto padrao, indisponibilidade | CODIGO MORTO |
+| `departamentos.tests`, `core.tests`, `escalas.tests` | fixtures e provas de read-only/cutover | TESTE HISTORICO |
+| migrations antigas | snapshots de schema | MIGRATION |
+| docs | inventario e decisoes | DOCUMENTACAO |
+| `verbo_no_lar` | escala propria do Verbo no Lar | OUTRO DOMINIO |
+| `DepartamentoMembro` | permissoes/compatibilidade de departamentos | OUTRO MODULO AINDA DEPENDENTE |
+
+### Removido
+
+- `escalas/forms.py`, que continha forms de criacao/edicao de:
+  `Escala`, `EscalaItem`, `CultoPadrao` e `IndisponibilidadeMembro`.
+- templates mortos:
+  - `templates/departamentos/escala_form.html`
+  - `templates/departamentos/gerar_escalas_mes.html`
+  - `templates/departamentos/culto_padrao_form.html`
+  - `templates/departamentos/indisponibilidade_form.html`
+- codigo de escrita em `escalas.services`:
+  - criar/atualizar escala;
+  - gerar escalas do mes;
+  - salvar/remover item;
+  - criar/atualizar/alternar culto padrao;
+  - criar/atualizar/cancelar indisponibilidade legada.
+- geracao mensal legada em `escalas.utils`.
+- reexport de geracao mensal em `departamentos.utils`.
+- teste antigo de geracao mensal legada, pois esse comportamento foi
+  deliberadamente descontinuado.
+
+### Mantido Para Historico
+
+- `EscalaListView`: lista historica read-only.
+- `EscalaItensView`: detalhe historico read-only de pessoas escaladas.
+- `CultoPadraoListView`: lista historica read-only dos cultos padrao antigos.
+- `MinhasIndisponibilidadesListView`: lista historica read-only.
+- services de listagem/consulta necessarios para essas telas.
+- `membro_esta_indisponivel` e
+  `get_indisponibilidades_ativas_do_membro`, pois `EscalaItem.clean` ainda
+  preserva validacao historica do modelo.
+
+### Mantido Por Compatibilidade
+
+Rotas antigas conhecidas continuam existindo, mas sem logica de escrita:
+
+- `usuarios:departamentos:escala_nova`
+- `usuarios:departamentos:escala_editar`
+- `usuarios:departamentos:escala_gerar_mes`
+- `usuarios:departamentos:escala_itens` via `POST`
+- `usuarios:departamentos:escala_item_remover`
+- `usuarios:departamentos:culto_padrao_novo`
+- `usuarios:departamentos:culto_padrao_editar`
+- `usuarios:departamentos:culto_padrao_status`
+- `usuarios:departamentos:indisponibilidade_nova`
+- `usuarios:departamentos:indisponibilidade_editar`
+- `usuarios:departamentos:indisponibilidade_cancelar`
+
+`GET` nas rotas de criacao/edicao/geracao exibe pagina de transicao para o
+novo portal. `POST` segue bloqueado com `LEGACY_SCHEDULING_READ_ONLY`.
+
+### Admin Legado
+
+Permanece read-only para:
+
+- `Escala`
+- `EscalaItem`
+- `CultoPadrao`
+- `IndisponibilidadeMembro`
+
+Nenhuma escrita foi reabilitada.
+
+### Bloqueadores Para Remocao Fisica
+
+- existem 15 `Escala` passadas e 1 `EscalaItem` local; historico ainda deve ser
+  preservado;
+- `EscalaItem` depende de `DepartamentoMembro`, e essa migracao pertence ao
+  dominio de Departamentos;
+- imports de compatibilidade em `departamentos.models` ainda expõem modelos
+  antigos enquanto consumidores legados existirem;
+- docs e migrations antigas devem permanecer;
+- `legacy_scheduling_report` ainda e util enquanto houver tabelas legadas.
+
+### Classificacao Por Model
+
+| Model | Classificacao | Motivo |
+| --- | --- | --- |
+| `Escala` | KEEP_FOR_HISTORY | Existem registros historicos; listas/admin/relatorio ainda consultam. |
+| `EscalaItem` | KEEP_FOR_HISTORY | Preserva pessoas escaladas no historico e FK com `DepartamentoMembro`. |
+| `CultoPadrao` | KEEP_FOR_HISTORY | Preserva origem de escalas historicas por FK opcional. |
+| `IndisponibilidadeMembro` | KEEP_FOR_HISTORY | Sem registros locais, mas ainda faz parte do pacote historico/admin/read-only ate remocao fisica coordenada. |
+
+Recomendacao: nao remover fisicamente em PVV-040 sem decisao explicita de
+produto sobre historico. O custo atual de manter read-only e baixo; a remocao
+fisica deve esperar validacao de producao, backup e plano de arquivamento.
+
+Nenhuma tabela foi removida, nenhum model historico foi removido, nenhuma
+migration destrutiva foi criada, nenhum dado foi apagado, nenhum backfill foi
+executado e nenhum dual-write foi introduzido na PVV-039.
