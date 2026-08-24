@@ -14,7 +14,15 @@ function AppShell({ children }: AppShellProps) {
     ? 'Usuarios'
     : location.pathname.startsWith('/solicitacoes-acesso')
       ? 'Solicitacoes'
-      : 'Pessoas'
+      : location.pathname.startsWith('/agenda-cultos')
+        ? 'Agenda de Cultos'
+        : location.pathname.startsWith('/departamentos')
+          ? 'Departamentos'
+          : location.pathname.startsWith('/discipulado')
+            ? 'Discipulado'
+            : location.pathname.startsWith('/membresia')
+              ? 'Membresia'
+              : 'Pessoas'
 
   return (
     <div className={`app-shell${isSidebarCollapsed ? ' app-shell--collapsed' : ''}`}>

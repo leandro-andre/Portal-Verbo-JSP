@@ -24,6 +24,8 @@ import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
+import WorshipSchedulePage from './pages/WorshipSchedulePage'
+import WorshipTemplatesPage from './pages/WorshipTemplatesPage'
 import { useCurrentUser } from './hooks/useAuth'
 import { usePerson } from './hooks/usePeople'
 import type { Capability } from './types/auth'
@@ -111,6 +113,8 @@ function AdminRoutes() {
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
         <Route path="/minhas-indisponibilidades" element={<MyUnavailabilityPage />} />
+        <Route path="/agenda-cultos" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipSchedulePage /></AuthorizedRoute>} />
+        <Route path="/agenda-cultos/padroes" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipTemplatesPage /></AuthorizedRoute>} />
         <Route path="/departamentos" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentsPage /></AuthorizedRoute>} />
         <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />

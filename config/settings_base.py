@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "church_journey",
     "usuarios",
     "pessoas",
+    "worship",
     "core",
     "departamentos",
     "escalas",

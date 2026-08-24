@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarX2, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarClock, CalendarX2, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -15,6 +15,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
   const canViewDiscipleship = capabilities.includes('DISCIPLESHIP_CLASS_VIEW')
   const canViewMembership = capabilities.includes('MEMBERSHIP_VIEW')
   const canViewDepartments = capabilities.includes('DEPARTMENT_VIEW')
+  const canViewWorshipSchedule = capabilities.includes('WORSHIP_SCHEDULE_VIEW')
   const hasAccessItems = canViewAccessRequests || canViewUsers
 
   return (
@@ -98,8 +99,17 @@ function Sidebar({ isCollapsed }: SidebarProps) {
           </NavLink>
         ) : null}
 
-        {canViewDepartments && !isCollapsed ? (
+        {(canViewDepartments || canViewWorshipSchedule) && !isCollapsed ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Igreja</p>
+        ) : null}
+        {canViewWorshipSchedule ? (
+          <NavLink
+            className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+            to="/agenda-cultos"
+          >
+            <CalendarClock size={18} aria-hidden="true" />
+            {!isCollapsed ? <span>Agenda de Cultos</span> : null}
+          </NavLink>
         ) : null}
         {canViewDepartments ? (
           <NavLink
