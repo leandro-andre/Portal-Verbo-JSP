@@ -1,7 +1,16 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
+
+from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
+from escalas.models import Escala
+from pessoas.models import Person
+from scheduling.models import Schedule, ScheduleAssignment
+from worship.models import WorshipService
 
 from .models import ContatoMensagem, SiteConfig
 
@@ -168,3 +177,60 @@ class AdminDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Painel Editorial")
         self.assertContains(response, "Mensagens de Contato")
+
+    def test_admin_dashboard_usa_scheduling_e_ignora_escala_legada_futura(self):
+        user_model = get_user_model()
+        admin_user = user_model.objects.create_superuser(
+            username="admin.dashboard",
+            email="admin.dashboard@example.com",
+            password="senha-forte-123",
+        )
+        departamento = Departamento.objects.create(nome="Midia Admin")
+        role = DepartmentRole.objects.create(department=departamento, name="Camera", code="camera")
+        person = Person.objects.create(full_name="Camera Admin", birth_date="1990-01-01")
+        membership = DepartmentMembership.objects.create(
+            person=person,
+            department=departamento,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        Escala.objects.create(
+            departamento=departamento,
+            titulo="Escala Legada Admin",
+            data=timezone.localdate() + timedelta(days=20),
+            horario="19:00",
+            ativa=True,
+        )
+        worship_service = WorshipService.objects.create(
+            name="Culto Admin Novo",
+            date=timezone.localdate() + timedelta(days=10),
+            time="10:00",
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        schedule = Schedule.objects.create(
+            department=departamento,
+            worship_service=worship_service,
+            status=Schedule.Status.PUBLISHED,
+        )
+        ScheduleAssignment.objects.create(schedule=schedule, department_membership=membership)
+        Schedule.objects.create(
+            department=departamento,
+            worship_service=WorshipService.objects.create(
+                name="Culto Admin Rascunho",
+                date=timezone.localdate() + timedelta(days=11),
+                time="10:00",
+                kind=WorshipService.Kind.EXTRAORDINARY,
+            ),
+            status=Schedule.Status.DRAFT,
+        )
+
+        self.client.force_login(admin_user)
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Culto Admin Novo")
+        self.assertContains(response, "Escalas Publicadas")
+        self.assertContains(response, "Escalas em Rascunho")
+        self.assertContains(response, "Pessoas Escaladas")
+        self.assertNotContains(response, "Escala Legada Admin")

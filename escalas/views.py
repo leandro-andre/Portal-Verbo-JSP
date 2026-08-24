@@ -22,6 +22,7 @@ from .forms import (
     GerarEscalasMesForm,
     IndisponibilidadeMembroForm,
 )
+from .legacy_freeze import LegacySchedulingReadOnlyMixin, legacy_scheduling_read_only_response
 from .models import CultoPadrao, Escala, EscalaItem, IndisponibilidadeMembro
 from .permissions import (
     CultoPadraoManagerRequiredMixin,
@@ -86,7 +87,7 @@ class MinhasIndisponibilidadesListView(LoginRequiredMixin, ListView):
         return context
 
 
-class IndisponibilidadeCreateView(LoginRequiredMixin, CreateView):
+class IndisponibilidadeCreateView(LoginRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
     model = IndisponibilidadeMembro
     form_class = IndisponibilidadeMembroForm
     template_name = "departamentos/indisponibilidade_form.html"
@@ -113,7 +114,7 @@ class IndisponibilidadeCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class IndisponibilidadeUpdateView(OwnIndisponibilidadeRequiredMixin, UpdateView):
+class IndisponibilidadeUpdateView(OwnIndisponibilidadeRequiredMixin, LegacySchedulingReadOnlyMixin, UpdateView):
     model = IndisponibilidadeMembro
     form_class = IndisponibilidadeMembroForm
     template_name = "departamentos/indisponibilidade_form.html"
@@ -142,10 +143,7 @@ class IndisponibilidadeUpdateView(OwnIndisponibilidadeRequiredMixin, UpdateView)
 
 class IndisponibilidadeCancelView(OwnIndisponibilidadeRequiredMixin, View):
     def post(self, request, pk):
-        indisponibilidade = get_object_or_404(IndisponibilidadeMembro, pk=pk)
-        cancelar_indisponibilidade(indisponibilidade)
-        messages.success(request, "Indisponibilidade cancelada com sucesso.")
-        return HttpResponseRedirect(reverse("usuarios:departamentos:minhas_indisponibilidades"))
+        return legacy_scheduling_read_only_response()
 
 
 class CultoPadraoListView(CultoPadraoManagerRequiredMixin, ListView):
@@ -170,7 +168,7 @@ class CultoPadraoListView(CultoPadraoManagerRequiredMixin, ListView):
         return context
 
 
-class CultoPadraoCreateView(CultoPadraoManagerRequiredMixin, CreateView):
+class CultoPadraoCreateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
     model = CultoPadrao
     form_class = CultoPadraoForm
     template_name = "departamentos/culto_padrao_form.html"
@@ -195,7 +193,7 @@ class CultoPadraoCreateView(CultoPadraoManagerRequiredMixin, CreateView):
         return HttpResponseRedirect(self.success_url)
 
 
-class CultoPadraoUpdateView(CultoPadraoManagerRequiredMixin, UpdateView):
+class CultoPadraoUpdateView(CultoPadraoManagerRequiredMixin, LegacySchedulingReadOnlyMixin, UpdateView):
     model = CultoPadrao
     form_class = CultoPadraoForm
     template_name = "departamentos/culto_padrao_form.html"
@@ -224,13 +222,7 @@ class CultoPadraoUpdateView(CultoPadraoManagerRequiredMixin, UpdateView):
 
 class CultoPadraoStatusView(CultoPadraoManagerRequiredMixin, View):
     def post(self, request, pk):
-        culto = get_object_or_404(CultoPadrao, pk=pk)
-        culto = alternar_status_culto_padrao(culto)
-        if culto.ativo:
-            messages.success(request, "Culto padrao reativado com sucesso.")
-        else:
-            messages.success(request, "Culto padrao inativado com sucesso.")
-        return HttpResponseRedirect(reverse("usuarios:departamentos:cultos_padrao_lista"))
+        return legacy_scheduling_read_only_response()
 
 
 class EscalaListView(EscalaLeaderRequiredMixin, ListView):
@@ -274,7 +266,7 @@ class EscalaListView(EscalaLeaderRequiredMixin, ListView):
         return context
 
 
-class GerarEscalasMesView(EscalaManagerRequiredMixin, FormView):
+class GerarEscalasMesView(EscalaManagerRequiredMixin, LegacySchedulingReadOnlyMixin, FormView):
     form_class = GerarEscalasMesForm
     template_name = "departamentos/gerar_escalas_mes.html"
     success_url = reverse_lazy("usuarios:departamentos:escala_lista")
@@ -330,7 +322,7 @@ class GerarEscalasMesView(EscalaManagerRequiredMixin, FormView):
         return super().form_valid(form)
 
 
-class EscalaCreateView(EscalaLeaderRequiredMixin, CreateView):
+class EscalaCreateView(EscalaLeaderRequiredMixin, LegacySchedulingReadOnlyMixin, CreateView):
     model = Escala
     form_class = EscalaForm
     template_name = "departamentos/escala_form.html"
@@ -372,7 +364,7 @@ class EscalaCreateView(EscalaLeaderRequiredMixin, CreateView):
         return HttpResponseRedirect(self.success_url)
 
 
-class EscalaUpdateView(EscalaQuerysetMixin, UpdateView):
+class EscalaUpdateView(EscalaQuerysetMixin, LegacySchedulingReadOnlyMixin, UpdateView):
     model = Escala
     form_class = EscalaForm
     template_name = "departamentos/escala_form.html"
@@ -419,67 +411,28 @@ class EscalaItensView(EscalaQuerysetMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        editar_id = self.request.GET.get("editar")
-        item = None
-        if editar_id:
-            item = get_item_escala_or_none(self.object, editar_id)
-
-        form = kwargs.get("form")
-        if form is None:
-            form = EscalaItemForm(instance=item, escala=self.object)
-
         itens = get_itens_da_escala(self.object)
         indisponiveis = get_indisponiveis_da_escala(self.object)
 
         context.update(
             {
                 "active_section": "escalas",
-                "form": form,
                 "itens": itens,
-                "editing_item": item,
+                "editing_item": None,
                 "confirmados_count": itens.filter(confirmado=True).count(),
                 "pendentes_count": itens.filter(confirmado=False).count(),
                 "indisponiveis": indisponiveis,
+                "legacy_read_only": True,
             }
         )
         return context
 
     def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        item = None
-        item_id = request.POST.get("item_id")
-        if item_id:
-            item = get_object_or_404(EscalaItem, pk=item_id, escala=self.object)
-
-        form = EscalaItemForm(request.POST, instance=item, escala=self.object)
-
-        if form.is_valid():
-            try:
-                salvar_item_escala(form)
-            except ValidationError as exc:
-                if hasattr(exc, "message_dict"):
-                    for field, errors in exc.message_dict.items():
-                        for error in errors:
-                            form.add_error(field, error)
-                else:
-                    for error in getattr(exc, "messages", []) or [str(exc)]:
-                        form.add_error(None, error)
-            else:
-                if item:
-                    messages.success(request, "Item da escala atualizado com sucesso.")
-                else:
-                    messages.success(request, "Membro adicionado a escala com sucesso.")
-                return HttpResponseRedirect(self.get_success_url())
-
-        return self.render_to_response(self.get_context_data(form=form, object=self.object))
+        return legacy_scheduling_read_only_response()
 
     def get_success_url(self):
         return reverse("usuarios:departamentos:escala_itens", args=[self.object.pk])
 
 class EscalaItemDeleteView(EscalaQuerysetMixin, View):
     def post(self, request, pk, item_id):
-        escala = get_object_or_404(self.get_queryset(), pk=pk)
-        item = get_object_or_404(EscalaItem, pk=item_id, escala=escala)
-        remover_item_da_escala(item)
-        messages.success(request, "Membro removido da escala com sucesso.")
-        return HttpResponseRedirect(reverse("usuarios:departamentos:escala_itens", args=[escala.pk]))
+        return legacy_scheduling_read_only_response()

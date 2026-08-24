@@ -382,11 +382,11 @@
                     <h3 class="dashboard-card__title">Escalas</h3>
                 </div>
                 <p class="dashboard-card__text">
-                    Monte escalas por departamento e acompanhe quem ja foi confirmado para cada funcao.
+                    Acompanhe e monte escalas pelo novo fluxo operacional do portal.
                 </p>
                 <div class="dashboard-card__actions">
-                    <a class="dashboard-btn" href="{% url 'admin:escalas_escala_changelist' %}">Ver Escalas</a>
-                    <a class="dashboard-btn dashboard-btn--primary" href="{% url 'admin:escalas_escala_add' %}">Nova Escala</a>
+                    <a class="dashboard-btn" href="{% url 'admin:scheduling_schedule_changelist' %}">Ver Escalas</a>
+                    <a class="dashboard-btn dashboard-btn--primary" href="/escalas">Abrir Portal</a>
                 </div>
             </article>
 
@@ -434,7 +434,15 @@
             </article>
             <article class="dashboard-stat">
                 <span class="dashboard-stat__value">{{ stats.escalas_ativas }}</span>
-                <span class="dashboard-stat__label">Escalas Ativas</span>
+                <span class="dashboard-stat__label">Escalas Publicadas</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.escalas_rascunho }}</span>
+                <span class="dashboard-stat__label">Escalas em Rascunho</span>
+            </article>
+            <article class="dashboard-stat">
+                <span class="dashboard-stat__value">{{ stats.pessoas_escaladas }}</span>
+                <span class="dashboard-stat__label">Pessoas Escaladas</span>
             </article>
             <article class="dashboard-stat">
                 <span class="dashboard-stat__value">{{ stats.total_mensagens }}</span>
@@ -503,22 +511,22 @@
             <section class="dashboard-panel">
                 <header class="dashboard-panel__header">
                     <h3 class="dashboard-panel__title">Proximas Escalas</h3>
-                    <a class="dashboard-panel__link" href="{% url 'admin:escalas_escala_changelist' %}">Ver todas</a>
+                    <a class="dashboard-panel__link" href="{% url 'admin:scheduling_schedule_changelist' %}">Ver todas</a>
                 </header>
                 <div class="dashboard-panel__body">
                     {% if stats.proximas_escalas %}
                         <ul class="dashboard-list">
                             {% for escala in stats.proximas_escalas %}
                                 <li class="dashboard-list__item">
-                                    <a class="dashboard-list__title" href="{% url 'admin:escalas_escala_change' escala.id %}">{{ escala.titulo }}</a>
+                                    <a class="dashboard-list__title" href="{% url 'admin:scheduling_schedule_change' escala.id %}">{{ escala.worship_service.name }}</a>
                                     <div class="dashboard-list__meta">
-                                        {{ escala.departamento.nome }} | {{ escala.data|date:"d/m/Y" }} as {{ escala.horario|time:"H:i" }}
+                                        {{ escala.department.nome }} | {{ escala.worship_service.date|date:"d/m/Y" }} as {{ escala.worship_service.time|time:"H:i" }} | {{ escala.assignments_count }} pessoa(s)
                                     </div>
                                 </li>
                             {% endfor %}
                         </ul>
                     {% else %}
-                        <div class="dashboard-empty">Nenhuma escala ativa programada.</div>
+                        <div class="dashboard-empty">Nenhuma proxima escala publicada.</div>
                     {% endif %}
                 </div>
             </section>

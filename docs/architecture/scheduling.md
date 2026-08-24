@@ -21,6 +21,32 @@ O app `scheduling` nasce sobre o novo nucleo:
 
 `WorshipService -> Schedule -> ScheduleAssignment -> DepartmentMembership -> Person`
 
+A partir da PVV-037, novas escalas nascem somente neste fluxo. A fonte de
+verdade oficial fica:
+
+- agenda oficial: `WorshipService`
+- escalas novas: `Schedule`
+- pessoas escaladas: `ScheduleAssignment`
+- vinculo departamental: `DepartmentMembership`
+- disponibilidade: `PersonUnavailability`
+
+O legado `Escala`/`EscalaItem`/`CultoPadrao`/`IndisponibilidadeMembro` permanece
+apenas para consulta historica e compatibilidade temporaria.
+
+PVV-038 conclui o cutover dos dashboards e leituras operacionais atuais/futuras:
+
+- dashboard pessoal usa `ScheduleAssignment` publicado e futuro via
+  `Usuario.person`;
+- dashboard admin usa `Schedule` publicado/futuro, rascunhos futuros e
+  assignments futuros do novo dominio;
+- nenhum dashboard operacional faz fallback para `Escala` ou `EscalaItem`
+  legado quando nao ha `Schedule`;
+- `DRAFT` pode aparecer apenas como contador administrativo separado;
+- `PUBLISHED` e `WorshipService.SCHEDULED` sao a combinacao oficial para
+  compromissos futuros ativos;
+- `Schedule.CANCELLED` e `WorshipService.CANCELLED` nao aparecem como
+  compromisso ativo.
+
 `Schedule` representa a escala de um departamento para um culto concreto.
 Ela nao duplica data/horario como fonte de verdade; esses dados pertencem a
 `WorshipService`.

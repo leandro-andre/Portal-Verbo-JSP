@@ -9,10 +9,10 @@ from django.views.generic import TemplateView, UpdateView
 from django.views.generic.edit import FormView
 
 from core.models import ContatoMensagem
-from departamentos.models import DepartamentoMembro
-from escalas.models import EscalaItem
+from departamentos.models import DepartmentMembership
 from eventos.models import Evento
 from noticias.models import Noticia
+from scheduling.selectors import get_upcoming_assignments_for_person
 
 from .forms import LoginForm, PerfilForm, RegistroForm
 
@@ -68,27 +68,23 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         today = timezone.localdate()
+        person = getattr(user, "person", None)
+        minhas_participacoes = DepartmentMembership.objects.none()
+        minhas_escalas = []
+        if person:
+            minhas_participacoes = (
+                DepartmentMembership.objects.select_related("department", "role")
+                .filter(person=person, status=DepartmentMembership.Status.ACTIVE)
+                .order_by("department__nome", "id")
+            )
+            minhas_escalas = get_upcoming_assignments_for_person(person, today=today)[:5]
 
         context.update(
             {
                 "profile_status": get_profile_status(user),
-                "minhas_participacoes": DepartamentoMembro.objects.select_related(
-                    "departamento"
-                )
-                .filter(membro=user, ativo=True)
-                .order_by("departamento__nome"),
-                "minhas_escalas": EscalaItem.objects.select_related(
-                    "escala",
-                    "escala__departamento",
-                    "participacao",
-                )
-                .filter(
-                    participacao__membro=user,
-                    participacao__ativo=True,
-                    escala__ativa=True,
-                    escala__data__gte=today,
-                )
-                .order_by("escala__data", "escala__horario")[:5],
+                "person_linked": bool(person),
+                "minhas_participacoes": minhas_participacoes,
+                "minhas_escalas": minhas_escalas,
                 "proximos_eventos": Evento.objects.filter(
                     publicado=True,
                     data_inicio__gte=today,

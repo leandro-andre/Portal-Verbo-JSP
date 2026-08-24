@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ site.nome_igreja|default:"Portal" }}{% endblock %}
+
+{% block content %}
+<section class="section user-area">
+    <div class="container user-shell">
+        {% include "usuarios/_sidebar.html" %}
+
+        <div class="user-shell__content">
+            <section class="user-hero user-hero--compact">
+                <div>
+                    <p class="user-hero__eyebrow">Historico legado</p>
+                    <h1 class="user-hero__title">{{ page_title }}</h1>
+                    <p class="user-hero__text">{{ page_text }}</p>
+                </div>
+                <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="{{ target_url }}">Ir para Escalas</a>
+                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Ver historico legado</a>
+                </div>
+            </section>
+
+            <section class="module-card">
+                <div class="module-card__header">
+                    <h2 class="module-card__title">Modo somente leitura</h2>
+                </div>
+                <div class="module-card__body user-card__body--stack">
+                    <p class="user-note">
+                        {{ error_code }}: novas escalas, pessoas escaladas e cultos padrao devem ser gerenciados no novo Portal.
+                    </p>
+                    <p class="user-note">
+                        Os registros antigos permanecem disponiveis apenas para consulta e compatibilidade temporaria.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+{% endblock %}

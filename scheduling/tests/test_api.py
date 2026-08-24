@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
+from escalas.models import Escala, EscalaItem
 from pessoas.models import Person, PersonUnavailability
 from scheduling.models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
 from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
@@ -141,6 +142,19 @@ class SchedulingApiTests(TestCase):
         self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/cancel/").status_code, 200)
         self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/reactivate/").status_code, 200)
         self.assertEqual(self.client.delete(f"/api/scheduling/schedules/{schedule['id']}/").status_code, 405)
+
+    def test_new_scheduling_flow_does_not_dual_write_legacy_models(self):
+        self.login(self.admin)
+
+        schedule = self.create_schedule_via_api()
+        self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": self.department_membership.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(Escala.objects.count(), 0)
+        self.assertEqual(EscalaItem.objects.count(), 0)
 
     def test_secretary_manages_and_pastor_is_view_only(self):
         self.login(self.secretary)

@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -27,7 +28,6 @@ from .permissions import (
     usuario_pode_acessar_departamentos,
     usuario_pertence_departamento,
     usuario_pode_criar_departamentos,
-    usuario_pode_editar_propria_indisponibilidade,
     usuario_pode_gerenciar_cultos_padrao,
     usuario_pode_gerenciar_escalas,
     usuario_pode_gerenciar_membros,
@@ -65,6 +65,8 @@ from .selectors import (
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment
 from church_journey.services import approve_membership, deactivate_membership, reactivate_membership
 from pessoas.models import Person
+from scheduling.models import Schedule, ScheduleAssignment
+from worship.models import WorshipService
 from .utils import gerar_escalas_do_mes_para_departamento, membro_esta_indisponivel
 from usuarios.roles import (
     PASTOR_GROUP,
@@ -346,9 +348,68 @@ class DepartamentosDashboardTests(TestCase):
             email="ana.departamento@example.com",
         )
 
-    def test_dashboard_exibe_departamentos_e_escalas_do_usuario(self):
+    def test_dashboard_exibe_departamentos_e_escalas_do_usuario_pelo_scheduling(self):
         self.client.force_login(self.user)
+        person = Person.objects.create(full_name="Ana Departamento", birth_date=date(1990, 1, 1))
+        self.user.person = person
+        self.user.save(update_fields=["person"])
         louvor = Departamento.objects.create(nome="Louvor")
+        role = DepartmentRole.objects.create(
+            department=louvor,
+            name="Vocal",
+            code="vocal",
+            active=True,
+        )
+        membership = DepartmentMembership.objects.create(
+            person=person,
+            department=louvor,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        participacao_legada = DepartamentoMembro.objects.create(
+            membro=self.user,
+            departamento=louvor,
+            papel=DepartamentoMembro.Papel.VOLUNTARIO,
+        )
+        escala_legada = Escala.objects.create(
+            departamento=louvor,
+            titulo="Escala de Louvor",
+            data=timezone.localdate() + timedelta(days=30),
+            horario="18:30",
+            ativa=True,
+        )
+        EscalaItem.objects.create(
+            escala=escala_legada,
+            participacao=participacao_legada,
+            funcao="Baixo legado",
+            confirmado=True,
+        )
+        worship_service = WorshipService.objects.create(
+            name="Culto Domingo",
+            date=timezone.localdate() + timedelta(days=20),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        published_schedule = Schedule.objects.create(
+            department=louvor,
+            worship_service=worship_service,
+            status=Schedule.Status.PUBLISHED,
+        )
+        ScheduleAssignment.objects.create(schedule=published_schedule, department_membership=membership)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Louvor")
+        self.assertContains(response, "Culto Domingo")
+        self.assertContains(response, "Vocal")
+        self.assertNotContains(response, "Escala de Louvor")
+        self.assertNotContains(response, "Baixo legado")
+
+    def test_dashboard_nao_faz_fallback_para_escala_legada_futura(self):
+        self.client.force_login(self.user)
+        louvor = Departamento.objects.create(nome="Louvor Legado")
         participacao = DepartamentoMembro.objects.create(
             membro=self.user,
             departamento=louvor,
@@ -356,24 +417,78 @@ class DepartamentosDashboardTests(TestCase):
         )
         escala = Escala.objects.create(
             departamento=louvor,
-            titulo="Escala de Louvor",
-            data="2026-05-20",
+            titulo="Escala Legada Futura",
+            data=timezone.localdate() + timedelta(days=30),
             horario="18:30",
             ativa=True,
         )
         EscalaItem.objects.create(
             escala=escala,
             participacao=participacao,
-            funcao="Vocal",
+            funcao="Vocal legado",
             confirmado=True,
         )
 
         response = self.client.get(reverse("usuarios:dashboard"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Louvor")
-        self.assertContains(response, "Escala de Louvor")
-        self.assertContains(response, "Vocal")
+        self.assertContains(response, "Sua conta ainda nao esta vinculada a uma pessoa do cadastro.")
+        self.assertNotContains(response, "Escala Legada Futura")
+        self.assertNotContains(response, "Vocal legado")
+
+    def test_dashboard_pessoal_mostra_apenas_published_scheduled_futuro(self):
+        self.client.force_login(self.user)
+        person = Person.objects.create(full_name="Ana Departamento", birth_date=date(1990, 1, 1))
+        self.user.person = person
+        self.user.save(update_fields=["person"])
+        departamento = Departamento.objects.create(nome="Midia Dashboard")
+        role = DepartmentRole.objects.create(department=departamento, name="Camera", code="camera")
+        membership = DepartmentMembership.objects.create(
+            person=person,
+            department=departamento,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        visible_service = WorshipService.objects.create(
+            name="Culto Publicado",
+            date=timezone.localdate() + timedelta(days=10),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+        )
+        draft_service = WorshipService.objects.create(
+            name="Culto Rascunho",
+            date=timezone.localdate() + timedelta(days=11),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+        )
+        cancelled_schedule_service = WorshipService.objects.create(
+            name="Culto Escala Cancelada",
+            date=timezone.localdate() + timedelta(days=12),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+        )
+        cancelled_worship_service = WorshipService.objects.create(
+            name="Culto Cancelado",
+            date=timezone.localdate() + timedelta(days=13),
+            time=time(10, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.CANCELLED,
+        )
+        schedules = [
+            Schedule.objects.create(department=departamento, worship_service=visible_service, status=Schedule.Status.PUBLISHED),
+            Schedule.objects.create(department=departamento, worship_service=draft_service, status=Schedule.Status.DRAFT),
+            Schedule.objects.create(department=departamento, worship_service=cancelled_schedule_service, status=Schedule.Status.CANCELLED),
+            Schedule.objects.create(department=departamento, worship_service=cancelled_worship_service, status=Schedule.Status.PUBLISHED),
+        ]
+        for schedule in schedules:
+            ScheduleAssignment.objects.create(schedule=schedule, department_membership=membership)
+
+        response = self.client.get(reverse("usuarios:dashboard"))
+
+        self.assertContains(response, "Culto Publicado")
+        self.assertNotContains(response, "Culto Rascunho")
+        self.assertNotContains(response, "Culto Escala Cancelada")
+        self.assertNotContains(response, "Culto Cancelado")
 
 
 class PermissionHelpersTests(TestCase):
@@ -487,8 +602,12 @@ class IndisponibilidadesViewsTests(TestCase):
             email="outro.indisponivel@example.com",
         )
 
-    def test_usuario_logado_pode_cadastrar_e_ver_suas_indisponibilidades(self):
+    def test_usuario_logado_ve_historico_mas_nao_cadastra_indisponibilidade_legada(self):
         self.client.force_login(self.usuario)
+
+        list_response = self.client.get(reverse("usuarios:departamentos:minhas_indisponibilidades"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "historico antigo permanece disponivel")
 
         response = self.client.post(
             reverse("usuarios:departamentos:indisponibilidade_nova"),
@@ -502,11 +621,9 @@ class IndisponibilidadesViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        indisponibilidade = IndisponibilidadeMembro.objects.get(membro=self.usuario)
-        self.assertContains(response, "Indisponibilidade cadastrada com sucesso")
-        self.assertContains(response, "Viagem com a familia.")
-        self.assertTrue(usuario_pode_editar_propria_indisponibilidade(self.usuario, indisponibilidade))
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
+        self.assertFalse(IndisponibilidadeMembro.objects.filter(membro=self.usuario).exists())
 
     def test_usuario_nao_pode_ver_ou_editar_indisponibilidades_de_outro(self):
         indisponibilidade = IndisponibilidadeMembro.objects.create(
@@ -527,7 +644,7 @@ class IndisponibilidadesViewsTests(TestCase):
         )
         self.assertEqual(edit.status_code, 403)
 
-    def test_usuario_pode_cancelar_propria_indisponibilidade(self):
+    def test_usuario_nao_cancela_indisponibilidade_legada(self):
         indisponibilidade = IndisponibilidadeMembro.objects.create(
             membro=self.usuario,
             data_inicio="2026-05-04",
@@ -542,10 +659,10 @@ class IndisponibilidadesViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
         indisponibilidade.refresh_from_db()
-        self.assertFalse(indisponibilidade.ativo)
-        self.assertContains(response, "Indisponibilidade cancelada com sucesso")
+        self.assertTrue(indisponibilidade.ativo)
 
 
 class DepartamentosInternosViewsTests(TestCase):
@@ -799,17 +916,20 @@ class EscalasInternasViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Escala Louvor Domingo")
+        self.assertContains(response, 'href="/escalas"')
+        self.assertNotContains(response, "Nova escala")
         self.assertEqual(list(response.context["escalas"]), [escala_louvor])
 
-    def test_form_de_escala_restringe_departamentos_por_lideranca(self):
+    def test_form_de_escala_legado_mostra_transicao_para_portal_novo(self):
         self.client.force_login(self.lider)
 
         response = self.client.get(reverse("usuarios:departamentos:escala_nova"))
 
-        queryset = response.context["form"].fields["departamento"].queryset
-        self.assertEqual(list(queryset), [self.departamento_louvor])
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A gestao de escalas foi migrada para o novo Portal")
+        self.assertContains(response, "/escalas")
 
-    def test_nao_permite_criar_escala_em_departamento_sem_lideranca(self):
+    def test_nao_permite_criar_escala_legada(self):
         self.client.force_login(self.lider)
 
         response = self.client.post(
@@ -824,8 +944,37 @@ class EscalasInternasViewsTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
         self.assertFalse(Escala.objects.filter(titulo="Escala indevida").exists())
+
+    def test_nao_permite_editar_escala_legada(self):
+        self.client.force_login(self.lider)
+        escala = Escala.objects.create(
+            departamento=self.departamento_louvor,
+            titulo="Escala original",
+            data="2026-05-21",
+            horario="18:00",
+            ativa=True,
+        )
+
+        response = self.client.post(
+            reverse("usuarios:departamentos:escala_editar", args=[escala.pk]),
+            {
+                "departamento": self.departamento_louvor.pk,
+                "titulo": "Escala alterada",
+                "data": "2026-05-22",
+                "horario": "19:00",
+                "observacoes": "",
+                "ativa": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
+        escala.refresh_from_db()
+        self.assertEqual(escala.titulo, "Escala original")
+        self.assertEqual(str(escala.data), "2026-05-21")
 
     def test_itens_da_escala_filtram_membros_do_departamento(self):
         self.client.force_login(self.lider)
@@ -839,19 +988,11 @@ class EscalasInternasViewsTests(TestCase):
 
         response = self.client.get(reverse("usuarios:departamentos:escala_itens", args=[escala.pk]))
 
-        queryset = response.context["form"].fields["participacao"].queryset
-        self.assertEqual(
-            list(queryset),
-            [
-                self.participacao_membro_louvor,
-                DepartamentoMembro.objects.get(
-                    membro=self.lider,
-                    departamento=self.departamento_louvor,
-                ),
-            ],
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Gestao migrada")
+        self.assertNotIn("form", response.context)
 
-    def test_bloqueia_conflito_ao_adicionar_item_da_escala(self):
+    def test_nao_permite_adicionar_item_na_escala_legada(self):
         DepartamentoMembro.objects.create(
             membro=self.lider,
             departamento=self.departamento_midia,
@@ -889,8 +1030,8 @@ class EscalasInternasViewsTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "ja esta escalado em Louvor Escalas")
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
         self.assertEqual(escala_midia.itens.count(), 0)
 
     def test_tela_da_escala_mostra_membros_indisponiveis(self):
@@ -918,7 +1059,7 @@ class EscalasInternasViewsTests(TestCase):
         self.assertContains(response, "Indisponiveis nesta data")
         self.assertContains(response, self.membro.get_full_name() or self.membro.username)
 
-    def test_bloqueia_adicao_de_membro_indisponivel_na_escala(self):
+    def test_post_de_item_legado_e_bloqueado_antes_de_validacoes_operacionais(self):
         self.client.force_login(self.lider)
         escala = Escala.objects.create(
             departamento=self.departamento_louvor,
@@ -946,11 +1087,11 @@ class EscalasInternasViewsTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "indisponivel para servir")
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
         self.assertEqual(escala.itens.count(), 0)
 
-    def test_staff_pode_gerenciar_cultos_padrao(self):
+    def test_staff_nao_cria_culto_padrao_legado(self):
         self.client.force_login(self.staff)
 
         response = self.client.post(
@@ -965,11 +1106,11 @@ class EscalasInternasViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(CultoPadrao.objects.filter(nome="Domingo Noite").exists())
-        self.assertContains(response, "Culto padrao criado com sucesso")
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
+        self.assertFalse(CultoPadrao.objects.filter(nome="Domingo Noite").exists())
 
-    def test_lider_pode_gerar_escalas_do_mes_para_departamento_que_lidera(self):
+    def test_lider_nao_gera_escalas_legadas_do_mes(self):
         self.client.force_login(self.lider)
         culto_domingo = CultoPadrao.objects.create(
             nome="Domingo Manha",
@@ -995,22 +1136,11 @@ class EscalasInternasViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Geracao concluida")
-        self.assertTrue(
-            Escala.objects.filter(
-                departamento=self.departamento_louvor,
-                culto_padrao=culto_domingo,
-            ).exists()
-        )
-        self.assertTrue(
-            Escala.objects.filter(
-                departamento=self.departamento_louvor,
-                culto_padrao=culto_quinta,
-            ).exists()
-        )
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
+        self.assertFalse(Escala.objects.filter(departamento=self.departamento_louvor).exists())
 
-    def test_nova_escala_preenche_horario_a_partir_do_culto_padrao(self):
+    def test_nova_escala_legada_com_culto_padrao_e_bloqueada(self):
         self.client.force_login(self.lider)
         culto = CultoPadrao.objects.create(
             nome="Domingo Manha",
@@ -1033,13 +1163,10 @@ class EscalasInternasViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        escala = Escala.objects.get(departamento=self.departamento_louvor, data="2026-05-03")
-        self.assertEqual(escala.culto_padrao, culto)
-        self.assertEqual(escala.titulo, "Domingo Manha")
-        self.assertEqual(escala.horario.strftime("%H:%M"), "10:00")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Escala.objects.filter(departamento=self.departamento_louvor).exists())
 
-    def test_lider_pode_criar_escala_personalizada_fora_do_padrao(self):
+    def test_lider_nao_cria_escala_personalizada_legada(self):
         self.client.force_login(self.lider)
 
         response = self.client.post(
@@ -1056,16 +1183,10 @@ class EscalasInternasViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(
-            Escala.objects.filter(
-                departamento=self.departamento_louvor,
-                titulo="Vigilia especial",
-                culto_padrao__isnull=True,
-            ).exists()
-        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Escala.objects.filter(titulo="Vigilia especial").exists())
 
-    def test_permite_remover_item_da_escala(self):
+    def test_nao_permite_remover_item_da_escala_legada(self):
         self.client.force_login(self.lider)
         escala = Escala.objects.create(
             departamento=self.departamento_louvor,
@@ -1085,9 +1206,9 @@ class EscalasInternasViewsTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(EscalaItem.objects.filter(pk=item.pk).exists())
-        self.assertContains(response, "Membro removido da escala com sucesso")
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "LEGACY_SCHEDULING_READ_ONLY", status_code=403)
+        self.assertTrue(EscalaItem.objects.filter(pk=item.pk).exists())
 
 
 class DepartmentLifecycleServiceTests(TestCase):

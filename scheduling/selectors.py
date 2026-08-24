@@ -252,6 +252,51 @@ def get_person_schedule_assignments(person, *, scope="upcoming", year=None, mont
     return queryset.order_by(*ordering)
 
 
+def get_upcoming_assignments_for_person(person, *, today=None):
+    return get_person_schedule_assignments(person, scope="upcoming", today=today)
+
+
+def get_upcoming_published_schedules(*, today=None, department=None):
+    from django.utils import timezone
+
+    current_date = today or timezone.localdate()
+    queryset = (
+        Schedule.objects.select_related("department", "worship_service", "created_by")
+        .annotate(assignments_count=Count("assignments", distinct=True))
+        .filter(
+            status=Schedule.Status.PUBLISHED,
+            worship_service__status=WorshipService.Status.SCHEDULED,
+            worship_service__date__gte=current_date,
+        )
+    )
+    if department is not None:
+        queryset = queryset.filter(department=department)
+    return queryset.order_by("worship_service__date", "worship_service__time", "id")
+
+
+def get_next_published_schedule_for_department(department, *, today=None):
+    return get_upcoming_published_schedules(today=today, department=department).first()
+
+
+def get_operational_schedule_dashboard_counts(*, today=None):
+    from django.utils import timezone
+
+    current_date = today or timezone.localdate()
+    base = Schedule.objects.filter(
+        worship_service__status=WorshipService.Status.SCHEDULED,
+        worship_service__date__gte=current_date,
+    )
+    return {
+        "published_upcoming": base.filter(status=Schedule.Status.PUBLISHED).count(),
+        "draft_upcoming": base.filter(status=Schedule.Status.DRAFT).count(),
+        "assignments_upcoming": ScheduleAssignment.objects.filter(
+            schedule__status=Schedule.Status.PUBLISHED,
+            schedule__worship_service__status=WorshipService.Status.SCHEDULED,
+            schedule__worship_service__date__gte=current_date,
+        ).count(),
+    }
+
+
 def get_my_schedule_assignment_warnings(assignment):
     eligibility = get_assignment_eligibility(assignment.schedule, assignment.department_membership)
     warnings = []

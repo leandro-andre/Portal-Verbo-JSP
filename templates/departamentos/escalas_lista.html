@@ -10,18 +10,17 @@
         <div class="user-shell__content">
             <section class="user-hero user-hero--compact">
                 <div>
-                    <p class="user-hero__eyebrow">Gestao de escalas</p>
-                    <h1 class="user-hero__title">Escalas</h1>
+                    <p class="user-hero__eyebrow">Historico legado</p>
+                    <h1 class="user-hero__title">Escalas antigas</h1>
                     <p class="user-hero__text">
-                        Veja as escalas dos departamentos que voce lidera e mantenha a organizacao do ministerio sem conflito de horario.
+                        A gestao de escalas foi migrada para o novo Portal. Estes registros permanecem disponiveis apenas para consulta temporaria.
                     </p>
                 </div>
                 <div class="user-hero__actions">
+                    <a class="btn btn--primary" href="/escalas">Ir para Escalas</a>
                     {% if can_manage_cultos_padrao %}
-                        <a class="btn btn--soft" href="{% url 'usuarios:departamentos:cultos_padrao_lista' %}">Cultos padrao</a>
+                        <a class="btn btn--outline" href="{% url 'usuarios:departamentos:cultos_padrao_lista' %}">Ver cultos padrao legados</a>
                     {% endif %}
-                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_gerar_mes' %}">Gerar mes</a>
-                    <a class="btn btn--primary" href="{% url 'usuarios:departamentos:escala_nova' %}">Nova escala</a>
                 </div>
             </section>
 
@@ -90,6 +89,7 @@
                                             <span class="module-badge {% if escala.culto_padrao_id %}module-badge--role{% else %}module-badge--muted{% endif %}">
                                                 {% if escala.culto_padrao_id %}{{ escala.culto_padrao.nome }}{% else %}Personalizada{% endif %}
                                             </span>
+                                            <span class="module-badge module-badge--muted">Historico legado</span>
                                         </td>
                                         <td>{{ escala.data|date:"d/m/Y" }}</td>
                                         <td>{{ escala.horario|time:"H:i" }}</td>
@@ -100,8 +100,7 @@
                                         </td>
                                         <td>{{ escala.total_itens_count }}</td>
                                         <td class="module-table__actions">
-                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:escala_editar' escala.pk %}">Editar</a>
-                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:departamentos:escala_itens' escala.pk %}">Ver itens</a>
+                                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:departamentos:escala_itens' escala.pk %}">Ver historico</a>
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -112,11 +111,10 @@
                     <div class="module-empty">
                         <h3 class="module-empty__title">Nenhuma escala encontrada</h3>
                         <p class="module-empty__text">
-                            Crie sua primeira escala em um departamento que voce lidera para iniciar a organizacao interna.
+                            Novas escalas devem ser criadas no novo Portal.
                         </p>
                         <div class="module-empty__actions">
-                            <a class="btn btn--outline btn--sm" href="{% url 'usuarios:departamentos:escala_gerar_mes' %}">Gerar mes</a>
-                            <a class="btn btn--primary" href="{% url 'usuarios:departamentos:escala_nova' %}">Criar escala</a>
+                            <a class="btn btn--primary" href="/escalas">Ir para Escalas</a>
                         </div>
                     </div>
                 {% endif %}

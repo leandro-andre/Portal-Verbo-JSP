@@ -10,15 +10,15 @@
         <div class="user-shell__content">
             <section class="user-hero user-hero--compact">
                 <div>
-                    <p class="user-hero__eyebrow">Escalas</p>
-                    <h1 class="user-hero__title">Cultos padrao</h1>
+                    <p class="user-hero__eyebrow">Historico legado</p>
+                    <h1 class="user-hero__title">Cultos padrao antigos</h1>
                     <p class="user-hero__text">
-                        Cadastre os horarios fixos da igreja para acelerar a criacao de escalas mensais e manter o padrao dos cultos recorrentes.
+                        A agenda oficial agora usa Cultos Padrao do novo Portal. Estes registros antigos permanecem apenas para consulta.
                     </p>
                 </div>
                 <div class="user-hero__actions">
                     <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Voltar para escalas</a>
-                    <a class="btn btn--primary" href="{% url 'usuarios:departamentos:culto_padrao_novo' %}">Novo culto padrao</a>
+                    <a class="btn btn--primary" href="/agenda-cultos/padroes">Ir para Cultos padrao</a>
                 </div>
             </section>
 
@@ -57,7 +57,6 @@
                                     <th>Horario</th>
                                     <th>Status</th>
                                     <th>Observacoes</th>
-                                    <th class="module-table__actions">Acoes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -72,15 +71,6 @@
                                             </span>
                                         </td>
                                         <td>{{ culto.observacoes|default:"-"|truncatechars:80 }}</td>
-                                        <td class="module-table__actions">
-                                            <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:culto_padrao_editar' culto.pk %}">Editar</a>
-                                            <form method="post" action="{% url 'usuarios:departamentos:culto_padrao_status' culto.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja alterar o status deste culto padrao?">
-                                                {% csrf_token %}
-                                                <button type="submit" class="btn btn--outline btn--sm">
-                                                    {% if culto.ativo %}Inativar{% else %}Reativar{% endif %}
-                                                </button>
-                                            </form>
-                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -90,10 +80,10 @@
                     <div class="module-empty">
                         <h3 class="module-empty__title">Nenhum culto padrao cadastrado</h3>
                         <p class="module-empty__text">
-                            Cadastre os cultos recorrentes da igreja para gerar as escalas do mes com muito mais rapidez.
+                            Cadastre os cultos recorrentes no novo Portal.
                         </p>
                         <div class="module-empty__actions">
-                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:departamentos:culto_padrao_novo' %}">Cadastrar primeiro culto</a>
+                            <a class="btn btn--primary btn--sm" href="/agenda-cultos/padroes">Ir para Cultos padrao</a>
                         </div>
                     </div>
                 {% endif %}

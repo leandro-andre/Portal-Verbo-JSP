@@ -10,7 +10,7 @@
         <div class="user-shell__content">
             <section class="user-hero user-hero--compact">
                 <div>
-                    <p class="user-hero__eyebrow">Itens da escala</p>
+                    <p class="user-hero__eyebrow">Historico legado</p>
                     <h1 class="user-hero__title">{{ escala.titulo }}</h1>
                     <p class="user-hero__text">
                         {{ escala.departamento.nome }} | {{ escala.data|date:"d/m/Y" }} as {{ escala.horario|time:"H:i" }}
@@ -18,7 +18,7 @@
                 </div>
                 <div class="user-hero__actions">
                     <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_lista' %}">Voltar para escalas</a>
-                    <a class="btn btn--soft" href="{% url 'usuarios:departamentos:escala_editar' escala.pk %}">Editar escala</a>
+                    <a class="btn btn--primary" href="/escalas">Ir para Escalas</a>
                 </div>
             </section>
 
@@ -51,7 +51,6 @@
                                         <th>Funcao</th>
                                         <th>Confirmado</th>
                                         <th>Observacoes</th>
-                                        <th class="module-table__actions">Acoes</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -68,13 +67,6 @@
                                                 </span>
                                             </td>
                                             <td>{{ item.observacoes|default:"-"|truncatechars:80 }}</td>
-                                            <td class="module-table__actions">
-                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:escala_itens' escala.pk %}?editar={{ item.pk }}#form-item">Editar</a>
-                                                <form method="post" action="{% url 'usuarios:departamentos:escala_item_remover' escala.pk item.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja remover este membro da escala?">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn--outline btn--sm">Remover</button>
-                                                </form>
-                                            </td>
                                         </tr>
                                     {% endfor %}
                                 </tbody>
@@ -84,16 +76,13 @@
                         <div class="module-empty">
                             <h3 class="module-empty__title">Nenhum membro escalado</h3>
                             <p class="module-empty__text">
-                                Adicione pessoas vinculadas a este departamento para montar a escala.
+                                Esta escala antiga esta disponivel apenas para consulta.
                             </p>
-                            <div class="module-empty__actions">
-                                <a class="btn btn--primary btn--sm" href="#form-item">Adicionar membro</a>
-                            </div>
                         </div>
                     {% endif %}
                 </article>
 
-                <article class="module-card" id="form-item">
+                <article class="module-card">
                     {% if indisponiveis %}
                         <div class="module-card__header">
                             <h2 class="module-card__title">Indisponiveis nesta data</h2>
@@ -106,72 +95,16 @@
                                     </span>
                                 {% endfor %}
                             </div>
-                            <p class="module-table__meta">
-                                Se tentar escalar alguem indisponivel, o sistema vai bloquear a inclusao.
-                            </p>
                         </div>
                     {% endif %}
                     <div class="module-card__header">
-                        <h2 class="module-card__title">
-                            {% if editing_item %}Editar item{% else %}Adicionar membro{% endif %}
-                        </h2>
+                        <h2 class="module-card__title">Gestao migrada</h2>
                     </div>
-                    <div class="module-card__body">
-                        <form method="post" class="user-form">
-                            {% csrf_token %}
-                            {% if editing_item %}
-                                <input type="hidden" name="item_id" value="{{ editing_item.pk }}">
-                            {% endif %}
-
-                            {% if form.non_field_errors %}
-                                <div class="form-feedback form-feedback--error">
-                                    {% for error in form.non_field_errors %}
-                                        <div>{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-
-                            <div class="form-group">
-                                <label class="form-label" for="{{ form.participacao.id_for_label }}">Membro</label>
-                                {{ form.participacao }}
-                                {% for error in form.participacao.errors %}
-                                    <div class="form-error">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" for="{{ form.funcao.id_for_label }}">Funcao</label>
-                                {{ form.funcao }}
-                                {% for error in form.funcao.errors %}
-                                    <div class="form-error">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-
-                            <label class="module-checkbox-row" for="{{ form.confirmado.id_for_label }}">
-                                {{ form.confirmado }}
-                                <span>Membro confirmado</span>
-                            </label>
-                            {% for error in form.confirmado.errors %}
-                                <div class="form-error">{{ error }}</div>
-                            {% endfor %}
-
-                            <div class="form-group">
-                                <label class="form-label" for="{{ form.observacoes.id_for_label }}">Observacoes</label>
-                                {{ form.observacoes }}
-                                {% for error in form.observacoes.errors %}
-                                    <div class="form-error">{{ error }}</div>
-                                {% endfor %}
-                            </div>
-
-                            <div class="user-form__actions">
-                                <button type="submit" class="btn btn--primary">
-                                    {% if editing_item %}Salvar item{% else %}Adicionar a escala{% endif %}
-                                </button>
-                                {% if editing_item %}
-                                    <a class="btn btn--outline" href="{% url 'usuarios:departamentos:escala_itens' escala.pk %}">Cancelar edicao</a>
-                                {% endif %}
-                            </div>
-                        </form>
+                    <div class="module-card__body user-card__body--stack">
+                        <p class="user-note">
+                            A gestao de pessoas escaladas foi migrada para o novo Portal.
+                        </p>
+                        <a class="btn btn--primary" href="/escalas">Ir para Escalas</a>
                     </div>
                 </article>
             </section>

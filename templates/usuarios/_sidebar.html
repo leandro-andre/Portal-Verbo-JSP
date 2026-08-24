@@ -44,12 +44,12 @@
             <p class="user-nav__heading">Escalas</p>
             <div class="user-nav__items">
                 {% if can_manage_escalas %}
-                    <a class="user-nav__link {% if active_section == 'escalas' %}is-active{% endif %}" href="{% url 'usuarios:departamentos:escala_lista' %}">
+                    <a class="user-nav__link {% if active_section == 'escalas' %}is-active{% endif %}" href="/escalas">
                         Escalas
                     </a>
                 {% endif %}
                 {% if user.is_authenticated %}
-                    <a class="user-nav__link {% if active_section == 'indisponibilidades' %}is-active{% endif %}" href="{% url 'usuarios:departamentos:minhas_indisponibilidades' %}">
+                    <a class="user-nav__link {% if active_section == 'indisponibilidades' %}is-active{% endif %}" href="/minhas-indisponibilidades">
                         Minhas indisponibilidades
                     </a>
                 {% endif %}

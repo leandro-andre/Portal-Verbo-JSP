@@ -13,11 +13,11 @@
                     <p class="user-hero__eyebrow">Agenda pessoal</p>
                     <h1 class="user-hero__title">Minhas indisponibilidades</h1>
                     <p class="user-hero__text">
-                        Informe os periodos em que voce nao podera servir para ajudar a lideranca a montar escalas sem surpresa.
+                        O historico antigo permanece disponivel para consulta. Novas indisponibilidades devem ser registradas no novo Portal.
                     </p>
                 </div>
                 <div class="user-hero__actions">
-                    <a class="btn btn--primary" href="{% url 'usuarios:departamentos:indisponibilidade_nova' %}">Nova indisponibilidade</a>
+                    <a class="btn btn--primary" href="/minhas-indisponibilidades">Ir para Indisponibilidades</a>
                 </div>
             </section>
 
@@ -50,7 +50,6 @@
                                     <th>Horario</th>
                                     <th>Motivo</th>
                                     <th>Status</th>
-                                    <th class="module-table__actions">Acoes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -71,17 +70,6 @@
                                                 {% if indisponibilidade.ativo %}Ativa{% else %}Cancelada{% endif %}
                                             </span>
                                         </td>
-                                        <td class="module-table__actions">
-                                            {% if indisponibilidade.ativo %}
-                                                <a class="btn btn--soft btn--sm" href="{% url 'usuarios:departamentos:indisponibilidade_editar' indisponibilidade.pk %}">Editar</a>
-                                                <form method="post" action="{% url 'usuarios:departamentos:indisponibilidade_cancelar' indisponibilidade.pk %}" class="module-inline-form" data-confirm="Tem certeza que deseja cancelar esta indisponibilidade?">
-                                                    {% csrf_token %}
-                                                    <button type="submit" class="btn btn--outline btn--sm">Cancelar</button>
-                                                </form>
-                                            {% else %}
-                                                <span class="module-table__meta">Encerrada</span>
-                                            {% endif %}
-                                        </td>
                                     </tr>
                                 {% endfor %}
                             </tbody>
@@ -91,10 +79,10 @@
                     <div class="module-empty">
                         <h3 class="module-empty__title">Nenhuma indisponibilidade cadastrada</h3>
                         <p class="module-empty__text">
-                            Quando voce souber que nao podera servir, registre o periodo aqui para a lideranca considerar na montagem das escalas.
+                            Registre novos periodos no novo Portal.
                         </p>
                         <div class="module-empty__actions">
-                            <a class="btn btn--primary btn--sm" href="{% url 'usuarios:departamentos:indisponibilidade_nova' %}">Nova indisponibilidade</a>
+                            <a class="btn btn--primary btn--sm" href="/minhas-indisponibilidades">Ir para Indisponibilidades</a>
                         </div>
                     </div>
                 {% endif %}

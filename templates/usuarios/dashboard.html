@@ -105,11 +105,13 @@
                             <ul class="user-list user-list--divided">
                                 {% for participacao in minhas_participacoes %}
                                     <li>
-                                        <strong>{{ participacao.departamento.nome }}</strong><br>
-                                        <span>{{ participacao.get_papel_display }}{% if participacao.data_entrada %} | Desde {{ participacao.data_entrada|date:"d/m/Y" }}{% endif %}</span>
+                                        <strong>{{ participacao.department.nome }}</strong><br>
+                                        <span>{{ participacao.role.name }}{% if participacao.joined_at %} | Desde {{ participacao.joined_at|date:"d/m/Y" }}{% endif %}</span>
                                     </li>
                                 {% endfor %}
                             </ul>
+                        {% elif not person_linked %}
+                            <p class="user-empty">Sua conta ainda nao esta vinculada a uma pessoa do cadastro.</p>
                         {% else %}
                             <p class="user-empty">Voce ainda nao esta vinculado a nenhum departamento ativo.</p>
                         {% endif %}
@@ -125,16 +127,18 @@
                             <ul class="user-list user-list--divided">
                                 {% for item in minhas_escalas %}
                                     <li>
-                                        <strong>{{ item.escala.titulo }}</strong><br>
+                                        <strong>{{ item.schedule.worship_service.name }}</strong><br>
                                         <span>
-                                            {{ item.escala.departamento.nome }} | {{ item.funcao }} | {{ item.escala.data|date:"d/m/Y" }} as {{ item.escala.horario|time:"H:i" }}
-                                            {% if item.confirmado %} | Confirmado{% else %} | Pendente{% endif %}
+                                            {{ item.schedule.department.nome }} | {{ item.department_membership.role.name }} | {{ item.schedule.worship_service.date|date:"d/m/Y" }} as {{ item.schedule.worship_service.time|time:"H:i" }}
                                         </span>
                                     </li>
                                 {% endfor %}
                             </ul>
+                            <a class="btn btn--soft" href="/minhas-escalas">Ver todas</a>
+                        {% elif not person_linked %}
+                            <p class="user-empty">Sua conta ainda nao esta vinculada a uma pessoa do cadastro.</p>
                         {% else %}
-                            <p class="user-empty">Voce ainda nao possui escalas futuras vinculadas ao seu usuario.</p>
+                            <p class="user-empty">Nenhuma proxima escala.</p>
                         {% endif %}
                     </div>
                 </article>
