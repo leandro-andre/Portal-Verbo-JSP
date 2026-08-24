@@ -126,6 +126,7 @@ def get_department_context_permissions(user, department):
             "can_manage_department": False,
             "can_manage_roles": False,
             "can_manage_members": False,
+            "can_manage_schedules": False,
         }
 
     contextual_membership = get_contextual_department_membership(user, department)
@@ -149,11 +150,13 @@ def get_department_context_permissions(user, department):
         or user.has_perm("departamentos.reactivate_departmentrole")
         or (contextual_role and contextual_role.can_manage_members)
     )
+    can_manage_schedules = bool(contextual_role and contextual_role.can_manage_schedules)
 
     return {
         "can_manage_department": can_manage_department,
         "can_manage_roles": can_manage_roles,
         "can_manage_members": can_manage_members,
+        "can_manage_schedules": can_manage_schedules,
     }
 
 
@@ -176,3 +179,7 @@ def can_manage_department_roles(user, department):
 
 def can_manage_department_members(user, department):
     return get_department_context_permissions(user, department)["can_manage_members"]
+
+
+def can_manage_department_schedules(user, department):
+    return get_department_context_permissions(user, department)["can_manage_schedules"]

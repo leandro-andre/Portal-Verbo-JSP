@@ -22,6 +22,8 @@ import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
+import ScheduleDetailPage from './pages/ScheduleDetailPage'
+import SchedulesPage from './pages/SchedulesPage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
 import WorshipSchedulePage from './pages/WorshipSchedulePage'
@@ -115,6 +117,8 @@ function AdminRoutes() {
         <Route path="/minhas-indisponibilidades" element={<MyUnavailabilityPage />} />
         <Route path="/agenda-cultos" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipSchedulePage /></AuthorizedRoute>} />
         <Route path="/agenda-cultos/padroes" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipTemplatesPage /></AuthorizedRoute>} />
+        <Route path="/escalas" element={<SchedulesPage />} />
+        <Route path="/escalas/:id" element={<ScheduleDetailPage />} />
         <Route path="/departamentos" element={<AuthorizedRoute capability="DEPARTMENT_VIEW"><DepartmentsPage /></AuthorizedRoute>} />
         <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />

@@ -117,6 +117,7 @@ def create_department_role(
     name,
     can_manage_department=False,
     can_manage_members=False,
+    can_manage_schedules=False,
 ):
     ensure_department_active(department)
     code = generate_department_role_code(department=department, name=name)
@@ -127,6 +128,7 @@ def create_department_role(
         active=True,
         can_manage_department=can_manage_department,
         can_manage_members=can_manage_members,
+        can_manage_schedules=can_manage_schedules,
     )
     try:
         role.save()
@@ -157,6 +159,7 @@ def update_department_role(
     name=None,
     can_manage_department=None,
     can_manage_members=None,
+    can_manage_schedules=None,
 ):
     if name is not None:
         role.name = name
@@ -164,6 +167,8 @@ def update_department_role(
         role.can_manage_department = can_manage_department
     if can_manage_members is not None:
         role.can_manage_members = can_manage_members
+    if can_manage_schedules is not None:
+        role.can_manage_schedules = can_manage_schedules
     role.save()
     return role
 

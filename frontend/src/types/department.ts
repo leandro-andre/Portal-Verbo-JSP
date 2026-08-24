@@ -12,6 +12,7 @@ export type DepartmentPermissions = {
   can_manage_department: boolean
   can_manage_roles: boolean
   can_manage_members: boolean
+  can_manage_schedules: boolean
 }
 
 export type CreateDepartmentInput = {
@@ -47,6 +48,7 @@ export type DepartmentRole = {
   active: boolean
   can_manage_department: boolean
   can_manage_members: boolean
+  can_manage_schedules: boolean
   created_at: string
   updated_at: string
 }
@@ -55,12 +57,14 @@ export type CreateDepartmentRoleInput = {
   name: string
   can_manage_department: boolean
   can_manage_members: boolean
+  can_manage_schedules: boolean
 }
 
 export type UpdateDepartmentRoleInput = {
   name?: string
   can_manage_department?: boolean
   can_manage_members?: boolean
+  can_manage_schedules?: boolean
 }
 
 export type DepartmentMemberPerson = {

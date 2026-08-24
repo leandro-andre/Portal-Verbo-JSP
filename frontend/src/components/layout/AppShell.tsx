@@ -16,6 +16,8 @@ function AppShell({ children }: AppShellProps) {
       ? 'Solicitacoes'
       : location.pathname.startsWith('/agenda-cultos')
         ? 'Agenda de Cultos'
+        : location.pathname.startsWith('/escalas')
+          ? 'Escalas'
         : location.pathname.startsWith('/departamentos')
           ? 'Departamentos'
           : location.pathname.startsWith('/discipulado')

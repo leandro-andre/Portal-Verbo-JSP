@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "usuarios",
     "pessoas",
     "worship",
+    "scheduling",
     "core",
     "departamentos",
     "escalas",

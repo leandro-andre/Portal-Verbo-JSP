@@ -93,6 +93,7 @@ class DepartmentRoleSerializer(serializers.ModelSerializer):
             "active",
             "can_manage_department",
             "can_manage_members",
+            "can_manage_schedules",
             "created_at",
             "updated_at",
         ]
@@ -106,7 +107,7 @@ class DepartmentRoleCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         extra_fields = set(self.initial_data).difference(
-            {"name", "can_manage_department", "can_manage_members"}
+            {"name", "can_manage_department", "can_manage_members", "can_manage_schedules"}
         )
         if extra_fields:
             raise serializers.ValidationError(
@@ -124,11 +125,11 @@ class DepartmentRoleCreateSerializer(serializers.ModelSerializer):
 class DepartmentRoleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DepartmentRole
-        fields = ["name", "can_manage_department", "can_manage_members"]
+        fields = ["name", "can_manage_department", "can_manage_members", "can_manage_schedules"]
 
     def validate(self, attrs):
         extra_fields = set(self.initial_data).difference(
-            {"name", "code", "can_manage_department", "can_manage_members"}
+            {"name", "code", "can_manage_department", "can_manage_members", "can_manage_schedules"}
         )
         if extra_fields:
             raise serializers.ValidationError(

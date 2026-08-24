@@ -128,11 +128,12 @@ function RoleForm({
   onSubmit,
 }: {
   isPending: boolean
-  onSubmit: (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean }) => void
+  onSubmit: (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean; can_manage_schedules: boolean }) => void
 }) {
   const [name, setName] = useState('')
   const [canManageDepartment, setCanManageDepartment] = useState(false)
   const [canManageMembers, setCanManageMembers] = useState(false)
+  const [canManageSchedules, setCanManageSchedules] = useState(false)
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -140,10 +141,12 @@ function RoleForm({
       name,
       can_manage_department: canManageDepartment,
       can_manage_members: canManageMembers,
+      can_manage_schedules: canManageSchedules,
     })
     setName('')
     setCanManageDepartment(false)
     setCanManageMembers(false)
+    setCanManageSchedules(false)
   }
 
   return (
@@ -167,6 +170,14 @@ function RoleForm({
           onChange={(event) => setCanManageMembers(event.target.checked)}
         />
         <span>Gerencia cargos e pessoas</span>
+      </label>
+      <label className="checkbox-field">
+        <input
+          type="checkbox"
+          checked={canManageSchedules}
+          onChange={(event) => setCanManageSchedules(event.target.checked)}
+        />
+        <span>Gerencia escalas</span>
       </label>
       <button className="button button--primary" type="submit" disabled={isPending}>
         <Plus size={17} aria-hidden="true" />
@@ -404,6 +415,7 @@ function DepartmentDetailPage() {
                           {[
                             role.can_manage_department ? 'Departamento' : null,
                             role.can_manage_members ? 'Cargos e pessoas' : null,
+                            role.can_manage_schedules ? 'Escalas' : null,
                           ].filter(Boolean).join(', ') || '-'}
                         </td>
                         {canManageRoles ? (
@@ -420,6 +432,7 @@ function DepartmentDetailPage() {
                                         name: role.name,
                                         can_manage_department: !role.can_manage_department,
                                         can_manage_members: role.can_manage_members,
+                                        can_manage_schedules: role.can_manage_schedules,
                                       },
                                     }),
                                     'Cargo atualizado com sucesso.',
@@ -440,6 +453,7 @@ function DepartmentDetailPage() {
                                         name: role.name,
                                         can_manage_department: role.can_manage_department,
                                         can_manage_members: !role.can_manage_members,
+                                        can_manage_schedules: role.can_manage_schedules,
                                       },
                                     }),
                                     'Cargo atualizado com sucesso.',
@@ -448,6 +462,27 @@ function DepartmentDetailPage() {
                               >
                                 <Save size={16} aria-hidden="true" />
                                 Pessoas
+                              </button>
+                              <button
+                                className="button button--secondary"
+                                type="button"
+                                onClick={() =>
+                                  void runAction(
+                                    () => roleMutations.update.mutateAsync({
+                                      roleId: role.id,
+                                      payload: {
+                                        name: role.name,
+                                        can_manage_department: role.can_manage_department,
+                                        can_manage_members: role.can_manage_members,
+                                        can_manage_schedules: !role.can_manage_schedules,
+                                      },
+                                    }),
+                                    'Cargo atualizado com sucesso.',
+                                  )
+                                }
+                              >
+                                <Save size={16} aria-hidden="true" />
+                                Escalas
                               </button>
                               <button
                                 className="button button--secondary"

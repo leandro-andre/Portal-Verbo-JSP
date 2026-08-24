@@ -26,6 +26,7 @@ urlpatterns = [
     path("api/", include("departamentos.api_urls")),
     path("api/people/", include("pessoas.urls")),
     path("api/worship/", include("worship.urls")),
+    path("api/scheduling/", include("scheduling.urls")),
     path("usuarios/", include("usuarios.urls")),
     path("", include("core.urls")),
     path("", include("eventos.urls")),

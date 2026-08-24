@@ -190,6 +190,7 @@ class DepartmentRole(models.Model):
     active = models.BooleanField("Ativo", default=True)
     can_manage_department = models.BooleanField("Pode gerenciar departamento", default=False)
     can_manage_members = models.BooleanField("Pode gerenciar pessoas", default=False)
+    can_manage_schedules = models.BooleanField("Pode gerenciar escalas", default=False)
     created_at = models.DateTimeField("Criado em", auto_now_add=True)
     updated_at = models.DateTimeField("Atualizado em", auto_now=True)
 
