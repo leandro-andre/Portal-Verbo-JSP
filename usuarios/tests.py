@@ -1,6 +1,8 @@
 from datetime import date
-from io import StringIO
+from io import BytesIO, StringIO
 from os import environ
+import shutil
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -9,12 +11,15 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+from PIL import Image
 
-from departamentos.models import Departamento, DepartamentoMembro
+from church_journey.models import ChurchJourney
+from departamentos.models import Departamento, DepartamentoMembro, DepartmentMembership, DepartmentRole
 from departamentos.permissions import usuario_pode_acessar_departamentos
 from escalas.permissions import usuario_pode_acessar_escalas
 from ministros.models import Ministro
@@ -720,6 +725,181 @@ class AuthApiTests(TestCase):
         self.assertIn("password", response.json())
         usuario.refresh_from_db()
         self.assertFalse(usuario.is_active)
+
+
+class MyProfileApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.media_root = tempfile.mkdtemp()
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.person = Person.objects.create(
+            full_name="Leandro Viana",
+            preferred_name="Leandro",
+            birth_date=date(1990, 5, 10),
+            email="leandro.person@example.com",
+            phone="81999999999",
+        )
+        self.user = self.user_model.objects.create_user(
+            username="leandro",
+            password="Senha-forte-123",
+            email="leandro.user@example.com",
+            person=self.person,
+        )
+        self.other_person = Person.objects.create(
+            full_name="Outra Pessoa",
+            birth_date=date(1991, 6, 20),
+            phone="81988888888",
+        )
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.media_root, ignore_errors=True)
+
+    def image_file(self, filename="foto.jpg", image_format="JPEG", content_type="image/jpeg"):
+        buffer = BytesIO()
+        Image.new("RGB", (16, 16), color=(37, 99, 235)).save(buffer, format=image_format)
+        return SimpleUploadedFile(filename, buffer.getvalue(), content_type=content_type)
+
+    def test_get_profile_exige_autenticacao(self):
+        response = self.client.get(reverse("my-profile"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_get_profile_sem_person_nao_cria_cadastro(self):
+        user = self.user_model.objects.create_user(username="sem.person", password="Senha-forte-123")
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("my-profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["person_linked"])
+        self.assertIn("Procure a Secretaria", response.json()["message"])
+        self.assertIsNone(response.json()["person"])
+        self.assertEqual(Person.objects.count(), 2)
+
+    def test_get_profile_retorna_dados_resumidos_da_pessoa_conta_igreja_e_departamentos(self):
+        ChurchJourney.objects.create(person=self.person)
+        department = Departamento.objects.create(nome="Midia Perfil", codigo="midia-perfil")
+        role = DepartmentRole.objects.create(department=department, name="Operador", code="operador")
+        DepartmentMembership.objects.create(person=self.person, department=department, role=role)
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("my-profile"))
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(body["person_linked"])
+        self.assertEqual(body["person"]["id"], self.person.id)
+        self.assertEqual(body["person"]["display_name"], "Leandro")
+        self.assertEqual(body["account"]["username"], "leandro")
+        self.assertTrue(body["church"]["has_church_journey"])
+        self.assertIsNone(body["church"]["membership_status"])
+        self.assertEqual(body["departments"][0]["department"]["name"], "Midia Perfil")
+        self.assertEqual(body["departments"][0]["role"]["name"], "Operador")
+
+    def test_patch_profile_permite_apenas_telefone_e_normaliza(self):
+        self.client.force_login(self.user)
+
+        response = self.client.patch(
+            reverse("my-profile"),
+            {"phone": "(81) 99644-0827"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.phone, "81996440827")
+        self.assertEqual(response.json()["person"]["phone"], "81996440827")
+
+    def test_patch_profile_rejeita_campos_de_admin_e_nao_altera_outra_person(self):
+        self.client.force_login(self.user)
+
+        response = self.client.patch(
+            reverse("my-profile"),
+            {
+                "person_id": self.other_person.id,
+                "full_name": "Nome Alterado",
+                "birth_date": "2000-01-01",
+                "email": "alterado@example.com",
+                "status": Person.Status.INACTIVE,
+                "phone": "(81) 99644-0827",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.person.refresh_from_db()
+        self.other_person.refresh_from_db()
+        self.assertEqual(self.person.full_name, "Leandro Viana")
+        self.assertEqual(self.person.phone, "81999999999")
+        self.assertEqual(self.other_person.full_name, "Outra Pessoa")
+        self.assertEqual(self.other_person.phone, "81988888888")
+
+    def test_upload_photo_aceita_jpeg_png_webp_e_current_user_retorna_photo_url(self):
+        self.client.force_login(self.user)
+
+        for filename, image_format, content_type in (
+            ("foto.jpg", "JPEG", "image/jpeg"),
+            ("foto.png", "PNG", "image/png"),
+            ("foto.webp", "WEBP", "image/webp"),
+        ):
+            with self.subTest(content_type=content_type):
+                response = self.client.post(
+                    reverse("my-profile-photo"),
+                    {"photo": self.image_file(filename, image_format, content_type)},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("/media/people/photos/", response.json()["person"]["photo_url"])
+
+        current_user = self.client.get(reverse("auth-current-user")).json()["user"]
+        self.assertIn("/media/people/photos/", current_user["photo_url"])
+
+    def test_upload_photo_rejeita_tipo_invalido_e_arquivo_maior_que_5mb(self):
+        self.client.force_login(self.user)
+
+        invalid = self.client.post(
+            reverse("my-profile-photo"),
+            {"photo": SimpleUploadedFile("foto.txt", b"texto", content_type="text/plain")},
+        )
+        large = self.client.post(
+            reverse("my-profile-photo"),
+            {"photo": SimpleUploadedFile("grande.jpg", b"x" * (5 * 1024 * 1024 + 1), content_type="image/jpeg")},
+        )
+
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(large.status_code, 400)
+        self.assertFalse(Person.objects.get(pk=self.person.pk).photo)
+
+    def test_replace_photo_remove_arquivo_antigo(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse("my-profile-photo"), {"photo": self.image_file("foto.jpg")})
+        self.person.refresh_from_db()
+        old_name = self.person.photo.name
+
+        response = self.client.post(
+            reverse("my-profile-photo"),
+            {"photo": self.image_file("nova.png", "PNG", "image/png")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertFalse(self.person.photo.storage.exists(old_name))
+
+    def test_delete_photo_limpa_campo_sem_apagar_person(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse("my-profile-photo"), {"photo": self.image_file("foto.jpg")})
+        self.person.refresh_from_db()
+        photo_name = self.person.photo.name
+
+        response = self.client.delete(reverse("my-profile-photo"))
+
+        self.assertEqual(response.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertFalse(self.person.photo)
+        self.assertTrue(Person.objects.filter(pk=self.person.pk).exists())
+        self.assertFalse(self.person.photo.storage.exists(photo_name))
 
 
 class LocalSettingsCsrfTests(TestCase):

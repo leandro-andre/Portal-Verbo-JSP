@@ -156,6 +156,14 @@
   color: #dbeafe;
 }
 
+.sidebar__user-avatar img,
+.topbar__user-avatar img {
+  border-radius: 999px;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .topbar {
   align-items: center;
   background: var(--color-surface);
@@ -193,6 +201,18 @@
 
 .topbar__user {
   gap: 9px;
+}
+
+.topbar__user-link {
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  text-decoration: none;
+}
+
+.topbar__user-link:hover,
+.topbar__user-link:focus-visible {
+  background: var(--color-surface-muted);
+  outline: none;
 }
 
 .topbar__user-copy {
@@ -882,6 +902,40 @@
   width: 100%;
 }
 
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.form-field span {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.form-field input {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font: inherit;
+  min-height: 42px;
+  padding: 9px 12px;
+  width: 100%;
+}
+
+.form-field input:focus {
+  border-color: #9db2d6;
+  box-shadow: 0 0 0 3px var(--color-focus);
+  outline: none;
+}
+
+.form-field input[aria-invalid='true'] {
+  border-color: #ef4444;
+}
+
 .field-group input:focus,
 .field-group select:focus {
   border-color: #9db2d6;
@@ -1100,6 +1154,50 @@
   font-size: 16px;
   height: 54px;
   width: 54px;
+}
+
+.my-profile-photo {
+  align-items: center;
+  background: #eef4ff;
+  border: 1px solid #dbe7ff;
+  border-radius: 999px;
+  color: #1e3a8a;
+  display: inline-flex;
+  flex: 0 0 76px;
+  font-size: 20px;
+  font-weight: 800;
+  height: 76px;
+  justify-content: center;
+  overflow: hidden;
+  width: 76px;
+}
+
+.my-profile-photo img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.my-profile-upload {
+  position: relative;
+}
+
+.my-profile-upload input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.my-profile-form {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  margin-bottom: 0;
+}
+
+.my-profile-departments {
+  display: grid;
+  gap: 10px;
 }
 
 .profile-header__identity {
@@ -1644,6 +1742,10 @@
 
   .form-actions .button {
     width: 100%;
+  }
+
+  .my-profile-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .review-actions {

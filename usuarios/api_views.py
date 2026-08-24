@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from pessoas.models import Person
+from pessoas.serializers import get_photo_url
 from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
@@ -36,7 +37,10 @@ from .serializers import (
     PublicAccessRequestCreateSerializer,
     RejectAccessRequestSerializer,
     LinkUserPersonSerializer,
+    MyProfilePhotoUploadSerializer,
+    MyProfileUpdateSerializer,
     USERNAME_ALREADY_EXISTS_CODE,
+    my_profile_payload,
 )
 from .services import (
     AccessRequestError,
@@ -61,7 +65,7 @@ def _json_request_body(request):
         return None
 
 
-def _current_user_payload(user):
+def _current_user_payload(user, request=None):
     if not user.is_authenticated:
         return {"is_authenticated": False, "user": None}
 
@@ -76,6 +80,7 @@ def _current_user_payload(user):
             "is_staff": user.is_staff,
             "is_superuser": user.is_superuser,
             "person_id": user.person_id,
+            "photo_url": get_photo_url(user.person, request) if user.person_id else None,
             "roles": get_role_codes(user),
             "capabilities": get_capabilities(user),
         },
@@ -97,7 +102,7 @@ def current_user_view(request):
     if not request.user.is_authenticated and request.session.get(SESSION_KEY):
         request.session.flush()
 
-    return JsonResponse(_current_user_payload(request.user))
+    return JsonResponse(_current_user_payload(request.user, request))
 
 
 @require_POST
@@ -139,7 +144,7 @@ def login_view(request):
         )
 
     login(request, user)
-    return JsonResponse(_current_user_payload(user))
+    return JsonResponse(_current_user_payload(user, request))
 
 
 @require_POST
@@ -256,6 +261,11 @@ class CanEnableUsers(BasePermission):
             and request.user.is_active
             and request.user.has_perm(USER_ENABLE)
         )
+
+
+class IsActiveAuthenticatedUser(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user.is_authenticated and request.user.is_active)
 
 
 class PublicAccessRequestCreateView(APIView):
@@ -479,3 +489,55 @@ class AdminUserPersonLinkView(AdminUserDetailView):
         usuario = self.get_object(pk)
         usuario = unlink_user_from_person(usuario)
         return Response(PortalUserSerializer(usuario).data)
+
+
+class MyProfileView(APIView):
+    permission_classes = [IsActiveAuthenticatedUser]
+
+    def get(self, request):
+        return Response(my_profile_payload(request.user, request))
+
+    def patch(self, request):
+        person = getattr(request.user, "person", None)
+        if person is None:
+            return Response(my_profile_payload(request.user, request), status=status.HTTP_409_CONFLICT)
+
+        serializer = MyProfileUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(person, field, value)
+        if serializer.validated_data:
+            person.save(update_fields=[*serializer.validated_data.keys(), "updated_at"])
+        return Response(my_profile_payload(request.user, request))
+
+
+class MyProfilePhotoView(APIView):
+    permission_classes = [IsActiveAuthenticatedUser]
+
+    def post(self, request):
+        person = getattr(request.user, "person", None)
+        if person is None:
+            return Response(my_profile_payload(request.user, request), status=status.HTTP_409_CONFLICT)
+
+        serializer = MyProfilePhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        old_photo_name = person.photo.name if person.photo else ""
+        person.photo = serializer.validated_data["photo"]
+        person.save(update_fields=["photo", "updated_at"])
+        if old_photo_name and old_photo_name != person.photo.name and person.photo.storage.exists(old_photo_name):
+            person.photo.storage.delete(old_photo_name)
+        return Response(my_profile_payload(request.user, request))
+
+    def delete(self, request):
+        person = getattr(request.user, "person", None)
+        if person is None:
+            return Response(my_profile_payload(request.user, request), status=status.HTTP_409_CONFLICT)
+
+        if person.photo:
+            storage = person.photo.storage
+            photo_name = person.photo.name
+            person.photo = None
+            person.save(update_fields=["photo", "updated_at"])
+            if photo_name and storage.exists(photo_name):
+                storage.delete(photo_name)
+        return Response(my_profile_payload(request.user, request))

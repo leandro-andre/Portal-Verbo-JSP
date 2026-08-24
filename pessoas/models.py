@@ -1,4 +1,6 @@
 import re
+import uuid
+from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -15,6 +17,11 @@ def validate_brazilian_mobile(value):
     if len(digits) != 11 or digits[2] != "9":
         raise ValidationError("Informe um celular brasileiro valido com 11 digitos.")
     return digits
+
+
+def person_photo_upload_to(instance, filename):
+    suffix = Path(filename).suffix.lower()
+    return f"people/photos/{instance.pk or 'pending'}/{uuid.uuid4().hex}{suffix}"
 
 
 class PersonQuerySet(models.QuerySet):
@@ -35,6 +42,7 @@ class Person(models.Model):
     birth_date = models.DateField("Data de nascimento")
     email = models.EmailField("E-mail", blank=True)
     phone = models.CharField("Telefone", max_length=30, blank=True)
+    photo = models.ImageField("Foto", upload_to=person_photo_upload_to, blank=True, null=True)
     status = models.CharField(
         "Status",
         max_length=20,

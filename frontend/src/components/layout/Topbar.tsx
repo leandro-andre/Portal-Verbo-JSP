@@ -1,4 +1,5 @@
 import { Bell, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useLogout, useCurrentUser } from '../../hooks/useAuth'
 
 type TopbarProps = {
@@ -45,15 +46,15 @@ function Topbar({ title, isSidebarCollapsed, onToggleSidebar }: TopbarProps) {
         <button className="icon-button" type="button" aria-label="Notificacoes">
           <Bell size={18} aria-hidden="true" />
         </button>
-        <div className="topbar__user" aria-label="Usuario atual">
+        <Link className="topbar__user topbar__user-link" aria-label="Meu Perfil" to="/meu-perfil">
           <span className="topbar__user-avatar" aria-hidden="true">
-            {initials}
+            {currentUser?.user?.photo_url ? <img src={currentUser.user.photo_url} alt="" /> : initials}
           </span>
           <span className="topbar__user-copy">
             <span className="topbar__user-name">{displayName}</span>
             <span className="topbar__user-role">{roleLabel}</span>
           </span>
-        </div>
+        </Link>
         <button
           className="icon-button"
           type="button"

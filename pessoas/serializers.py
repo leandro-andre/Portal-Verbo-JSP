@@ -13,6 +13,17 @@ from church_journey.selectors import (
 from .models import Person, PersonUnavailability, validate_brazilian_mobile
 
 
+def get_photo_url(obj, request=None):
+    photo = getattr(obj, "photo", None)
+    if not photo:
+        return None
+    try:
+        url = photo.url
+    except ValueError:
+        return None
+    return request.build_absolute_uri(url) if request is not None else url
+
+
 class PersonPortalUserSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     username = serializers.CharField()
@@ -29,6 +40,7 @@ class PersonSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     display_name = serializers.CharField(read_only=True)
+    photo_url = serializers.SerializerMethodField()
     portal_user = PersonPortalUserSerializer(source="user_account", read_only=True)
     has_church_journey = serializers.SerializerMethodField()
     discipleship = serializers.SerializerMethodField()
@@ -43,6 +55,7 @@ class PersonSerializer(serializers.ModelSerializer):
             "birth_date",
             "email",
             "phone",
+            "photo_url",
             "status",
             "portal_user",
             "has_church_journey",
@@ -55,6 +68,9 @@ class PersonSerializer(serializers.ModelSerializer):
 
     def get_has_church_journey(self, obj):
         return hasattr(obj, "church_journey")
+
+    def get_photo_url(self, obj):
+        return get_photo_url(obj, self.context.get("request"))
 
     def get_discipleship(self, obj):
         completed_enrollment = get_completed_discipleship(obj)

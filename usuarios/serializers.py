@@ -4,7 +4,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
+from PIL import Image, UnidentifiedImageError
 
+from church_journey.selectors import get_discipleship_completed_at, has_completed_discipleship
+from departamentos.models import DepartmentMembership
+from pessoas.models import Person, validate_brazilian_mobile
+from pessoas.serializers import get_photo_url
 from .services import get_access_status
 from .models import AccessRequest
 
@@ -215,3 +220,145 @@ class PortalUserSerializer(serializers.Serializer):
 
 class LinkUserPersonSerializer(serializers.Serializer):
     person_id = serializers.IntegerField(required=True)
+
+
+SELF_PROFILE_MESSAGE = (
+    "Seu acesso ainda nao esta vinculado a uma pessoa. Procure a Secretaria para revisar seu cadastro."
+)
+
+
+class MyProfileUpdateSerializer(serializers.Serializer):
+    phone = serializers.CharField(required=False, allow_blank=True)
+
+    allowed_fields = {"phone"}
+
+    def validate(self, attrs):
+        extra_fields = set(self.initial_data).difference(self.allowed_fields)
+        if extra_fields:
+            raise serializers.ValidationError(
+                {field: "Este campo nao pode ser alterado neste endpoint." for field in sorted(extra_fields)}
+            )
+        if "phone" in self.initial_data:
+            try:
+                attrs["phone"] = validate_brazilian_mobile(attrs.get("phone", ""))
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({"phone": exc.messages}) from exc
+        return attrs
+
+
+class MyProfilePhotoUploadSerializer(serializers.Serializer):
+    photo = serializers.FileField(required=True)
+
+    allowed_content_types = {"image/jpeg", "image/png", "image/webp"}
+    max_size = 5 * 1024 * 1024
+
+    def validate_photo(self, photo):
+        content_type = getattr(photo, "content_type", "")
+        if content_type not in self.allowed_content_types:
+            raise serializers.ValidationError("Envie uma imagem JPEG, PNG ou WEBP.")
+        if photo.size > self.max_size:
+            raise serializers.ValidationError("A foto deve ter no maximo 5MB.")
+        try:
+            Image.open(photo).verify()
+        except (UnidentifiedImageError, OSError) as exc:
+            raise serializers.ValidationError("Envie um arquivo de imagem valido.") from exc
+        finally:
+            photo.seek(0)
+        return photo
+
+
+def _account_payload(user):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "email": user.email,
+        "is_active": user.is_active,
+    }
+
+
+def _person_payload(person, request):
+    return {
+        "id": person.id,
+        "full_name": person.full_name,
+        "preferred_name": person.preferred_name,
+        "display_name": person.display_name,
+        "birth_date": person.birth_date.isoformat(),
+        "email": person.email,
+        "phone": person.phone,
+        "status": person.status,
+        "photo_url": get_photo_url(person, request),
+    }
+
+
+def _church_payload(person):
+    membership = getattr(person, "membership", None)
+    if membership is not None:
+        membership_status = membership.status
+        member_since = membership.member_since.isoformat()
+    else:
+        membership_status = None
+        member_since = None
+
+    completed_at = get_discipleship_completed_at(person)
+    return {
+        "person_status": person.status,
+        "has_church_journey": hasattr(person, "church_journey"),
+        "membership_status": membership_status,
+        "member_since": member_since,
+        "discipleship_completed": has_completed_discipleship(person),
+        "discipleship_completed_at": completed_at.isoformat() if completed_at else None,
+    }
+
+
+def _departments_payload(person):
+    memberships = (
+        DepartmentMembership.objects.filter(person=person, status=DepartmentMembership.Status.ACTIVE)
+        .select_related("department", "role")
+        .order_by("department__nome", "role__name", "id")
+    )
+    return [
+        {
+            "id": membership.id,
+            "status": membership.status,
+            "joined_at": membership.joined_at.isoformat(),
+            "department": {
+                "id": membership.department_id,
+                "name": membership.department.nome,
+                "code": membership.department.codigo,
+            },
+            "role": {
+                "id": membership.role_id,
+                "name": membership.role.name,
+                "code": membership.role.code,
+            },
+        }
+        for membership in memberships
+    ]
+
+
+def my_profile_payload(user, request):
+    person = getattr(user, "person", None)
+    if person is None:
+        return {
+            "person_linked": False,
+            "message": SELF_PROFILE_MESSAGE,
+            "account": _account_payload(user),
+            "person": None,
+            "church": None,
+            "departments": [],
+        }
+
+    person = (
+        Person.objects.select_related("membership", "church_journey")
+        .filter(pk=person.pk)
+        .first()
+    ) or person
+    return {
+        "person_linked": True,
+        "message": "",
+        "account": _account_payload(user),
+        "person": _person_payload(person, request),
+        "church": _church_payload(person),
+        "departments": _departments_payload(person),
+    }

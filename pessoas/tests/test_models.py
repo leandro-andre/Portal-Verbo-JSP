@@ -227,6 +227,15 @@ class PersonModelTests(TestCase):
 
         self.assertEqual(usuario.display_name, "Mari")
 
+    def test_person_photo_usa_pasta_da_pessoa_e_nome_estavel(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        upload_to = Person._meta.get_field("photo").upload_to
+
+        path = upload_to(person, "Minha Foto.PNG")
+
+        self.assertTrue(path.startswith(f"people/photos/{person.pk}/"))
+        self.assertTrue(path.endswith(".png"))
+
 
 class PersonUnavailabilityModelTests(TestCase):
     def setUp(self):

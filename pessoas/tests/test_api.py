@@ -60,6 +60,7 @@ class PersonApiTests(APITestCase):
                 "birth_date",
                 "email",
                 "phone",
+                "photo_url",
                 "status",
                 "portal_user",
                 "has_church_journey",

@@ -17,6 +17,7 @@ import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import DiscipleshipAttendancePage from './pages/DiscipleshipAttendancePage'
 import LoginPage from './pages/LoginPage'
 import MembershipPage from './pages/MembershipPage'
+import MyProfilePage from './pages/MyProfilePage'
 import MySchedulesPage from './pages/MySchedulesPage'
 import MyUnavailabilityPage from './pages/MyUnavailabilityPage'
 import PersonCreatePage from './pages/PersonCreatePage'
@@ -115,6 +116,7 @@ function AdminRoutes() {
         <Route path="/usuarios/:id" element={<AuthorizedRoute capability="USER_VIEW"><UserAccessPage /></AuthorizedRoute>} />
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
+        <Route path="/meu-perfil" element={<MyProfilePage />} />
         <Route path="/minhas-escalas" element={<MySchedulesPage />} />
         <Route path="/minhas-indisponibilidades" element={<MyUnavailabilityPage />} />
         <Route path="/agenda-cultos" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipSchedulePage /></AuthorizedRoute>} />

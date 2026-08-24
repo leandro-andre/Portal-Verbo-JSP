@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -19,6 +19,21 @@ function Sidebar({ isCollapsed }: SidebarProps) {
   const canViewSchedules = capabilities.includes('SCHEDULE_VIEW')
   const hasPerson = Boolean(currentUser?.user?.person_id)
   const hasAccessItems = canViewAccessRequests || canViewUsers
+  const displayName = currentUser?.user?.display_name || 'Usuario do portal'
+  const roleLabel = currentUser?.user?.roles[0]
+    ? {
+        PORTAL_ADMIN: 'Administrador do Portal',
+        SECRETARY: 'Secretaria',
+        PASTOR: 'Pastor',
+      }[currentUser.user.roles[0]]
+    : 'Acesso ao portal'
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'UP'
 
   return (
     <aside className="sidebar" aria-label="Navegacao principal">
@@ -35,7 +50,14 @@ function Sidebar({ isCollapsed }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav" aria-label="Modulos do portal">
-        {hasPerson && !isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
+        {!isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
+        <NavLink
+          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          to="/meu-perfil"
+        >
+          <UserRound size={18} aria-hidden="true" />
+          {!isCollapsed ? <span>Meu Perfil</span> : null}
+        </NavLink>
         {hasPerson ? (
           <>
             <NavLink
@@ -146,12 +168,12 @@ function Sidebar({ isCollapsed }: SidebarProps) {
 
       <div className="sidebar__user">
         <div className="sidebar__user-avatar" aria-hidden="true">
-          UP
+          {currentUser?.user?.photo_url ? <img src={currentUser.user.photo_url} alt="" /> : initials}
         </div>
         {!isCollapsed ? (
           <div className="sidebar__user-copy">
-            <strong>Usuario do portal</strong>
-            <span>Acesso administrativo</span>
+            <strong>{displayName}</strong>
+            <span>{roleLabel}</span>
           </div>
         ) : null}
       </div>

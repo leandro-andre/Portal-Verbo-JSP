@@ -65,6 +65,7 @@ export type CurrentUser = {
   is_staff: boolean
   is_superuser: boolean
   person_id: number | null
+  photo_url: string | null
   roles: RoleCode[]
   capabilities: Capability[]
 }

@@ -16,6 +16,7 @@ export type Person = {
   birth_date: string
   email: string
   phone: string
+  photo_url: string | null
   status: PersonStatus
   portal_user: PersonPortalUser | null
   has_church_journey: boolean
@@ -137,3 +138,53 @@ export type PossibleDuplicateResponse = {
 }
 
 export type ApiValidationErrors = Partial<Record<keyof CreatePersonInput, string[]>>
+
+export type MyProfileResponse = {
+  person_linked: boolean
+  message: string
+  account: {
+    id: number
+    username: string
+    display_name: string
+    email: string
+    is_active: boolean
+  }
+  person: {
+    id: number
+    full_name: string
+    preferred_name: string
+    display_name: string
+    birth_date: string
+    email: string
+    phone: string
+    status: PersonStatus
+    photo_url: string | null
+  } | null
+  church: {
+    person_status: PersonStatus
+    has_church_journey: boolean
+    membership_status: MembershipStatus | null
+    member_since: string | null
+    discipleship_completed: boolean
+    discipleship_completed_at: string | null
+  } | null
+  departments: Array<{
+    id: number
+    status: string
+    joined_at: string
+    department: {
+      id: number
+      name: string
+      code: string
+    }
+    role: {
+      id: number
+      name: string
+      code: string
+    }
+  }>
+}
+
+export type MyProfileUpdateInput = {
+  phone: string
+}
