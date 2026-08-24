@@ -1,4 +1,12 @@
-import type { MonthlySchedule, ScheduleAssignment, ScheduleCandidate, ScheduleCreateInput, ScheduleDetail, ScheduleSummary } from '../types/scheduling'
+import type {
+  MonthlySchedule,
+  ScheduleAssignment,
+  ScheduleCandidate,
+  ScheduleCreateInput,
+  ScheduleDetail,
+  ScheduleSummary,
+  ScheduleValidationResult,
+} from '../types/scheduling'
 import type { Department } from '../types/department'
 import { csrfJsonHeaders } from './http'
 
@@ -81,6 +89,14 @@ export async function createSchedule(payload: ScheduleCreateInput) {
 
 export function getSchedule(id: number) {
   return requestJson<ScheduleDetail>(`/api/scheduling/schedules/${id}/`, {}, 'Nao foi possivel carregar a escala.')
+}
+
+export function getScheduleValidation(id: number) {
+  return requestJson<ScheduleValidationResult>(
+    `/api/scheduling/schedules/${id}/validation/`,
+    {},
+    'Nao foi possivel carregar a validacao da escala.',
+  )
 }
 
 export async function runScheduleLifecycle(id: number, action: 'publish' | 'reopen' | 'cancel' | 'reactivate') {

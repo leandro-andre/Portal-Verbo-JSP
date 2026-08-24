@@ -1,4 +1,4 @@
-import type { Department, DepartmentMembership } from './department'
+import type { Department, DepartmentMembership, DepartmentRole } from './department'
 import type { WorshipService } from './worship'
 
 export type ScheduleStatus = 'DRAFT' | 'PUBLISHED' | 'CANCELLED'
@@ -28,6 +28,12 @@ export type ScheduleAssignment = {
 export type ScheduleDetail = ScheduleSummary & {
   assignments: ScheduleAssignment[]
   active_roles: DepartmentMembership['role'][]
+  validation_summary: {
+    valid: boolean
+    can_publish: boolean
+    blocking_count: number
+    warning_count: number
+  }
 }
 
 export type ScheduleCreateInput = {
@@ -54,6 +60,7 @@ export type MonthlyScheduleSummary = {
 export type MonthlyScheduleItem = {
   worship_service: ScheduleSummary['worship_service']
   schedule: ScheduleSummary | null
+  validation_status: 'OK' | 'WARNING' | 'BLOCKED' | null
 }
 
 export type MonthlySchedule = {
@@ -65,4 +72,50 @@ export type MonthlySchedule = {
   }
   summary: MonthlyScheduleSummary
   items: MonthlyScheduleItem[]
+}
+
+export type DepartmentScheduleRequirement = {
+  id: number
+  department: number
+  role: DepartmentRole
+  minimum_quantity: number
+  recommended_quantity: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type CreateDepartmentScheduleRequirementInput = {
+  role_id: number
+  minimum_quantity: number
+  recommended_quantity: number
+}
+
+export type UpdateDepartmentScheduleRequirementInput = {
+  minimum_quantity?: number
+  recommended_quantity?: number
+}
+
+export type ScheduleValidationIssue = {
+  code: string
+  message: string
+  role_id?: number
+  assignment_id?: number
+}
+
+export type ScheduleRequirementValidation = {
+  role: Pick<DepartmentRole, 'id' | 'name' | 'code'>
+  minimum_quantity: number
+  recommended_quantity: number
+  assigned_quantity: number
+  minimum_met: boolean
+  recommended_met: boolean
+}
+
+export type ScheduleValidationResult = {
+  valid: boolean
+  can_publish: boolean
+  blocking_issues: ScheduleValidationIssue[]
+  warnings: ScheduleValidationIssue[]
+  requirements: ScheduleRequirementValidation[]
 }

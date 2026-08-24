@@ -4,8 +4,8 @@ from django.utils import timezone
 from departamentos.selectors import is_department_membership_operationally_eligible
 from worship.models import WorshipService
 
-from .models import Schedule, ScheduleAssignment
-from .selectors import get_assignment_eligibility
+from .models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
+from .selectors import get_assignment_eligibility, get_schedule_composition_validation
 
 
 SCHEDULE_ALREADY_EXISTS = "SCHEDULE_ALREADY_EXISTS"
@@ -20,14 +20,105 @@ PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE = "PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE
 PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE = "PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE"
 PERSON_SCHEDULE_TIME_CONFLICT = "PERSON_SCHEDULE_TIME_CONFLICT"
 SCHEDULE_HAS_NO_ASSIGNMENTS = "SCHEDULE_HAS_NO_ASSIGNMENTS"
+SCHEDULE_REQUIREMENT_ALREADY_EXISTS = "SCHEDULE_REQUIREMENT_ALREADY_EXISTS"
+SCHEDULE_REQUIREMENT_ROLE_MISMATCH = "SCHEDULE_REQUIREMENT_ROLE_MISMATCH"
+SCHEDULE_REQUIREMENT_ROLE_INACTIVE = "SCHEDULE_REQUIREMENT_ROLE_INACTIVE"
+INVALID_SCHEDULE_REQUIREMENT_QUANTITIES = "INVALID_SCHEDULE_REQUIREMENT_QUANTITIES"
+INVALID_SCHEDULE_REQUIREMENT_TRANSITION = "INVALID_SCHEDULE_REQUIREMENT_TRANSITION"
+SCHEDULE_VALIDATION_FAILED = "SCHEDULE_VALIDATION_FAILED"
 
 
 class SchedulingError(Exception):
-    def __init__(self, code, message, reasons=None):
+    def __init__(self, code, message, reasons=None, details=None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.reasons = reasons or []
+        self.details = details or {}
+
+
+def validate_requirement_values(*, department, role, minimum_quantity, recommended_quantity, require_operational=True):
+    if role.department_id != department.id:
+        raise SchedulingError(
+            SCHEDULE_REQUIREMENT_ROLE_MISMATCH,
+            "O cargo informado nao pertence ao departamento.",
+        )
+    if minimum_quantity < 0 or recommended_quantity < 0 or recommended_quantity < minimum_quantity:
+        raise SchedulingError(
+            INVALID_SCHEDULE_REQUIREMENT_QUANTITIES,
+            "A quantidade recomendada deve ser maior ou igual a minima, e ambas devem ser zero ou maiores.",
+        )
+    if require_operational:
+        if not department.ativo:
+            raise SchedulingError(DEPARTMENT_NOT_ACTIVE, "O departamento precisa estar ativo.")
+        if not role.active:
+            raise SchedulingError(SCHEDULE_REQUIREMENT_ROLE_INACTIVE, "O cargo precisa estar ativo.")
+
+
+def create_schedule_requirement(*, department, role, minimum_quantity=0, recommended_quantity=0):
+    validate_requirement_values(
+        department=department,
+        role=role,
+        minimum_quantity=minimum_quantity,
+        recommended_quantity=recommended_quantity,
+    )
+    if DepartmentScheduleRequirement.objects.filter(department=department, role=role).exists():
+        raise SchedulingError(
+            SCHEDULE_REQUIREMENT_ALREADY_EXISTS,
+            "Ja existe configuracao de escala para este cargo.",
+        )
+    try:
+        return DepartmentScheduleRequirement.objects.create(
+            department=department,
+            role=role,
+            minimum_quantity=minimum_quantity,
+            recommended_quantity=recommended_quantity,
+            active=True,
+        )
+    except IntegrityError as exc:
+        raise SchedulingError(
+            SCHEDULE_REQUIREMENT_ALREADY_EXISTS,
+            "Ja existe configuracao de escala para este cargo.",
+        ) from exc
+
+
+def update_schedule_requirement(requirement, *, minimum_quantity=None, recommended_quantity=None):
+    next_minimum = requirement.minimum_quantity if minimum_quantity is None else minimum_quantity
+    next_recommended = requirement.recommended_quantity if recommended_quantity is None else recommended_quantity
+    validate_requirement_values(
+        department=requirement.department,
+        role=requirement.role,
+        minimum_quantity=next_minimum,
+        recommended_quantity=next_recommended,
+        require_operational=True,
+    )
+    requirement.minimum_quantity = next_minimum
+    requirement.recommended_quantity = next_recommended
+    requirement.save(update_fields=["minimum_quantity", "recommended_quantity", "updated_at"])
+    return requirement
+
+
+def deactivate_schedule_requirement(requirement):
+    if not requirement.active:
+        raise SchedulingError(INVALID_SCHEDULE_REQUIREMENT_TRANSITION, "Esta configuracao ja esta inativa.")
+    requirement.active = False
+    requirement.save(update_fields=["active", "updated_at"])
+    return requirement
+
+
+def reactivate_schedule_requirement(requirement):
+    if requirement.active:
+        raise SchedulingError(INVALID_SCHEDULE_REQUIREMENT_TRANSITION, "Esta configuracao ja esta ativa.")
+    validate_requirement_values(
+        department=requirement.department,
+        role=requirement.role,
+        minimum_quantity=requirement.minimum_quantity,
+        recommended_quantity=requirement.recommended_quantity,
+        require_operational=True,
+    )
+    requirement.active = True
+    requirement.save(update_fields=["active", "updated_at"])
+    return requirement
 
 
 def ensure_schedule_operational(schedule):
@@ -71,8 +162,13 @@ def publish_schedule(schedule):
         raise SchedulingError(INVALID_SCHEDULE_TRANSITION, "Escala cancelada precisa voltar para rascunho antes de publicar.")
     if schedule.status == Schedule.Status.PUBLISHED:
         raise SchedulingError(INVALID_SCHEDULE_TRANSITION, "Esta escala ja esta publicada.")
-    if not schedule.assignments.exists():
-        raise SchedulingError(SCHEDULE_HAS_NO_ASSIGNMENTS, "Nao e permitido publicar escala sem pessoas.")
+    validation = get_schedule_composition_validation(schedule)
+    if not validation.can_publish:
+        raise SchedulingError(
+            SCHEDULE_VALIDATION_FAILED,
+            "A escala possui pendencias obrigatorias.",
+            details=validation.as_dict(),
+        )
     schedule.status = Schedule.Status.PUBLISHED
     schedule.save(update_fields=["status", "updated_at"])
     return schedule

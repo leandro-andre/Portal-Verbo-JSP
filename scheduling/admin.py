@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Schedule, ScheduleAssignment
+from .models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
 
 
 class ScheduleAssignmentInline(admin.TabularInline):
@@ -19,3 +19,9 @@ class ScheduleAdmin(admin.ModelAdmin):
 class ScheduleAssignmentAdmin(admin.ModelAdmin):
     list_display = ("schedule", "department_membership", "created_by", "created_at")
     list_filter = ("schedule__status", "schedule__department")
+
+
+@admin.register(DepartmentScheduleRequirement)
+class DepartmentScheduleRequirementAdmin(admin.ModelAdmin):
+    list_display = ("department", "role", "minimum_quantity", "recommended_quantity", "active")
+    list_filter = ("active", "department")

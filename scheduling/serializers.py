@@ -6,8 +6,8 @@ from departamentos.serializers import DepartmentRoleSerializer
 from pessoas.models import Person
 from worship.models import WorshipService
 
-from .models import Schedule, ScheduleAssignment
-from .selectors import get_active_schedule_roles, get_assignment_candidates, get_schedule_assignments
+from .models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
+from .selectors import get_active_schedule_roles, get_assignment_candidates, get_schedule_assignments, get_schedule_composition_validation
 
 
 class ScheduleDepartmentSerializer(serializers.ModelSerializer):
@@ -90,15 +90,25 @@ class ScheduleSerializer(serializers.ModelSerializer):
 class ScheduleDetailSerializer(ScheduleSerializer):
     assignments = serializers.SerializerMethodField()
     active_roles = serializers.SerializerMethodField()
+    validation_summary = serializers.SerializerMethodField()
 
     class Meta(ScheduleSerializer.Meta):
-        fields = ScheduleSerializer.Meta.fields + ["assignments", "active_roles"]
+        fields = ScheduleSerializer.Meta.fields + ["assignments", "active_roles", "validation_summary"]
 
     def get_assignments(self, obj):
         return ScheduleAssignmentSerializer(get_schedule_assignments(obj), many=True).data
 
     def get_active_roles(self, obj):
         return DepartmentRoleSerializer(get_active_schedule_roles(obj), many=True).data
+
+    def get_validation_summary(self, obj):
+        validation = get_schedule_composition_validation(obj)
+        return {
+            "valid": validation.valid,
+            "can_publish": validation.can_publish,
+            "blocking_count": len(validation.blocking_issues),
+            "warning_count": len(validation.warnings),
+        }
 
 
 class ScheduleCreateSerializer(serializers.Serializer):
@@ -126,6 +136,39 @@ def serialize_assignment_candidates(schedule):
     return ScheduleCandidateSerializer(get_assignment_candidates(schedule), many=True).data
 
 
+class DepartmentScheduleRequirementSerializer(serializers.ModelSerializer):
+    role = DepartmentRoleSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentScheduleRequirement
+        fields = [
+            "id",
+            "department",
+            "role",
+            "minimum_quantity",
+            "recommended_quantity",
+            "active",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class DepartmentScheduleRequirementCreateSerializer(serializers.Serializer):
+    role_id = serializers.PrimaryKeyRelatedField(queryset=DepartmentRole.objects.all(), source="role")
+    minimum_quantity = serializers.IntegerField(min_value=0, default=0)
+    recommended_quantity = serializers.IntegerField(min_value=0, default=0)
+
+
+class DepartmentScheduleRequirementUpdateSerializer(serializers.Serializer):
+    minimum_quantity = serializers.IntegerField(min_value=0, required=False)
+    recommended_quantity = serializers.IntegerField(min_value=0, required=False)
+
+
+class ScheduleValidationSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        return instance.as_dict()
+
+
 class MonthlyScheduleItemSerializer(serializers.Serializer):
     def to_representation(self, instance):
         request = self.context.get("request")
@@ -134,6 +177,7 @@ class MonthlyScheduleItemSerializer(serializers.Serializer):
             "schedule": ScheduleSerializer(instance["schedule"], context={"request": request}).data
             if instance["schedule"] is not None
             else None,
+            "validation_status": instance.get("validation_status"),
         }
 
 

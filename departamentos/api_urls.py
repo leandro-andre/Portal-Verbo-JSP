@@ -32,6 +32,26 @@ urlpatterns = [
         name="department-membership-list",
     ),
     path(
+        "departments/<int:department_id>/schedule-requirements/",
+        api_views.DepartmentScheduleRequirementListCreateView.as_view(),
+        name="department-schedule-requirement-list",
+    ),
+    path(
+        "departments/<int:department_id>/schedule-requirements/<int:requirement_id>/",
+        api_views.DepartmentScheduleRequirementDetailView.as_view(),
+        name="department-schedule-requirement-detail",
+    ),
+    path(
+        "departments/<int:department_id>/schedule-requirements/<int:requirement_id>/deactivate/",
+        api_views.DepartmentScheduleRequirementDeactivateView.as_view(),
+        name="department-schedule-requirement-deactivate",
+    ),
+    path(
+        "departments/<int:department_id>/schedule-requirements/<int:requirement_id>/reactivate/",
+        api_views.DepartmentScheduleRequirementReactivateView.as_view(),
+        name="department-schedule-requirement-reactivate",
+    ),
+    path(
         "departments/<int:department_id>/eligible-people/",
         api_views.DepartmentEligiblePeopleView.as_view(),
         name="department-eligible-people",

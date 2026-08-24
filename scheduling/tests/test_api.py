@@ -8,7 +8,7 @@ from django.utils import timezone
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
 from pessoas.models import Person, PersonUnavailability
-from scheduling.models import Schedule
+from scheduling.models import DepartmentScheduleRequirement, Schedule
 from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
 from worship.models import WorshipService
 
@@ -301,3 +301,133 @@ class SchedulingApiTests(TestCase):
         )
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 201)
+
+    def test_requirement_api_crud_lifecycle_delete_405_and_validation_endpoint(self):
+        self.login(self.admin)
+        create_response = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.role.pk, "minimum_quantity": 1, "recommended_quantity": 2},
+            content_type="application/json",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        requirement_id = create_response.json()["id"]
+
+        list_response = self.client.get(f"/api/departments/{self.department.pk}/schedule-requirements/")
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.json()[0]["role"]["id"], self.role.pk)
+
+        patch_response = self.client.patch(
+            f"/api/departments/{self.department.pk}/schedule-requirements/{requirement_id}/",
+            {"minimum_quantity": 1, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(patch_response.json()["recommended_quantity"], 1)
+        self.assertEqual(
+            self.client.delete(f"/api/departments/{self.department.pk}/schedule-requirements/{requirement_id}/").status_code,
+            405,
+        )
+        self.assertEqual(
+            self.client.post(f"/api/departments/{self.department.pk}/schedule-requirements/{requirement_id}/deactivate/").status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(f"/api/departments/{self.department.pk}/schedule-requirements/{requirement_id}/reactivate/").status_code,
+            200,
+        )
+
+        schedule = self.create_schedule_via_api()
+        validation = self.client.get(f"/api/scheduling/schedules/{schedule['id']}/validation/")
+        self.assertEqual(validation.status_code, 200)
+        self.assertFalse(validation.json()["can_publish"])
+
+    def test_requirement_api_rejects_invalid_payloads_and_permissions(self):
+        self.login(self.admin)
+        mismatch = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.other_manager_role.pk, "minimum_quantity": 1, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(mismatch.status_code, 409)
+        self.assertEqual(mismatch.json()["code"], "SCHEDULE_REQUIREMENT_ROLE_MISMATCH")
+
+        invalid_quantities = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.role.pk, "minimum_quantity": 2, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(invalid_quantities.status_code, 409)
+        self.assertEqual(invalid_quantities.json()["code"], "INVALID_SCHEDULE_REQUIREMENT_QUANTITIES")
+
+        self.role.active = False
+        self.role.save(update_fields=["active"])
+        inactive_role = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.role.pk, "minimum_quantity": 0, "recommended_quantity": 0},
+            content_type="application/json",
+        )
+        self.assertEqual(inactive_role.status_code, 409)
+        self.assertEqual(inactive_role.json()["code"], "SCHEDULE_REQUIREMENT_ROLE_INACTIVE")
+        self.role.active = True
+        self.role.save(update_fields=["active"])
+
+        self.login(self.pastor)
+        self.assertEqual(self.client.get(f"/api/departments/{self.department.pk}/schedule-requirements/").status_code, 200)
+        forbidden = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.role.pk, "minimum_quantity": 0, "recommended_quantity": 0},
+            content_type="application/json",
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+    def test_requirement_contextual_manager_only_own_department_and_loses_when_inactive(self):
+        self.login(self.leader_user)
+        response = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.role.pk, "minimum_quantity": 1, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        other_response = self.client.post(
+            f"/api/departments/{self.other_department.pk}/schedule-requirements/",
+            {"role_id": self.other_manager_role.pk, "minimum_quantity": 1, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(other_response.status_code, 403)
+
+        leader_membership = DepartmentMembership.objects.get(person=self.leader_person, department=self.department)
+        leader_membership.status = DepartmentMembership.Status.INACTIVE
+        leader_membership.save(update_fields=["status"])
+        blocked = self.client.post(
+            f"/api/departments/{self.department.pk}/schedule-requirements/",
+            {"role_id": self.manager_role.pk, "minimum_quantity": 1, "recommended_quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(blocked.status_code, 403)
+
+    def test_publish_blocked_by_minimum_and_allowed_with_warning(self):
+        DepartmentScheduleRequirement.objects.create(
+            department=self.department,
+            role=self.role,
+            minimum_quantity=1,
+            recommended_quantity=2,
+        )
+        self.login(self.admin)
+        schedule = self.create_schedule_via_api()
+
+        blocked = self.client.post(f"/api/scheduling/schedules/{schedule['id']}/publish/")
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.json()["code"], "SCHEDULE_VALIDATION_FAILED")
+        self.assertFalse(blocked.json()["can_publish"])
+        self.assertGreater(len(blocked.json()["blocking_issues"]), 0)
+
+        self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": self.department_membership.pk},
+            content_type="application/json",
+        )
+        warning_validation = self.client.get(f"/api/scheduling/schedules/{schedule['id']}/validation/")
+        self.assertEqual(warning_validation.status_code, 200)
+        self.assertTrue(warning_validation.json()["can_publish"])
+        self.assertEqual(len(warning_validation.json()["warnings"]), 1)
+        self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/publish/").status_code, 200)

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import F, Q
 
 
 class Schedule(models.Model):
@@ -89,3 +90,49 @@ class ScheduleAssignment(models.Model):
 
     def __str__(self):
         return f"{self.department_membership} em {self.schedule}"
+
+
+class DepartmentScheduleRequirement(models.Model):
+    department = models.ForeignKey(
+        "departamentos.Departamento",
+        verbose_name="Departamento",
+        on_delete=models.PROTECT,
+        related_name="schedule_requirements",
+    )
+    role = models.ForeignKey(
+        "departamentos.DepartmentRole",
+        verbose_name="Cargo",
+        on_delete=models.PROTECT,
+        related_name="schedule_requirements",
+    )
+    minimum_quantity = models.PositiveIntegerField("Quantidade minima", default=0)
+    recommended_quantity = models.PositiveIntegerField("Quantidade recomendada", default=0)
+    active = models.BooleanField("Ativo", default=True)
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["department__nome", "role__name", "id"]
+        verbose_name = "Requisito de composicao de escala"
+        verbose_name_plural = "Requisitos de composicao de escala"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["department", "role"],
+                name="uniq_schedule_requirement_department_role",
+            ),
+            models.CheckConstraint(
+                condition=Q(minimum_quantity__gte=0),
+                name="schedule_requirement_minimum_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(recommended_quantity__gte=0),
+                name="schedule_requirement_recommended_non_negative",
+            ),
+            models.CheckConstraint(
+                condition=Q(recommended_quantity__gte=F("minimum_quantity")),
+                name="schedule_requirement_recommended_gte_minimum",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.department} - {self.role}"

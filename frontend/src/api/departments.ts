@@ -11,6 +11,11 @@ import type {
   UpdateDepartmentMembershipInput,
   UpdateDepartmentRoleInput,
 } from '../types/department'
+import type {
+  CreateDepartmentScheduleRequirementInput,
+  DepartmentScheduleRequirement,
+  UpdateDepartmentScheduleRequirementInput,
+} from '../types/scheduling'
 import { csrfJsonHeaders } from './http'
 
 export class DepartmentApiValidationError extends Error {
@@ -273,6 +278,95 @@ export function deactivateDepartmentRole(departmentId: number, roleId: number) {
 
 export function reactivateDepartmentRole(departmentId: number, roleId: number) {
   return runDepartmentRoleLifecycle(departmentId, roleId, 'reactivate')
+}
+
+export async function getDepartmentScheduleRequirements(departmentId: number): Promise<DepartmentScheduleRequirement[]> {
+  const response = await fetch(`/api/departments/${departmentId}/schedule-requirements/`, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new DepartmentHttpError(response.status, 'Nao foi possivel carregar a configuracao de escala.')
+  }
+
+  return response.json() as Promise<DepartmentScheduleRequirement[]>
+}
+
+export async function createDepartmentScheduleRequirement(
+  departmentId: number,
+  payload: CreateDepartmentScheduleRequirementInput,
+): Promise<DepartmentScheduleRequirement> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/schedule-requirements/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentScheduleRequirement
+}
+
+export async function updateDepartmentScheduleRequirement(
+  departmentId: number,
+  requirementId: number,
+  payload: UpdateDepartmentScheduleRequirementInput,
+): Promise<DepartmentScheduleRequirement> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/schedule-requirements/${requirementId}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+
+  if (response.status === 400) {
+    throw new DepartmentApiValidationError(parseValidationErrors(data))
+  }
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentScheduleRequirement
+}
+
+async function runDepartmentScheduleRequirementLifecycle(
+  departmentId: number,
+  requirementId: number,
+  action: 'deactivate' | 'reactivate',
+) {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/departments/${departmentId}/schedule-requirements/${requirementId}/${action}/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  const data = await parseResponse(response)
+
+  if (!response.ok) {
+    throwBusinessError(data)
+  }
+
+  return data as DepartmentScheduleRequirement
+}
+
+export function deactivateDepartmentScheduleRequirement(departmentId: number, requirementId: number) {
+  return runDepartmentScheduleRequirementLifecycle(departmentId, requirementId, 'deactivate')
+}
+
+export function reactivateDepartmentScheduleRequirement(departmentId: number, requirementId: number) {
+  return runDepartmentScheduleRequirementLifecycle(departmentId, requirementId, 'reactivate')
 }
 
 export async function getDepartmentMemberships(departmentId: number): Promise<DepartmentMembership[]> {

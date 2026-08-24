@@ -8,19 +8,25 @@ from departamentos.selectors import get_department_membership_eligibility
 from pessoas.availability import is_person_available
 from worship.models import WorshipService
 
-from .models import Schedule, ScheduleAssignment
+from .models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
 
 
 DEPARTMENT_MEMBERSHIP_WRONG_DEPARTMENT = "DEPARTMENT_MEMBERSHIP_WRONG_DEPARTMENT"
 PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE = "PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE"
 PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE = "PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE"
 PERSON_SCHEDULE_TIME_CONFLICT = "PERSON_SCHEDULE_TIME_CONFLICT"
+SCHEDULE_HAS_NO_ASSIGNMENTS = "SCHEDULE_HAS_NO_ASSIGNMENTS"
+SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET = "SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET"
+SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET = "SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET"
 
 REASON_MESSAGES = {
     DEPARTMENT_MEMBERSHIP_WRONG_DEPARTMENT: "O vinculo nao pertence ao departamento desta escala.",
     PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE: "Pessoa indisponivel para este culto.",
     PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE: "Pessoa ja escalada para este culto.",
     PERSON_SCHEDULE_TIME_CONFLICT: "Pessoa ja escalada em outro culto no mesmo horario.",
+    SCHEDULE_HAS_NO_ASSIGNMENTS: "Nao e permitido publicar escala sem pessoas.",
+    SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET: "Minimo obrigatorio do cargo nao atendido.",
+    SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET: "Quantidade recomendada do cargo nao atingida.",
 }
 
 
@@ -42,6 +48,64 @@ class ScheduleAssignmentEligibilityResult:
         return {
             "eligible": self.eligible,
             "reasons": [reason.as_dict() for reason in self.reasons],
+        }
+
+
+@dataclass(frozen=True)
+class ScheduleValidationIssue:
+    code: str
+    message: str
+    role_id: int | None = None
+    assignment_id: int | None = None
+
+    def as_dict(self):
+        payload = {"code": self.code, "message": self.message}
+        if self.role_id is not None:
+            payload["role_id"] = self.role_id
+        if self.assignment_id is not None:
+            payload["assignment_id"] = self.assignment_id
+        return payload
+
+
+@dataclass(frozen=True)
+class ScheduleRequirementValidation:
+    role: DepartmentRole
+    minimum_quantity: int
+    recommended_quantity: int
+    assigned_quantity: int
+    minimum_met: bool
+    recommended_met: bool
+
+    def as_dict(self):
+        return {
+            "role": {"id": self.role_id, "name": self.role.name, "code": self.role.code},
+            "minimum_quantity": self.minimum_quantity,
+            "recommended_quantity": self.recommended_quantity,
+            "assigned_quantity": self.assigned_quantity,
+            "minimum_met": self.minimum_met,
+            "recommended_met": self.recommended_met,
+        }
+
+    @property
+    def role_id(self):
+        return self.role.id
+
+
+@dataclass(frozen=True)
+class ScheduleValidationResult:
+    valid: bool
+    can_publish: bool
+    blocking_issues: tuple[ScheduleValidationIssue, ...]
+    warnings: tuple[ScheduleValidationIssue, ...]
+    requirements: tuple[ScheduleRequirementValidation, ...]
+
+    def as_dict(self):
+        return {
+            "valid": self.valid,
+            "can_publish": self.can_publish,
+            "blocking_issues": [issue.as_dict() for issue in self.blocking_issues],
+            "warnings": [issue.as_dict() for issue in self.warnings],
+            "requirements": [requirement.as_dict() for requirement in self.requirements],
         }
 
 
@@ -146,6 +210,93 @@ def get_assignment_candidates(schedule):
     ]
 
 
+def get_department_schedule_requirements(department, *, include_inactive=True):
+    queryset = (
+        DepartmentScheduleRequirement.objects.filter(department=department)
+        .select_related("department", "role")
+        .order_by("role__name", "id")
+    )
+    if not include_inactive:
+        queryset = queryset.filter(active=True, role__active=True)
+    return queryset
+
+
+def get_schedule_composition_validation(schedule):
+    schedule = (
+        Schedule.objects.select_related("department", "worship_service")
+        .prefetch_related("assignments__department_membership__person", "assignments__department_membership__role")
+        .get(pk=schedule.pk)
+    )
+    assignments = list(get_schedule_assignments(schedule))
+    valid_assignment_counts = {}
+    blocking_issues = []
+    warnings = []
+
+    if not assignments:
+        blocking_issues.append(ScheduleValidationIssue(SCHEDULE_HAS_NO_ASSIGNMENTS, REASON_MESSAGES[SCHEDULE_HAS_NO_ASSIGNMENTS]))
+
+    if not schedule.department.ativo:
+        blocking_issues.append(ScheduleValidationIssue("DEPARTMENT_NOT_ACTIVE", "O departamento desta escala esta inativo."))
+
+    if schedule.worship_service.status != WorshipService.Status.SCHEDULED:
+        blocking_issues.append(ScheduleValidationIssue("WORSHIP_SERVICE_NOT_SCHEDULED", "O culto desta escala esta cancelado."))
+
+    for assignment in assignments:
+        eligibility = get_assignment_eligibility(schedule, assignment.department_membership)
+        if eligibility.eligible:
+            role_id = assignment.department_membership.role_id
+            valid_assignment_counts[role_id] = valid_assignment_counts.get(role_id, 0) + 1
+            continue
+        for reason in eligibility.reasons:
+            blocking_issues.append(
+                ScheduleValidationIssue(
+                    code=reason.code,
+                    message=f"{assignment.department_membership.person.display_name}: {reason.message}",
+                    role_id=assignment.department_membership.role_id,
+                    assignment_id=assignment.id,
+                )
+            )
+
+    requirements = []
+    for requirement in get_department_schedule_requirements(schedule.department, include_inactive=False):
+        assigned_quantity = valid_assignment_counts.get(requirement.role_id, 0)
+        minimum_met = assigned_quantity >= requirement.minimum_quantity
+        recommended_met = assigned_quantity >= requirement.recommended_quantity
+        requirement_validation = ScheduleRequirementValidation(
+            role=requirement.role,
+            minimum_quantity=requirement.minimum_quantity,
+            recommended_quantity=requirement.recommended_quantity,
+            assigned_quantity=assigned_quantity,
+            minimum_met=minimum_met,
+            recommended_met=recommended_met,
+        )
+        requirements.append(requirement_validation)
+        if not minimum_met:
+            blocking_issues.append(
+                ScheduleValidationIssue(
+                    code=SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET,
+                    message=f"{requirement.role.name}: minimo de {requirement.minimum_quantity} nao atendido.",
+                    role_id=requirement.role_id,
+                )
+            )
+        elif not recommended_met:
+            warnings.append(
+                ScheduleValidationIssue(
+                    code=SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET,
+                    message=f"{requirement.role.name}: {assigned_quantity} de {requirement.recommended_quantity} recomendados.",
+                    role_id=requirement.role_id,
+                )
+            )
+
+    return ScheduleValidationResult(
+        valid=not blocking_issues and not warnings,
+        can_publish=not blocking_issues,
+        blocking_issues=tuple(blocking_issues),
+        warnings=tuple(warnings),
+        requirements=tuple(requirements),
+    )
+
+
 def get_schedule_departments_for_user(user):
     if not getattr(user, "is_authenticated", False) or not user.is_active:
         return Departamento.objects.none()
@@ -205,7 +356,11 @@ def get_department_monthly_schedule(*, department, year, month, user):
                 summary["draft"] += 1
         if schedule is not None and schedule.status == Schedule.Status.CANCELLED:
             summary["cancelled_schedules"] += 1
-        items.append({"worship_service": service, "schedule": schedule})
+        validation_status = None
+        if schedule is not None:
+            validation = get_schedule_composition_validation(schedule)
+            validation_status = "BLOCKED" if validation.blocking_issues else "WARNING" if validation.warnings else "OK"
+        items.append({"worship_service": service, "schedule": schedule, "validation_status": validation_status})
 
     return {
         "year": year,

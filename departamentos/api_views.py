@@ -12,6 +12,7 @@ from .selectors import (
     can_manage_department,
     can_manage_department_members,
     can_manage_department_roles,
+    can_manage_department_schedules,
     can_view_department,
     get_department_entry_eligibility,
 )
@@ -39,6 +40,19 @@ from .services import (
     reactivate_department_role,
     update_department_membership_role,
     update_department_role,
+)
+from scheduling.models import DepartmentScheduleRequirement
+from scheduling.serializers import (
+    DepartmentScheduleRequirementCreateSerializer,
+    DepartmentScheduleRequirementSerializer,
+    DepartmentScheduleRequirementUpdateSerializer,
+)
+from scheduling.services import (
+    SchedulingError,
+    create_schedule_requirement,
+    deactivate_schedule_requirement,
+    reactivate_schedule_requirement,
+    update_schedule_requirement,
 )
 
 
@@ -69,10 +83,10 @@ class IsActiveAuthenticated(BasePermission):
 
 
 def business_error_response(exc):
-    return Response(
-        {"code": exc.code, "message": exc.message},
-        status=status.HTTP_409_CONFLICT,
-    )
+    payload = {"code": exc.code, "message": exc.message}
+    if getattr(exc, "details", None):
+        payload.update(exc.details)
+    return Response(payload, status=status.HTTP_409_CONFLICT)
 
 
 def ensure_or_403(condition):
@@ -82,6 +96,18 @@ def ensure_or_403(condition):
 
 def can_manage_with_global_or_context(user, department, permission, context_checker):
     return bool(user.has_perm(permission) or context_checker(user, department))
+
+
+def can_view_schedule_requirements(user, department):
+    return bool(
+        user.has_perm("scheduling.view_schedule")
+        or user.has_perm("departamentos.view_departamento")
+        or can_manage_department_schedules(user, department)
+    )
+
+
+def can_manage_schedule_requirements(user, department):
+    return bool(user.has_perm("scheduling.add_schedule") or can_manage_department_schedules(user, department))
 
 
 class DepartmentListCreateView(APIView):
@@ -265,6 +291,96 @@ class DepartmentRoleReactivateView(APIView):
         except DepartmentError as exc:
             return business_error_response(exc)
         return Response(DepartmentRoleSerializer(role).data)
+
+
+class DepartmentScheduleRequirementListCreateView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def get_department(self, department_id):
+        return get_object_or_404(Departamento, pk=department_id)
+
+    def get(self, request, department_id):
+        department = self.get_department(department_id)
+        ensure_or_403(can_view_schedule_requirements(request.user, department))
+        requirements = (
+            DepartmentScheduleRequirement.objects.filter(department=department)
+            .select_related("department", "role")
+            .order_by("role__name", "id")
+        )
+        return Response(DepartmentScheduleRequirementSerializer(requirements, many=True).data)
+
+    def post(self, request, department_id):
+        department = self.get_department(department_id)
+        ensure_or_403(can_manage_schedule_requirements(request.user, department))
+        serializer = DepartmentScheduleRequirementCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            requirement = create_schedule_requirement(
+                department=department,
+                role=serializer.validated_data["role"],
+                minimum_quantity=serializer.validated_data["minimum_quantity"],
+                recommended_quantity=serializer.validated_data["recommended_quantity"],
+            )
+        except SchedulingError as exc:
+            return business_error_response(exc)
+        return Response(DepartmentScheduleRequirementSerializer(requirement).data, status=status.HTTP_201_CREATED)
+
+
+class DepartmentScheduleRequirementDetailView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def get_objects(self, department_id, requirement_id):
+        department = get_object_or_404(Departamento, pk=department_id)
+        requirement = get_object_or_404(
+            DepartmentScheduleRequirement.objects.select_related("department", "role"),
+            pk=requirement_id,
+            department=department,
+        )
+        return department, requirement
+
+    def get(self, request, department_id, requirement_id):
+        department, requirement = self.get_objects(department_id, requirement_id)
+        ensure_or_403(can_view_schedule_requirements(request.user, department))
+        return Response(DepartmentScheduleRequirementSerializer(requirement).data)
+
+    def patch(self, request, department_id, requirement_id):
+        department, requirement = self.get_objects(department_id, requirement_id)
+        ensure_or_403(can_manage_schedule_requirements(request.user, department))
+        serializer = DepartmentScheduleRequirementUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            requirement = update_schedule_requirement(requirement, **serializer.validated_data)
+        except SchedulingError as exc:
+            return business_error_response(exc)
+        return Response(DepartmentScheduleRequirementSerializer(requirement).data)
+
+
+class DepartmentScheduleRequirementDeactivateView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def post(self, request, department_id, requirement_id):
+        department = get_object_or_404(Departamento, pk=department_id)
+        requirement = get_object_or_404(DepartmentScheduleRequirement, pk=requirement_id, department=department)
+        ensure_or_403(can_manage_schedule_requirements(request.user, department))
+        try:
+            requirement = deactivate_schedule_requirement(requirement)
+        except SchedulingError as exc:
+            return business_error_response(exc)
+        return Response(DepartmentScheduleRequirementSerializer(requirement).data)
+
+
+class DepartmentScheduleRequirementReactivateView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def post(self, request, department_id, requirement_id):
+        department = get_object_or_404(Departamento, pk=department_id)
+        requirement = get_object_or_404(DepartmentScheduleRequirement, pk=requirement_id, department=department)
+        ensure_or_403(can_manage_schedule_requirements(request.user, department))
+        try:
+            requirement = reactivate_schedule_requirement(requirement)
+        except SchedulingError as exc:
+            return business_error_response(exc)
+        return Response(DepartmentScheduleRequirementSerializer(requirement).data)
 
 
 class DepartmentMembershipListCreateView(APIView):

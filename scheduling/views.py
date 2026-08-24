@@ -15,9 +15,10 @@ from .serializers import (
     ScheduleCreateSerializer,
     ScheduleDetailSerializer,
     ScheduleSerializer,
+    ScheduleValidationSerializer,
     serialize_assignment_candidates,
 )
-from .selectors import get_department_monthly_schedule, get_schedule_departments_for_user
+from .selectors import get_department_monthly_schedule, get_schedule_composition_validation, get_schedule_departments_for_user
 from .services import (
     SchedulingError,
     cancel_schedule,
@@ -72,6 +73,8 @@ def business_error_response(error):
     payload = {"code": error.code, "message": error.message}
     if error.reasons:
         payload["reasons"] = error.reasons
+    if error.details:
+        payload.update(error.details)
     return Response(payload, status=status.HTTP_409_CONFLICT)
 
 
@@ -168,6 +171,15 @@ class ScheduleDetailView(APIView):
         if not can_view_schedules(request.user) and not can_manage_schedule(request.user, schedule.department):
             raise PermissionDenied("Sem permissao para visualizar escala.")
         return Response(ScheduleDetailSerializer(schedule, context={"request": request}).data)
+
+
+class ScheduleValidationView(APIView):
+    def get(self, request, pk):
+        ensure_authenticated(request.user)
+        schedule = get_schedule_or_404(pk)
+        if not can_view_schedules(request.user) and not can_manage_schedule(request.user, schedule.department):
+            raise PermissionDenied("Sem permissao para visualizar validacao da escala.")
+        return Response(ScheduleValidationSerializer(get_schedule_composition_validation(schedule)).data)
 
 
 class ScheduleLifecycleView(APIView):

@@ -5,6 +5,7 @@ import {
   deleteScheduleAssignment,
   getSchedule,
   getScheduleCandidates,
+  getScheduleValidation,
   getMonthlySchedule,
   getSchedulingDepartments,
   getSchedules,
@@ -28,6 +29,10 @@ export function scheduleQueryKey(id: number) {
 
 export function scheduleCandidatesQueryKey(id: number) {
   return ['scheduling', 'schedule', id, 'candidates'] as const
+}
+
+export function scheduleValidationQueryKey(id: number) {
+  return ['scheduling', 'schedule', id, 'validation'] as const
 }
 
 export function useSchedules(year: number, month: number, departmentId: string, status: string) {
@@ -79,11 +84,20 @@ export function useScheduleCandidates(id: number, roleId?: number, enabled = tru
   })
 }
 
+export function useScheduleValidation(id: number, enabled = true) {
+  return useQuery({
+    queryKey: scheduleValidationQueryKey(id),
+    queryFn: () => getScheduleValidation(id),
+    enabled: enabled && Number.isFinite(id),
+  })
+}
+
 export function useScheduleMutations(id: number) {
   const queryClient = useQueryClient()
   const onSuccess = async () => {
     await queryClient.invalidateQueries({ queryKey: scheduleQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: scheduleCandidatesQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: scheduleValidationQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: ['scheduling', 'schedules'] })
     await queryClient.invalidateQueries({ queryKey: ['scheduling', 'monthly'] })
   }

@@ -3,20 +3,25 @@ import {
   createDepartment,
   createDepartmentMembership,
   createDepartmentRole,
+  createDepartmentScheduleRequirement,
   deactivateDepartment,
   deactivateDepartmentMembership,
   deactivateDepartmentRole,
+  deactivateDepartmentScheduleRequirement,
   getDepartment,
   getDepartmentEligiblePeople,
   getDepartmentMemberships,
   getDepartmentRoles,
+  getDepartmentScheduleRequirements,
   getDepartments,
   reactivateDepartment,
   reactivateDepartmentMembership,
   reactivateDepartmentRole,
+  reactivateDepartmentScheduleRequirement,
   updateDepartment,
   updateDepartmentMembership,
   updateDepartmentRole,
+  updateDepartmentScheduleRequirement,
 } from '../api/departments'
 import type {
   CreateDepartmentInput,
@@ -27,6 +32,10 @@ import type {
   UpdateDepartmentMembershipInput,
   UpdateDepartmentRoleInput,
 } from '../types/department'
+import type {
+  CreateDepartmentScheduleRequirementInput,
+  UpdateDepartmentScheduleRequirementInput,
+} from '../types/scheduling'
 
 export const departmentsQueryKey = ['departments'] as const
 
@@ -44,6 +53,10 @@ export function departmentMembershipsQueryKey(id: number) {
 
 export function departmentEligiblePeopleQueryKey(id: number) {
   return ['departments', id, 'eligible-people'] as const
+}
+
+export function departmentScheduleRequirementsQueryKey(id: number) {
+  return ['departments', id, 'schedule-requirements'] as const
 }
 
 export function useDepartments() {
@@ -124,12 +137,22 @@ export function useDepartmentEligiblePeople(id: number, enabled = true) {
   })
 }
 
+export function useDepartmentScheduleRequirements(id: number, enabled = true) {
+  return useQuery({
+    queryKey: departmentScheduleRequirementsQueryKey(id),
+    queryFn: () => getDepartmentScheduleRequirements(id),
+    enabled: enabled && Number.isFinite(id),
+  })
+}
+
 export function useDepartmentRoleMutations(id: number) {
   const queryClient = useQueryClient()
 
   const onSuccess = async () => {
     await queryClient.invalidateQueries({ queryKey: departmentRolesQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: departmentScheduleRequirementsQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: departmentQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: ['scheduling'] })
   }
 
   return {
@@ -153,6 +176,37 @@ export function useDepartmentRoleMutations(id: number) {
   }
 }
 
+export function useDepartmentScheduleRequirementMutations(id: number) {
+  const queryClient = useQueryClient()
+
+  const onSuccess = async () => {
+    await queryClient.invalidateQueries({ queryKey: departmentScheduleRequirementsQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: departmentRolesQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: departmentQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: ['scheduling'] })
+  }
+
+  return {
+    create: useMutation({
+      mutationFn: (payload: CreateDepartmentScheduleRequirementInput) => createDepartmentScheduleRequirement(id, payload),
+      onSuccess,
+    }),
+    update: useMutation({
+      mutationFn: ({ requirementId, payload }: { requirementId: number; payload: UpdateDepartmentScheduleRequirementInput }) =>
+        updateDepartmentScheduleRequirement(id, requirementId, payload),
+      onSuccess,
+    }),
+    deactivate: useMutation({
+      mutationFn: (requirementId: number) => deactivateDepartmentScheduleRequirement(id, requirementId),
+      onSuccess,
+    }),
+    reactivate: useMutation({
+      mutationFn: (requirementId: number) => reactivateDepartmentScheduleRequirement(id, requirementId),
+      onSuccess,
+    }),
+  }
+}
+
 export function useDepartmentMembershipMutations(id: number) {
   const queryClient = useQueryClient()
 
@@ -161,6 +215,7 @@ export function useDepartmentMembershipMutations(id: number) {
     await queryClient.invalidateQueries({ queryKey: departmentEligiblePeopleQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: departmentRolesQueryKey(id) })
     await queryClient.invalidateQueries({ queryKey: departmentQueryKey(id) })
+    await queryClient.invalidateQueries({ queryKey: ['scheduling'] })
   }
 
   return {

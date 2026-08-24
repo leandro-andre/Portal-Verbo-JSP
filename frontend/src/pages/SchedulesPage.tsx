@@ -50,6 +50,13 @@ function statusClass(status: ScheduleStatus | null) {
   return 'status-badge--inactive'
 }
 
+function validationLabel(status: MonthlyScheduleItem['validation_status']) {
+  if (status === 'BLOCKED') return 'Com bloqueios'
+  if (status === 'WARNING') return 'Com avisos'
+  if (status === 'OK') return 'Composicao ok'
+  return null
+}
+
 function isPastService(date: string) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -88,6 +95,12 @@ function ScheduleCard({
             <span className="status-badge__dot" aria-hidden="true" />
             {statusLabel(schedule?.status ?? null)}
           </span>
+          {validationLabel(item.validation_status) ? (
+            <span className={`status-badge ${item.validation_status === 'BLOCKED' ? 'access-status-badge--rejected' : item.validation_status === 'WARNING' ? 'lesson-status-badge--scheduled' : 'status-badge--active'}`}>
+              <span className="status-badge__dot" aria-hidden="true" />
+              {validationLabel(item.validation_status)}
+            </span>
+          ) : null}
           <span className="status-badge status-badge--inactive">{service.kind === 'EXTRAORDINARY' ? 'Extraordinario' : 'Regular'}</span>
         </div>
       </div>

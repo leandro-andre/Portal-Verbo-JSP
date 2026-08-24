@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowLeft, Plus, RefreshCcw, Trash2 } from 'lucide-react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { useSchedule, useScheduleCandidates, useScheduleMutations } from '../hooks/useScheduling'
+import { useSchedule, useScheduleCandidates, useScheduleMutations, useScheduleValidation } from '../hooks/useScheduling'
 import type { DepartmentRole } from '../types/department'
 import type { ScheduleDetail } from '../types/scheduling'
 
@@ -34,6 +34,7 @@ function ScheduleDetailPage() {
   if (backDepartment) backQuery.set('department', backDepartment)
   const backUrl = `/escalas${backQuery.toString() ? `?${backQuery.toString()}` : ''}`
   const { data: schedule, isError, isLoading, refetch } = useSchedule(scheduleId)
+  const { data: validation } = useScheduleValidation(scheduleId, Boolean(schedule))
   const [selectedRole, setSelectedRole] = useState<DepartmentRole | null>(null)
   const [candidateSearch, setCandidateSearch] = useState('')
   const { data: candidates = [] } = useScheduleCandidates(
@@ -78,6 +79,8 @@ function ScheduleDetailPage() {
 
   const canManage = schedule.permissions.can_manage
   const canEditAssignments = schedule.permissions.can_edit_assignments
+  const blockingIssues = validation?.blocking_issues ?? []
+  const warnings = validation?.warnings ?? []
 
   return (
     <section className="person-profile-page">
@@ -94,7 +97,22 @@ function ScheduleDetailPage() {
           </span>
           {canManage && schedule.status === 'DRAFT' ? (
             <>
-              <button className="button button--primary" type="button" onClick={() => void run(() => mutations.publish.mutateAsync())}>Publicar escala</button>
+              <button
+                className="button button--primary"
+                disabled={Boolean(validation && !validation.can_publish)}
+                type="button"
+                onClick={() => {
+                  if (validation && validation.warnings.length > 0) {
+                    const warningList = validation.warnings.map((warning) => warning.message).join('\n')
+                    if (!window.confirm(`A escala possui recomendacoes nao atendidas:\n${warningList}\n\nPublicar mesmo assim?`)) {
+                      return
+                    }
+                  }
+                  void run(() => mutations.publish.mutateAsync())
+                }}
+              >
+                Publicar escala
+              </button>
               <button
                 className="button button--secondary"
                 type="button"
@@ -135,8 +153,56 @@ function ScheduleDetailPage() {
 
       {error ? <div className="form-alert form-alert--error">{error}</div> : null}
       {schedule.worship_service.status === 'CANCELLED' ? <div className="form-alert form-alert--error">Culto cancelado na Agenda de Cultos.</div> : null}
+      {validation && !validation.can_publish && schedule.status === 'DRAFT' ? (
+        <div className="form-alert form-alert--error">Resolva os itens obrigatorios antes de publicar.</div>
+      ) : null}
 
       <div className="profile-content">
+        <section className="profile-section">
+          <h2>Composicao da escala</h2>
+          {validation && validation.requirements.length > 0 ? (
+            <div className="table-shell table-shell--section">
+              <table className="people-table">
+                <thead><tr><th>Cargo</th><th>Minimo</th><th>Recomendado</th><th>Status</th></tr></thead>
+                <tbody>
+                  {validation.requirements.map((requirement) => (
+                    <tr key={requirement.role.id}>
+                      <td>{requirement.role.name}</td>
+                      <td>{requirement.assigned_quantity} / {requirement.minimum_quantity}</td>
+                      <td>{requirement.assigned_quantity} / {requirement.recommended_quantity}</td>
+                      <td>
+                        {!requirement.minimum_met
+                          ? 'Minimo pendente'
+                          : !requirement.recommended_met
+                            ? 'Recomendado pendente'
+                            : 'Atendida'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="page-heading__description">Este departamento nao possui requisitos quantitativos configurados.</p>
+          )}
+        </section>
+
+        {validation && (blockingIssues.length > 0 || warnings.length > 0) ? (
+          <section className="profile-section">
+            <h2>Pendencias</h2>
+            {blockingIssues.length > 0 ? (
+              <div className="form-alert form-alert--error">
+                {blockingIssues.map((issue) => <p key={`${issue.code}-${issue.role_id ?? issue.assignment_id ?? issue.message}`}>Bloqueio: {issue.message}</p>)}
+              </div>
+            ) : null}
+            {warnings.length > 0 ? (
+              <div className="form-alert form-alert--success">
+                {warnings.map((issue) => <p key={`${issue.code}-${issue.role_id ?? issue.message}`}>Aviso: {issue.message}</p>)}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <section className="profile-section">
           <h2>Montagem por cargo</h2>
           {schedule.active_roles.length === 0 ? (

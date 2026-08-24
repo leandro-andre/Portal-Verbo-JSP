@@ -46,6 +46,47 @@ O codigo do cargo e imutavel pela API depois da criacao. Renomear um cargo nao
 altera o `code` originalmente criado. A regra de lideranca nao depende do nome
 "Lider"; depende das flags do cargo.
 
+## Configuracao De Escala
+
+PVV-034 adiciona, na tela do Departamento, a secao `Configuracao de escala`.
+Ela configura requisitos de composicao por cargo usando
+`scheduling.DepartmentScheduleRequirement`.
+
+Embora apareca no Departamento, o model vive em `scheduling`, porque representa
+como uma `Schedule` daquele Departamento deve ser validada.
+
+Cada configuracao liga:
+
+- `Departamento`
+- `DepartmentRole`
+- `minimum_quantity`
+- `recommended_quantity`
+- `active`
+
+O cargo precisa pertencer ao Departamento. Cargo inativo nao recebe nova
+configuracao ativa, e Departamento inativo nao permite criacao/alteracao
+operacional. Configuracoes existentes permanecem para historico e podem ser
+inativadas/reativadas pelo lifecycle quando operacionalmente valido.
+
+`minimum_quantity` bloqueia publicacao de escala quando nao atendido.
+`recommended_quantity` gera aviso, mas nao bloqueia. `minimum_quantity=0` e
+permitido. `recommended_quantity` deve ser maior ou igual ao minimo. Cargo sem
+configuracao nao cria requisito implicito.
+
+Nao existe quantidade maxima, regra por culto, regra por template, autoescala
+ou preenchimento automatico nesta versao.
+
+Endpoints:
+
+- `GET /api/departments/{department_id}/schedule-requirements/`
+- `POST /api/departments/{department_id}/schedule-requirements/`
+- `GET /api/departments/{department_id}/schedule-requirements/{id}/`
+- `PATCH /api/departments/{department_id}/schedule-requirements/{id}/`
+- `POST /api/departments/{department_id}/schedule-requirements/{id}/deactivate/`
+- `POST /api/departments/{department_id}/schedule-requirements/{id}/reactivate/`
+
+DELETE funcional nao existe.
+
 ## Pessoas No Departamento
 
 `DepartmentMembership` representa o vinculo novo entre uma `Person`, um
@@ -215,6 +256,11 @@ permissoes globais.
 Elegibilidade nao e autorizacao. Secretaria pode administrar um membro
 inelegivel; a inelegibilidade responde se a pessoa pode servir, nao quem pode
 gerenciar o cadastro.
+
+Para configuracao de escala, Admin e Secretaria gerenciam globalmente. Pastor
+visualiza. O gestor contextual gerencia apenas o proprio Departamento quando seu
+vinculo esta operacionalmente elegivel e o cargo possui
+`can_manage_schedules=True`.
 
 ## Secretaria E Midia
 

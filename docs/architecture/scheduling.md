@@ -32,9 +32,33 @@ departamental. Nao existe FK direta para `Person`.
 
 - uma `Schedule` por `department + worship_service`
 - um `ScheduleAssignment` por `schedule + department_membership`
+- um `DepartmentScheduleRequirement` por `department + role`
 
 O conflito operacional, porem, e por `Person`, pois uma pessoa pode possuir
 vinculos em varios departamentos.
+
+## Composicao Por Departamento
+
+PVV-034 adiciona `DepartmentScheduleRequirement` no app `scheduling`.
+
+Ele pertence ao Departamento, usa um `DepartmentRole` daquele mesmo
+Departamento e configura a composicao quantitativa esperada para escalas:
+
+- `minimum_quantity`: minimo obrigatorio para publicacao.
+- `recommended_quantity`: quantidade desejada, usada como aviso.
+- `active`: lifecycle da configuracao.
+
+`recommended_quantity` deve ser maior ou igual a `minimum_quantity`.
+`minimum_quantity=0` e permitido e significa cargo nao obrigatorio.
+`recommended_quantity=0` tambem e permitido e significa ausencia de
+recomendacao quantitativa.
+
+Cargo sem `DepartmentScheduleRequirement` nao cria requisito implicito. O
+sistema nao inventa default 1.
+
+Nao existe `maximum_quantity` nesta versao. A mesma configuracao vale para
+todos os cultos do Departamento, incluindo extraordinarios; nao ha variacao por
+template, tipo, horario ou culto especifico.
 
 ## Lifecycle
 
@@ -56,6 +80,13 @@ Transicoes:
 Publicar escala vazia e bloqueado.
 
 Assignments podem ser adicionados/removidos apenas em `DRAFT`.
+
+Antes de publicar, `publish_schedule` executa a validacao atual da composicao.
+Minimos nao atendidos, escala sem pessoas, culto cancelado, departamento
+inativo e assignments atualmente inelegiveis bloqueiam publicacao com
+`SCHEDULE_VALIDATION_FAILED`.
+
+Recomendado nao atingido gera aviso, mas nao bloqueia publicacao.
 
 ## Validacoes operacionais
 
@@ -130,6 +161,17 @@ uma indisponibilidade for criada depois da escala, a Schedule/Assignment nao e
 apagada automaticamente. O historico permanece. Novas operacoes passam pelas
 validacoes atuais.
 
+PVV-034 tambem usa essa validacao para revisar escalas existentes. Se uma
+Schedule publicada se tornar invalida depois por mudanca de requirement,
+Membership, cargo, departamento ou indisponibilidade, o status `PUBLISHED` nao
+muda automaticamente. O endpoint de validacao passa a mostrar a pendencia
+atual.
+
+Assignments atualmente inelegiveis continuam no banco, mas nao contam para
+`assigned_quantity` da composicao. O motivo privado de uma indisponibilidade
+continua oculto; a validacao informa apenas que a pessoa esta indisponivel para
+o culto.
+
 ## Snapshot
 
 Nao foram criados snapshots de nome, cargo, departamento ou culto. Consultas
@@ -144,6 +186,7 @@ projeto deve decidir se precisa de snapshot historico.
 - `GET /api/scheduling/schedules/`
 - `POST /api/scheduling/schedules/`
 - `GET /api/scheduling/schedules/{id}/`
+- `GET /api/scheduling/schedules/{id}/validation/`
 - `POST /api/scheduling/schedules/{id}/publish/`
 - `POST /api/scheduling/schedules/{id}/reopen/`
 - `POST /api/scheduling/schedules/{id}/cancel/`
@@ -169,6 +212,24 @@ Resumo mensal:
 - `cancelled_schedules`
 - `without_schedule`
 
+Quando uma Schedule existe, a projecao mensal tambem pode indicar
+`validation_status`:
+
+- `OK`
+- `WARNING`
+- `BLOCKED`
+
+`GET /api/scheduling/schedules/{id}/validation/` retorna:
+
+- `valid`
+- `can_publish`
+- `blocking_issues`
+- `warnings`
+- `requirements`
+
+Cada requisito validado inclui cargo, minimo, recomendado, quantidade atribuida
+operacionalmente valida, `minimum_met` e `recommended_met`.
+
 Filtros de listagem:
 
 - `department_id`
@@ -182,7 +243,8 @@ Filtros de listagem:
 - `/escalas`: montagem mensal por ano, mes e departamento, baseada na Agenda
   de Cultos. Cultos cancelados permanecem visiveis, mas nao editaveis.
 - `/escalas/:id`: detail agrupado pelos cargos ativos do departamento,
-  assignments, candidatos filtraveis por cargo e lifecycle.
+  assignments, candidatos filtraveis por cargo, lifecycle, composicao da escala
+  e pendencias/avisos de validacao.
 
 Nao ha autoescala, drag and drop, publicacao em lote, slots fixos,
 substituicao, notificacoes ou confirmacao/recusa nesta etapa.

@@ -12,8 +12,11 @@ import {
   useDepartmentMemberships,
   useDepartmentRoleMutations,
   useDepartmentRoles,
+  useDepartmentScheduleRequirementMutations,
+  useDepartmentScheduleRequirements,
 } from '../hooks/useDepartments'
 import type { Department, DepartmentRole } from '../types/department'
+import type { DepartmentScheduleRequirement } from '../types/scheduling'
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -117,6 +120,11 @@ function businessErrorMessage(error: unknown) {
       DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS: 'Esta pessoa ja esta vinculada a este departamento.',
       INVALID_DEPARTMENT_ROLE_TRANSITION: 'Esta transicao de cargo nao esta disponivel.',
       INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION: 'Esta transicao de pessoa no departamento nao esta disponivel.',
+      SCHEDULE_REQUIREMENT_ALREADY_EXISTS: 'Este cargo ja possui configuracao de escala.',
+      SCHEDULE_REQUIREMENT_ROLE_MISMATCH: 'O cargo informado nao pertence a este departamento.',
+      SCHEDULE_REQUIREMENT_ROLE_INACTIVE: 'Cargo inativo nao pode receber configuracao ativa.',
+      INVALID_SCHEDULE_REQUIREMENT_QUANTITIES: 'O recomendado deve ser maior ou igual ao minimo.',
+      INVALID_SCHEDULE_REQUIREMENT_TRANSITION: 'Esta transicao de configuracao nao esta disponivel.',
     }
     return messages[error.code] ?? error.message
   }
@@ -187,6 +195,60 @@ function RoleForm({
   )
 }
 
+function RequirementDialog({
+  isPending,
+  mode,
+  onClose,
+  onSubmit,
+  role,
+  requirement,
+}: {
+  isPending: boolean
+  mode: 'create' | 'edit'
+  onClose: () => void
+  onSubmit: (payload: { minimum_quantity: number; recommended_quantity: number }) => void
+  role: DepartmentRole
+  requirement: DepartmentScheduleRequirement | null
+}) {
+  const [minimumQuantity, setMinimumQuantity] = useState(String(requirement?.minimum_quantity ?? 1))
+  const [recommendedQuantity, setRecommendedQuantity] = useState(String(requirement?.recommended_quantity ?? requirement?.minimum_quantity ?? 1))
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+    onSubmit({
+      minimum_quantity: Number(minimumQuantity),
+      recommended_quantity: Number(recommendedQuantity),
+    })
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <form className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="schedule-requirement-title" onSubmit={handleSubmit}>
+        <h2 id="schedule-requirement-title">{mode === 'create' ? 'Configurar' : 'Editar'} {role.name}</h2>
+        <label className="form-field">
+          <span>Quantidade minima</span>
+          <input min="0" type="number" value={minimumQuantity} onChange={(event) => setMinimumQuantity(event.target.value)} required />
+        </label>
+        <label className="form-field">
+          <span>Quantidade recomendada</span>
+          <input min="0" type="number" value={recommendedQuantity} onChange={(event) => setRecommendedQuantity(event.target.value)} required />
+        </label>
+        <div className="dialog-copy">
+          <p>Minimo bloqueia publicacao quando nao atendido.</p>
+          <p>Recomendado gera aviso, mas nao bloqueia.</p>
+        </div>
+        <div className="form-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>Cancelar</button>
+          <button className="button button--primary" type="submit" disabled={isPending}>
+            <Save size={17} aria-hidden="true" />
+            {isPending ? 'Salvando...' : 'Salvar'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function MembershipForm({
   activeRoles,
   candidates,
@@ -249,16 +311,25 @@ function DepartmentDetailPage() {
   const rolesQuery = useDepartmentRoles(departmentId, Boolean(department))
   const membershipsQuery = useDepartmentMemberships(departmentId, Boolean(department))
   const eligiblePeopleQuery = useDepartmentEligiblePeople(departmentId, Boolean(department?.permissions?.can_manage_members))
+  const requirementsQuery = useDepartmentScheduleRequirements(departmentId, Boolean(department))
   const roleMutations = useDepartmentRoleMutations(departmentId)
+  const requirementMutations = useDepartmentScheduleRequirementMutations(departmentId)
   const membershipMutations = useDepartmentMembershipMutations(departmentId)
   const lifecycle = useDepartmentLifecycle(departmentId)
   const canChangeGlobally = useCan('DEPARTMENT_CHANGE')
   const canDeactivate = useCan('DEPARTMENT_DEACTIVATE')
   const canReactivate = useCan('DEPARTMENT_REACTIVATE')
+  const canManageSchedulesGlobally = useCan('SCHEDULE_MANAGE')
   const canChange = Boolean(department?.permissions?.can_manage_department || canChangeGlobally)
   const canManageRoles = Boolean(department?.permissions?.can_manage_roles)
   const canManageMembers = Boolean(department?.permissions?.can_manage_members)
+  const canManageSchedules = Boolean(department?.permissions?.can_manage_schedules || canManageSchedulesGlobally)
   const [dialogMode, setDialogMode] = useState<'deactivate' | 'reactivate' | null>(null)
+  const [requirementDialog, setRequirementDialog] = useState<{
+    mode: 'create' | 'edit'
+    role: DepartmentRole
+    requirement: DepartmentScheduleRequirement | null
+  } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState(() => {
     const state = location.state as { successMessage?: string } | null
@@ -269,6 +340,8 @@ function DepartmentDetailPage() {
   const roles = rolesQuery.data ?? []
   const memberships = membershipsQuery.data ?? []
   const activeRoles = roles.filter((role) => role.active)
+  const requirements = requirementsQuery.data ?? []
+  const requirementsByRole = new Map(requirements.map((requirement) => [requirement.role.id, requirement]))
 
   useEffect(() => {
     if (location.state) {
@@ -305,6 +378,19 @@ function DepartmentDetailPage() {
     } catch (mutationError) {
       setActionError(businessErrorMessage(mutationError))
     }
+  }
+
+  const handleRequirementSubmit = async (payload: { minimum_quantity: number; recommended_quantity: number }) => {
+    if (!requirementDialog) {
+      return
+    }
+    await runAction(
+      () => requirementDialog.requirement
+        ? requirementMutations.update.mutateAsync({ requirementId: requirementDialog.requirement.id, payload })
+        : requirementMutations.create.mutateAsync({ role_id: requirementDialog.role.id, ...payload }),
+      'Configuracao de escala salva.',
+    )
+    setRequirementDialog(null)
   }
 
   return (
@@ -514,6 +600,73 @@ function DepartmentDetailPage() {
 
             <section className="profile-section">
               <div className="section-heading-row">
+                <h2>Configuracao de escala</h2>
+                {requirementsQuery.isFetching ? <span className="table-muted">Atualizando...</span> : null}
+              </div>
+              <div className="table-shell table-shell--section">
+                <table className="people-table">
+                  <thead>
+                    <tr>
+                      <th>Cargo</th>
+                      <th>Minimo</th>
+                      <th>Recomendado</th>
+                      <th>Status</th>
+                      {canManageSchedules ? <th className="people-table__actions-header">Acoes</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeRoles.map((role) => {
+                      const requirement = requirementsByRole.get(role.id) ?? null
+                      return (
+                        <tr key={role.id}>
+                          <td>{role.name}</td>
+                          <td>{requirement ? requirement.minimum_quantity : 'Sem configuracao'}</td>
+                          <td>{requirement ? requirement.recommended_quantity : 'Sem configuracao'}</td>
+                          <td>{requirement ? requirement.active ? 'Ativa' : 'Inativa' : '-'}</td>
+                          {canManageSchedules ? (
+                            <td>
+                              <div className="table-actions">
+                                <button
+                                  className="button button--secondary"
+                                  type="button"
+                                  onClick={() => setRequirementDialog({ mode: requirement ? 'edit' : 'create', role, requirement })}
+                                >
+                                  <Save size={16} aria-hidden="true" />
+                                  {requirement ? 'Editar' : 'Configurar'}
+                                </button>
+                                {requirement ? (
+                                  <button
+                                    className="button button--secondary"
+                                    type="button"
+                                    onClick={() =>
+                                      void runAction(
+                                        () => requirement.active
+                                          ? requirementMutations.deactivate.mutateAsync(requirement.id)
+                                          : requirementMutations.reactivate.mutateAsync(requirement.id),
+                                        requirement.active ? 'Configuracao inativada.' : 'Configuracao reativada.',
+                                      )
+                                    }
+                                  >
+                                    <RefreshCcw size={16} aria-hidden="true" />
+                                    {requirement.active ? 'Inativar' : 'Reativar'}
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                          ) : null}
+                        </tr>
+                      )
+                    })}
+                    {activeRoles.length === 0 ? (
+                      <tr><td colSpan={canManageSchedules ? 5 : 4} className="table-muted">Nenhum cargo ativo para configurar.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="profile-section">
+              <div className="section-heading-row">
                 <h2>Pessoas</h2>
                 {membershipsQuery.isFetching ? <span className="table-muted">Atualizando...</span> : null}
               </div>
@@ -620,6 +773,16 @@ function DepartmentDetailPage() {
                 setDialogMode(null)
               }}
               onConfirm={() => void handleConfirmLifecycle()}
+            />
+          ) : null}
+          {requirementDialog ? (
+            <RequirementDialog
+              isPending={requirementMutations.create.isPending || requirementMutations.update.isPending}
+              mode={requirementDialog.mode}
+              onClose={() => setRequirementDialog(null)}
+              onSubmit={(payload) => void handleRequirementSubmit(payload)}
+              requirement={requirementDialog.requirement}
+              role={requirementDialog.role}
             />
           ) : null}
         </>
