@@ -119,3 +119,39 @@ export type ScheduleValidationResult = {
   warnings: ScheduleValidationIssue[]
   requirements: ScheduleRequirementValidation[]
 }
+
+export type MyScheduleWarning = {
+  code: string
+  message: string
+}
+
+export type MyScheduleItem = {
+  id: number
+  schedule_id: number
+  worship_service: {
+    id: number
+    name: string
+    date: string
+    time: string
+    status: WorshipService['status']
+    kind: WorshipService['kind']
+  }
+  department: {
+    id: number
+    name: string
+  }
+  role: {
+    id: number
+    name: string
+  }
+  schedule_status: ScheduleStatus
+  warnings: MyScheduleWarning[]
+}
+
+export type MySchedulesScope = 'upcoming' | 'history' | 'all'
+
+export type MySchedulesResponse = {
+  person_linked: boolean
+  scope: MySchedulesScope
+  items: MyScheduleItem[]
+}

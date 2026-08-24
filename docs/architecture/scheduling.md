@@ -154,6 +154,76 @@ anteriores falavam de dados/cargos/pessoas, nao de escala.
 Assignment usa `DepartmentMembership`, entao a pessoa escalada nao precisa possuir
 conta `Usuario`. Isso preserva o novo modelo baseado em `Person`.
 
+## Minhas Escalas
+
+PVV-035 adiciona a experiencia self-service `Minhas Escalas`.
+
+O fluxo de dados e:
+
+`Usuario -> Usuario.person -> Person -> DepartmentMembership -> ScheduleAssignment -> Schedule -> WorshipService`
+
+O endpoint publico para a propria pessoa e:
+
+- `GET /api/me/schedules/`
+
+Filtros opcionais:
+
+- `scope=upcoming|history|all`
+- `year`
+- `month`
+
+O endpoint nao aceita `person_id` ou `user_id`; ele sempre resolve a pessoa por
+`request.user.person`. Se o Usuario nao possuir `Person` vinculada, retorna
+estado claro com `person_linked=false` e lista vazia. Nao ha inferencia por
+nome/e-mail e nenhuma `Person` e criada automaticamente.
+
+`Person` sem `Usuario` continua podendo ter Membership, participar de
+Departamento e ser escalada. Ela apenas nao possui acesso self-service ate
+existir conta vinculada.
+
+### Proximas Escalas
+
+`scope=upcoming` retorna apenas assignments da propria pessoa quando:
+
+- `Schedule.status=PUBLISHED`
+- `Schedule.status` nao e `CANCELLED`
+- `WorshipService.status=SCHEDULED`
+- `WorshipService.date >= today`
+
+Escalas de hoje aparecem como proximas. A hora atual nao e considerada nesta
+feature.
+
+`Schedule DRAFT` nunca aparece em Minhas Escalas. Quando o lider publica, a
+escala passa a aparecer. Quando reabre para `DRAFT`, ela deixa de aparecer como
+compromisso oficial.
+
+`Schedule CANCELLED` e `WorshipService CANCELLED` nao aparecem como proximas
+ativas.
+
+### Historico
+
+`scope=history` retorna registros da propria pessoa quando o culto esta no
+passado, a Schedule foi cancelada ou o WorshipService foi cancelado. Isso
+preserva visibilidade historica sem apagar `ScheduleAssignment`.
+
+Nao existe status `REALIZADA`; evento passado e tratado como historico derivado
+pela data do culto.
+
+### Warnings Pessoais
+
+Minhas Escalas pode retornar `warnings` por item, voltados somente a pessoa
+autenticada. Exemplos:
+
+- indisponibilidade pessoal registrada para o horario da escala
+- situacao operacional atual que pode impedir a escala
+
+Esses warnings nao removem o assignment e nao expõem detalhes de terceiros. O
+motivo privado de `PersonUnavailability.reason` continua oculto.
+
+Nao ha confirmacao, recusa, solicitacao de troca, notificacoes, lembretes,
+contato automatico do lider, check-in ou presenca nesta etapa. A publicacao do
+lider e a etapa que torna a escala vigente no processo atual.
+
 ## Mudancas posteriores
 
 Se um culto for cancelado, departamento inativado, Membership ficar inativa ou
@@ -183,6 +253,7 @@ projeto deve decidir se precisa de snapshot historico.
 
 - `GET /api/scheduling/departments/`
 - `GET /api/scheduling/monthly/`
+- `GET /api/me/schedules/`
 - `GET /api/scheduling/schedules/`
 - `POST /api/scheduling/schedules/`
 - `GET /api/scheduling/schedules/{id}/`

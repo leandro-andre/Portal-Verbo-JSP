@@ -7,11 +7,12 @@ import {
   getScheduleCandidates,
   getScheduleValidation,
   getMonthlySchedule,
+  getMySchedules,
   getSchedulingDepartments,
   getSchedules,
   runScheduleLifecycle,
 } from '../api/scheduling'
-import type { ScheduleCreateInput } from '../types/scheduling'
+import type { MySchedulesScope, ScheduleCreateInput } from '../types/scheduling'
 
 export function schedulesQueryKey(year: number, month: number, departmentId: string, status: string) {
   return ['scheduling', 'schedules', year, month, departmentId, status] as const
@@ -35,6 +36,10 @@ export function scheduleValidationQueryKey(id: number) {
   return ['scheduling', 'schedule', id, 'validation'] as const
 }
 
+export function mySchedulesQueryKey(scope: MySchedulesScope, year?: number, month?: number) {
+  return ['me', 'schedules', scope, year ?? 'all-years', month ?? 'all-months'] as const
+}
+
 export function useSchedules(year: number, month: number, departmentId: string, status: string) {
   return useQuery({
     queryKey: schedulesQueryKey(year, month, departmentId, status),
@@ -54,6 +59,13 @@ export function useMonthlySchedule(year: number, month: number, departmentId: st
     queryKey: monthlyScheduleQueryKey(year, month, departmentId),
     queryFn: () => getMonthlySchedule(year, month, departmentId),
     enabled: Boolean(departmentId),
+  })
+}
+
+export function useMySchedules(scope: MySchedulesScope, year?: number, month?: number) {
+  return useQuery({
+    queryKey: mySchedulesQueryKey(scope, year, month),
+    queryFn: () => getMySchedules({ scope, year, month }),
   })
 }
 

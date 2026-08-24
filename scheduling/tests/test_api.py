@@ -8,7 +8,7 @@ from django.utils import timezone
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
 from pessoas.models import Person, PersonUnavailability
-from scheduling.models import DepartmentScheduleRequirement, Schedule
+from scheduling.models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
 from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
 from worship.models import WorshipService
 
@@ -431,3 +431,140 @@ class SchedulingApiTests(TestCase):
         self.assertTrue(warning_validation.json()["can_publish"])
         self.assertEqual(len(warning_validation.json()["warnings"]), 1)
         self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/publish/").status_code, 200)
+
+    def test_my_schedules_requires_own_person_and_filters_by_publication_lifecycle(self):
+        self.common.person = self.person
+        self.common.save(update_fields=["person"])
+        self.login(self.admin)
+        schedule = self.create_schedule_via_api()
+        self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": self.department_membership.pk},
+            content_type="application/json",
+        )
+
+        self.login(self.common)
+        draft_response = self.client.get("/api/me/schedules/")
+        self.assertEqual(draft_response.status_code, 200)
+        self.assertTrue(draft_response.json()["person_linked"])
+        self.assertEqual(draft_response.json()["items"], [])
+
+        self.login(self.admin)
+        self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/publish/").status_code, 200)
+        self.login(self.common)
+        published_response = self.client.get("/api/me/schedules/")
+        self.assertEqual(len(published_response.json()["items"]), 1)
+        item = published_response.json()["items"][0]
+        self.assertEqual(item["schedule_id"], schedule["id"])
+        self.assertEqual(item["department"]["name"], "Infantil")
+        self.assertEqual(item["role"]["name"], "Professor")
+        self.assertNotIn("assignments", item)
+
+        self.login(self.admin)
+        self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/reopen/").status_code, 200)
+        self.login(self.common)
+        reopened_response = self.client.get("/api/me/schedules/")
+        self.assertEqual(reopened_response.json()["items"], [])
+
+    def test_my_schedules_privacy_no_person_today_history_and_multiple_departments(self):
+        other_user = self.other_leader_user
+        self.common.person = self.person
+        self.common.save(update_fields=["person"])
+        second_membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=self.other_department,
+            role=self.other_manager_role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        today_service = WorshipService.objects.create(
+            name="Culto Hoje",
+            date=timezone.localdate(),
+            time=time(20, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        past_service = WorshipService.objects.create(
+            name="Culto Ontem",
+            date=timezone.localdate() - timedelta(days=1),
+            time=time(20, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        today_schedule = Schedule.objects.create(department=self.department, worship_service=today_service, status=Schedule.Status.PUBLISHED)
+        other_department_schedule = Schedule.objects.create(department=self.other_department, worship_service=self.worship_service, status=Schedule.Status.PUBLISHED)
+        past_schedule = Schedule.objects.create(department=self.department, worship_service=past_service, status=Schedule.Status.PUBLISHED)
+        Schedule.objects.create(department=self.department, worship_service=self.worship_service, status=Schedule.Status.DRAFT)
+        ScheduleAssignment.objects.create(schedule=today_schedule, department_membership=self.department_membership)
+        ScheduleAssignment.objects.create(schedule=other_department_schedule, department_membership=second_membership)
+        ScheduleAssignment.objects.create(schedule=past_schedule, department_membership=self.department_membership)
+
+        self.login(self.common)
+        upcoming = self.client.get("/api/me/schedules/")
+        self.assertEqual(upcoming.status_code, 200)
+        self.assertEqual([item["department"]["name"] for item in upcoming.json()["items"]], ["Infantil", "Midia"])
+        self.assertEqual(upcoming.json()["items"][0]["worship_service"]["name"], "Culto Hoje")
+
+        history = self.client.get("/api/me/schedules/?scope=history")
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(len(history.json()["items"]), 1)
+        self.assertEqual(history.json()["items"][0]["worship_service"]["name"], "Culto Ontem")
+
+        self.login(other_user)
+        other_response = self.client.get("/api/me/schedules/")
+        self.assertEqual(other_response.json()["items"], [])
+
+        self.common.person = None
+        self.common.save(update_fields=["person"])
+        self.login(self.common)
+        no_person = self.client.get("/api/me/schedules/")
+        self.assertEqual(no_person.status_code, 200)
+        self.assertFalse(no_person.json()["person_linked"])
+        self.assertEqual(no_person.json()["items"], [])
+
+    def test_my_schedules_cancelled_worship_cancelled_schedule_and_personal_warnings(self):
+        self.common.person = self.person
+        self.common.save(update_fields=["person"])
+        self.login(self.admin)
+        schedule = self.create_schedule_via_api()
+        self.client.post(
+            f"/api/scheduling/schedules/{schedule['id']}/assignments/",
+            {"department_membership_id": self.department_membership.pk},
+            content_type="application/json",
+        )
+        self.client.post(f"/api/scheduling/schedules/{schedule['id']}/publish/")
+
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=self.worship_service.date,
+            end_date=self.worship_service.date,
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            reason="Motivo privado",
+        )
+
+        self.login(self.common)
+        warning_response = self.client.get("/api/me/schedules/")
+        self.assertEqual(warning_response.status_code, 200)
+        self.assertEqual(warning_response.json()["items"][0]["warnings"][0]["code"], "MY_SCHEDULE_PERSON_UNAVAILABLE")
+        self.assertNotIn("Motivo privado", str(warning_response.json()))
+
+        self.login(self.admin)
+        self.assertEqual(self.client.post(f"/api/scheduling/schedules/{schedule['id']}/cancel/").status_code, 200)
+        self.login(self.common)
+        self.assertEqual(self.client.get("/api/me/schedules/").json()["items"], [])
+        self.assertEqual(self.client.get("/api/me/schedules/?scope=history").json()["items"][0]["schedule_status"], "CANCELLED")
+
+        self.login(self.admin)
+        schedule_model = Schedule.objects.get(pk=schedule["id"])
+        schedule_model.status = Schedule.Status.PUBLISHED
+        schedule_model.save(update_fields=["status"])
+        schedule_model.worship_service.status = WorshipService.Status.CANCELLED
+        schedule_model.worship_service.save(update_fields=["status"])
+        self.login(self.common)
+        self.assertEqual(self.client.get("/api/me/schedules/").json()["items"], [])
+        cancelled_worship = self.client.get("/api/me/schedules/?scope=history")
+        self.assertEqual(cancelled_worship.json()["items"][0]["worship_service"]["status"], "CANCELLED")
+
+    def test_my_schedules_anonymous_is_rejected(self):
+        response = self.client.get("/api/me/schedules/")
+        self.assertEqual(response.status_code, 403)

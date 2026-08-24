@@ -18,6 +18,8 @@ PERSON_SCHEDULE_TIME_CONFLICT = "PERSON_SCHEDULE_TIME_CONFLICT"
 SCHEDULE_HAS_NO_ASSIGNMENTS = "SCHEDULE_HAS_NO_ASSIGNMENTS"
 SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET = "SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET"
 SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET = "SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET"
+MY_SCHEDULE_PERSON_UNAVAILABLE = "MY_SCHEDULE_PERSON_UNAVAILABLE"
+MY_SCHEDULE_ASSIGNMENT_ATTENTION_REQUIRED = "MY_SCHEDULE_ASSIGNMENT_ATTENTION_REQUIRED"
 
 REASON_MESSAGES = {
     DEPARTMENT_MEMBERSHIP_WRONG_DEPARTMENT: "O vinculo nao pertence ao departamento desta escala.",
@@ -27,6 +29,8 @@ REASON_MESSAGES = {
     SCHEDULE_HAS_NO_ASSIGNMENTS: "Nao e permitido publicar escala sem pessoas.",
     SCHEDULE_REQUIREMENT_MINIMUM_NOT_MET: "Minimo obrigatorio do cargo nao atendido.",
     SCHEDULE_REQUIREMENT_RECOMMENDED_NOT_MET: "Quantidade recomendada do cargo nao atingida.",
+    MY_SCHEDULE_PERSON_UNAVAILABLE: "Voce possui indisponibilidade registrada para este horario.",
+    MY_SCHEDULE_ASSIGNMENT_ATTENTION_REQUIRED: "Sua situacao atual pode impedir esta escala. Procure sua lideranca.",
 }
 
 
@@ -208,6 +212,68 @@ def get_assignment_candidates(schedule):
         }
         for membership in memberships
     ]
+
+
+def get_person_schedule_assignments(person, *, scope="upcoming", year=None, month=None, today=None):
+    from django.utils import timezone
+
+    current_date = today or timezone.localdate()
+    normalized_scope = scope if scope in {"upcoming", "history", "all"} else "upcoming"
+    queryset = (
+        ScheduleAssignment.objects.filter(department_membership__person=person)
+        .select_related(
+            "department_membership__person",
+            "department_membership__department",
+            "department_membership__role",
+            "schedule__department",
+            "schedule__worship_service",
+        )
+        .exclude(schedule__status=Schedule.Status.DRAFT)
+    )
+    if normalized_scope == "upcoming":
+        queryset = queryset.filter(
+            schedule__status=Schedule.Status.PUBLISHED,
+            schedule__worship_service__status=WorshipService.Status.SCHEDULED,
+            schedule__worship_service__date__gte=current_date,
+        )
+    elif normalized_scope == "history":
+        queryset = queryset.filter(
+            Q(schedule__worship_service__date__lt=current_date)
+            | Q(schedule__status=Schedule.Status.CANCELLED)
+            | Q(schedule__worship_service__status=WorshipService.Status.CANCELLED)
+        )
+    if year:
+        queryset = queryset.filter(schedule__worship_service__date__year=year)
+    if month:
+        queryset = queryset.filter(schedule__worship_service__date__month=month)
+    ordering = ("schedule__worship_service__date", "schedule__worship_service__time", "schedule__department__nome", "id")
+    if normalized_scope == "history":
+        ordering = ("-schedule__worship_service__date", "-schedule__worship_service__time", "schedule__department__nome", "id")
+    return queryset.order_by(*ordering)
+
+
+def get_my_schedule_assignment_warnings(assignment):
+    eligibility = get_assignment_eligibility(assignment.schedule, assignment.department_membership)
+    warnings = []
+    if eligibility.eligible:
+        return warnings
+    reason_codes = {reason.code for reason in eligibility.reasons}
+    if PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE in reason_codes:
+        warnings.append(
+            {
+                "code": MY_SCHEDULE_PERSON_UNAVAILABLE,
+                "message": REASON_MESSAGES[MY_SCHEDULE_PERSON_UNAVAILABLE],
+            }
+        )
+    other_reason_codes = reason_codes - {PERSON_UNAVAILABLE_FOR_WORSHIP_SERVICE}
+    if other_reason_codes:
+        warnings.append(
+            {
+                "code": MY_SCHEDULE_ASSIGNMENT_ATTENTION_REQUIRED,
+                "message": REASON_MESSAGES[MY_SCHEDULE_ASSIGNMENT_ATTENTION_REQUIRED],
+            }
+        )
+    return warnings
 
 
 def get_department_schedule_requirements(department, *, include_inactive=True):

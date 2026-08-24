@@ -7,7 +7,13 @@ from pessoas.models import Person
 from worship.models import WorshipService
 
 from .models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
-from .selectors import get_active_schedule_roles, get_assignment_candidates, get_schedule_assignments, get_schedule_composition_validation
+from .selectors import (
+    get_active_schedule_roles,
+    get_assignment_candidates,
+    get_my_schedule_assignment_warnings,
+    get_schedule_assignments,
+    get_schedule_composition_validation,
+)
 
 
 class ScheduleDepartmentSerializer(serializers.ModelSerializer):
@@ -167,6 +173,35 @@ class DepartmentScheduleRequirementUpdateSerializer(serializers.Serializer):
 class ScheduleValidationSerializer(serializers.Serializer):
     def to_representation(self, instance):
         return instance.as_dict()
+
+
+class MyScheduleAssignmentSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        schedule = instance.schedule
+        worship_service = schedule.worship_service
+        membership = instance.department_membership
+        return {
+            "id": instance.id,
+            "schedule_id": schedule.id,
+            "worship_service": {
+                "id": worship_service.id,
+                "name": worship_service.name,
+                "date": worship_service.date.isoformat(),
+                "time": worship_service.time.strftime("%H:%M"),
+                "status": worship_service.status,
+                "kind": worship_service.kind,
+            },
+            "department": {
+                "id": schedule.department.id,
+                "name": schedule.department.nome,
+            },
+            "role": {
+                "id": membership.role.id,
+                "name": membership.role.name,
+            },
+            "schedule_status": schedule.status,
+            "warnings": get_my_schedule_assignment_warnings(instance),
+        }
 
 
 class MonthlyScheduleItemSerializer(serializers.Serializer):

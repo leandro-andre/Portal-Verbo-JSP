@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, ShieldCheck, UserCog, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -17,6 +17,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
   const canViewDepartments = capabilities.includes('DEPARTMENT_VIEW')
   const canViewWorshipSchedule = capabilities.includes('WORSHIP_SCHEDULE_VIEW')
   const canViewSchedules = capabilities.includes('SCHEDULE_VIEW')
+  const hasPerson = Boolean(currentUser?.user?.person_id)
   const hasAccessItems = canViewAccessRequests || canViewUsers
 
   return (
@@ -34,14 +35,25 @@ function Sidebar({ isCollapsed }: SidebarProps) {
       </div>
 
       <nav className="sidebar__nav" aria-label="Modulos do portal">
-        {!isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
-        <NavLink
-          className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-          to="/minhas-indisponibilidades"
-        >
-          <CalendarX2 size={18} aria-hidden="true" />
-          {!isCollapsed ? <span>Minhas indisponibilidades</span> : null}
-        </NavLink>
+        {hasPerson && !isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
+        {hasPerson ? (
+          <>
+            <NavLink
+              className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+              to="/minhas-escalas"
+            >
+              <CalendarCheck2 size={18} aria-hidden="true" />
+              {!isCollapsed ? <span>Minhas Escalas</span> : null}
+            </NavLink>
+            <NavLink
+              className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+              to="/minhas-indisponibilidades"
+            >
+              <CalendarX2 size={18} aria-hidden="true" />
+              {!isCollapsed ? <span>Minhas indisponibilidades</span> : null}
+            </NavLink>
+          </>
+        ) : null}
 
         {canViewPeople ? (
           <>

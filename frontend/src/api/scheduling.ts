@@ -1,5 +1,7 @@
 import type {
   MonthlySchedule,
+  MySchedulesResponse,
+  MySchedulesScope,
   ScheduleAssignment,
   ScheduleCandidate,
   ScheduleCreateInput,
@@ -75,6 +77,17 @@ export function getMonthlySchedule(year: number, month: number, departmentId: st
     `/api/scheduling/monthly/?${query.toString()}`,
     {},
     'Nao foi possivel carregar a montagem mensal.',
+  )
+}
+
+export function getMySchedules(params: { scope: MySchedulesScope; year?: number; month?: number }) {
+  const query = new URLSearchParams({ scope: params.scope })
+  if (params.year) query.set('year', String(params.year))
+  if (params.month) query.set('month', String(params.month))
+  return requestJson<MySchedulesResponse>(
+    `/api/me/schedules/?${query.toString()}`,
+    {},
+    'Nao foi possivel carregar suas escalas.',
   )
 }
 

@@ -17,6 +17,7 @@ from .api_views import (
     login_view,
     logout_view,
 )
+from scheduling.views import MySchedulesView
 
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path("auth/login/", login_view, name="auth-login"),
     path("auth/logout/", logout_view, name="auth-logout"),
     path("auth/activate/", activate_account_view, name="auth-activate"),
+    path("me/schedules/", MySchedulesView.as_view(), name="my-schedules"),
     path("users/", AdminUserListView.as_view(), name="admin-user-list"),
     path("users/<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("users/<int:pk>/disable/", AdminUserDisableView.as_view(), name="admin-user-disable"),

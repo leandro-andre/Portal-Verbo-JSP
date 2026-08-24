@@ -10,6 +10,7 @@ from departamentos.selectors import can_manage_department_schedules
 from .models import Schedule, ScheduleAssignment
 from .serializers import (
     MonthlyScheduleSerializer,
+    MyScheduleAssignmentSerializer,
     ScheduleAssignmentCreateSerializer,
     ScheduleAssignmentSerializer,
     ScheduleCreateSerializer,
@@ -18,7 +19,12 @@ from .serializers import (
     ScheduleValidationSerializer,
     serialize_assignment_candidates,
 )
-from .selectors import get_department_monthly_schedule, get_schedule_composition_validation, get_schedule_departments_for_user
+from .selectors import (
+    get_department_monthly_schedule,
+    get_person_schedule_assignments,
+    get_schedule_composition_validation,
+    get_schedule_departments_for_user,
+)
 from .services import (
     SchedulingError,
     cancel_schedule,
@@ -141,6 +147,44 @@ class ScheduleDepartmentListView(APIView):
         from .serializers import ScheduleDepartmentSerializer
 
         return Response(ScheduleDepartmentSerializer(departments, many=True).data)
+
+
+class MySchedulesView(APIView):
+    def get(self, request):
+        ensure_authenticated(request.user)
+        person = getattr(request.user, "person", None)
+        scope = (request.query_params.get("scope") or "upcoming").lower()
+        year = request.query_params.get("year")
+        month = request.query_params.get("month")
+        try:
+            parsed_year = int(year) if year else None
+            parsed_month = int(month) if month else None
+        except ValueError:
+            return Response({"message": "Informe ano e mes validos."}, status=status.HTTP_400_BAD_REQUEST)
+        if parsed_month is not None and not 1 <= parsed_month <= 12:
+            return Response({"message": "Informe um mes entre 1 e 12."}, status=status.HTTP_400_BAD_REQUEST)
+        normalized_scope = scope if scope in {"upcoming", "history", "all"} else "upcoming"
+        if person is None:
+            return Response(
+                {
+                    "person_linked": False,
+                    "scope": normalized_scope,
+                    "items": [],
+                }
+            )
+        assignments = get_person_schedule_assignments(
+            person,
+            scope=normalized_scope,
+            year=parsed_year,
+            month=parsed_month,
+        )
+        return Response(
+            {
+                "person_linked": True,
+                "scope": normalized_scope,
+                "items": MyScheduleAssignmentSerializer(assignments, many=True).data,
+            }
+        )
 
 
 class MonthlyScheduleView(APIView):
