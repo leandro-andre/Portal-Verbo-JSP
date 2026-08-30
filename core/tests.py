@@ -1,4 +1,5 @@
 from datetime import timedelta
+import importlib
 from pathlib import Path
 import os
 import subprocess
@@ -9,7 +10,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase, override_settings
-from django.urls import reverse
+from django.urls import clear_url_caches, reverse
 from django.utils import timezone
 
 from config.env import env_bool, env_list
@@ -24,6 +25,21 @@ from .models import ContatoMensagem, SiteConfig
 
 
 class ProductionReadinessTests(TestCase):
+    def reload_project_urlconf(self):
+        import config.urls
+
+        clear_url_caches()
+        importlib.reload(config.urls)
+        clear_url_caches()
+
+    def assert_spa_index_response(self, path, expected_content):
+        response = self.client.get(path)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/html")
+        self.assertEqual(b"".join(response.streaming_content), expected_content)
+        response.close()
+
     def test_health_check_publico_nao_expoe_detalhes(self):
         response = self.client.get(reverse("api-health"))
 
@@ -72,6 +88,49 @@ class ProductionReadinessTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(b"".join(response.streaming_content), b"<div id=\"root\"></div>")
             response.close()
+
+    def test_spa_fallback_serve_rotas_react_em_refresh_direto(self):
+        index_content = b"<div id=\"root\">SPA</div>"
+        self.addCleanup(self.reload_project_urlconf)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "index.html").write_bytes(index_content)
+
+            with override_settings(SERVE_REACT_APP=True, REACT_BUILD_DIR=build_dir):
+                self.reload_project_urlconf()
+                for path in (
+                    "/",
+                    "/meu-perfil",
+                    "/solicitacoes-acesso",
+                    "/solicitacoes-acesso/1",
+                    "/departamentos/novo",
+                ):
+                    with self.subTest(path=path):
+                        self.assert_spa_index_response(path, index_content)
+            self.reload_project_urlconf()
+
+    def test_spa_fallback_nao_captura_prefixos_reservados(self):
+        index_content = b"<div id=\"root\">SPA</div>"
+        self.addCleanup(self.reload_project_urlconf)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            build_dir = Path(temp_dir)
+            (build_dir / "index.html").write_bytes(index_content)
+
+            with override_settings(SERVE_REACT_APP=True, REACT_BUILD_DIR=build_dir):
+                self.reload_project_urlconf()
+                api_response = self.client.get("/api/health/")
+                admin_response = self.client.get("/admin/")
+                static_response = self.client.get("/static/spa-test.css")
+                media_response = self.client.get("/media/spa-test.jpg")
+
+                self.assertEqual(api_response.status_code, 200)
+                self.assertEqual(api_response.json(), {"status": "ok"})
+                self.assertNotEqual(admin_response.status_code, 200)
+                self.assertNotEqual(static_response.status_code, 200)
+                self.assertNotEqual(media_response.status_code, 200)
+            self.reload_project_urlconf()
 
 
 class ContatoViewTests(TestCase):

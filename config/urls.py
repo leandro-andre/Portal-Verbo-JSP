@@ -40,7 +40,7 @@ if settings.SERVE_REACT_APP:
     urlpatterns.insert(1, path("", react_app, name="react-app"))
     urlpatterns.append(
         re_path(
-            r"^(?!(api|admin|static|media)(/|$)).*$",
+            r"^(?!(?:api|admin|static|media)(?:/|$)).*$",
             react_app,
             name="react-app-fallback",
         )

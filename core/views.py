@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.conf import settings
 from django.http import FileResponse, Http404
@@ -8,6 +10,9 @@ from .forms import ContatoForm
 from .models import SiteConfig, SobrePage
 from eventos.models import Evento
 from noticias.models import Noticia
+
+
+logger = logging.getLogger(__name__)
 
 
 def home(request):
@@ -82,5 +87,10 @@ def ao_vivo(request):
 def react_app(request, path=""):
     index_path = settings.REACT_BUILD_DIR / "index.html"
     if not index_path.exists():
+        logger.error("React build index.html nao encontrado em %s", index_path)
         raise Http404("React build nao encontrado. Execute npm run build.")
-    return FileResponse(index_path.open("rb"), content_type="text/html")
+    try:
+        return FileResponse(index_path.open("rb"), content_type="text/html")
+    except OSError:
+        logger.exception("Falha ao servir React index.html em %s", index_path)
+        raise Http404("React build nao pode ser carregado.")
