@@ -180,9 +180,7 @@ def _get_or_create_person(access_request, *, person_id=None, create_new_person=F
 
 @transaction.atomic
 def approve_access_request(access_request, *, reviewed_by, person_id=None, create_new_person=False):
-    access_request = AccessRequest.objects.select_for_update().select_related("usuario").get(
-        pk=access_request.pk
-    )
+    access_request = AccessRequest.objects.select_for_update().get(pk=access_request.pk)
     _ensure_pending(access_request)
     _ensure_valid_access_request_whatsapp(access_request)
 
@@ -195,7 +193,11 @@ def approve_access_request(access_request, *, reviewed_by, person_id=None, creat
         if hasattr(person, "user_account"):
             raise PersonAlreadyHasUserError
 
-        usuario = access_request.usuario
+        usuario = None
+        if access_request.usuario_id:
+            user_model = get_user_model()
+            usuario = user_model.objects.select_for_update().get(pk=access_request.usuario_id)
+
         if usuario is None:
             first_name, last_name = split_legacy_name(person.full_name)
             user_model = get_user_model()

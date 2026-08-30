@@ -12,7 +12,9 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import Client, TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -53,6 +55,7 @@ from .permissions import (
     usuario_tem_acesso_total_pastoral,
     usuario_tem_acesso_total_sistema,
 )
+from .services import approve_access_request
 
 
 def assign_role(usuario, group_name):
@@ -1383,6 +1386,30 @@ class AdminAccessRequestApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         person = Person.objects.get(full_name="Maria Silva")
+        usuario = self.user_model.objects.get(username="maria.solicitante")
+        self.assertEqual(usuario.person, person)
+        self.assertTrue(usuario.is_active)
+
+    def test_aprovacao_nao_faz_join_nullable_no_lock_da_solicitacao(self):
+        access_request = self.create_new_flow_request()
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+
+        with CaptureQueriesContext(connection) as queries:
+            approve_access_request(access_request, reviewed_by=self.superuser, person_id=person.pk)
+
+        access_request_queries = [
+            query["sql"].lower()
+            for query in queries.captured_queries
+            if 'from "usuarios_accessrequest"' in query["sql"].lower()
+        ]
+        self.assertTrue(access_request_queries)
+        self.assertFalse(
+            any('"usuarios_usuario"' in query for query in access_request_queries),
+            "O lock da AccessRequest nao deve fazer JOIN com Usuario nullable.",
+        )
+
+        access_request.refresh_from_db()
+        self.assertEqual(access_request.status, AccessRequest.Status.APPROVED)
         usuario = self.user_model.objects.get(username="maria.solicitante")
         self.assertEqual(usuario.person, person)
         self.assertTrue(usuario.is_active)
