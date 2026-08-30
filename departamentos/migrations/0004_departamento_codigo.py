@@ -50,6 +50,7 @@ class Migration(migrations.Migration):
             name="codigo",
             field=models.SlugField(
                 blank=True,
+                db_index=False,
                 default="",
                 help_text=(
                     "Identificador interno estavel usado por permissoes e integracoes. "
@@ -66,6 +67,7 @@ class Migration(migrations.Migration):
             name="codigo",
             field=models.SlugField(
                 blank=True,
+                db_index=False,
                 help_text=(
                     "Identificador interno estavel usado por permissoes e integracoes. "
                     "Se ficar vazio, o sistema gera automaticamente."

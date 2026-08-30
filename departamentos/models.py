@@ -31,6 +31,7 @@ class Departamento(models.Model):
         "Codigo interno",
         max_length=60,
         unique=True,
+        db_index=False,
         blank=True,
         help_text=(
             "Identificador interno estavel usado por permissoes e integracoes. "
