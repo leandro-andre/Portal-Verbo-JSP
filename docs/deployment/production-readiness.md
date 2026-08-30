@@ -85,10 +85,7 @@ WhiteNoise nao serve media de usuarios como solucao persistente.
 Build esperado:
 
 ```bash
-cd frontend
-npm ci
 npm run build
-cd ..
 python manage.py collectstatic --noinput
 ```
 
@@ -170,7 +167,7 @@ Sequencia esperada para PVV-043:
 
 1. Instalar dependencias Python.
 2. Instalar dependencias Node.
-3. Build React.
+3. Build React via `npm run build` na raiz, que executa `npm ci` dentro de `frontend/`.
 4. `python manage.py collectstatic --noinput`.
 5. `python manage.py migrate`.
 6. Iniciar Gunicorn.

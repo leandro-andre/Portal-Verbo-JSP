@@ -119,10 +119,7 @@ Sem `DATABASE_URL`, o desenvolvimento local continua usando SQLite. Em producao,
 Build/execucao esperados para producao:
 
 ```powershell
-cd frontend
-npm ci
 npm run build
-cd ..
 python manage.py collectstatic --noinput
 python manage.py migrate
 gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
