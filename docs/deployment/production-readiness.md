@@ -6,7 +6,7 @@ Primeiro ambiente online planejado:
 
 - Railway para Django + React no mesmo servico.
 - Railway PostgreSQL para banco de producao.
-- Cloudflare R2 para media/fotos em feature futura.
+- Cloudflare R2 para media/fotos em producao.
 - GitHub como origem do deploy.
 - HTTPS via Railway/dominio configurado.
 - Same-origin sempre que possivel:
@@ -14,9 +14,9 @@ Primeiro ambiente online planejado:
   - `/api/`: Django API
   - `/admin/`: Django Admin
   - `/static/`: static files
-  - `/media/`: local apenas em desenvolvimento; producao aguardara R2
+  - `/media/`: local apenas em desenvolvimento; producao retorna URLs assinadas do R2
 
-Esta etapa nao executa deploy, nao cria Railway, nao cria PostgreSQL online, nao configura R2 e nao migra dados.
+Esta etapa nao executa deploy, nao cria Railway, nao cria PostgreSQL online, nao altera recursos Cloudflare/R2 e nao migra dados.
 
 ## Ambientes
 
@@ -57,6 +57,11 @@ Variaveis principais:
 - `DJANGO_USE_X_FORWARDED_PROTO`
 - `DJANGO_SECURE_SSL_REDIRECT`
 - `DJANGO_SECURE_HSTS_SECONDS`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+- `R2_ENDPOINT_URL`
+- `R2_QUERYSTRING_EXPIRE`
 
 `DJANGO_SECRET_KEY` nunca deve ser versionada com valor real.
 
@@ -178,13 +183,24 @@ Migrations devem rodar como etapa controlada de deploy/release, antes de servir 
 
 PVV-040 adicionou foto em `Person`.
 
-Nesta feature, R2 nao foi configurado. Media local continua adequada para desenvolvimento, mas Railway filesystem nao e solucao definitiva para uploads de usuarios.
+MEDIA usa o storage default do Django:
 
-Bloqueio antes de liberar fotos em producao:
+- sem variaveis R2: `FileSystemStorage`, adequado para desenvolvimento local;
+- com `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` e `R2_ENDPOINT_URL`: `storages.backends.s3.S3Storage` apontando para Cloudflare R2.
 
-- configurar storage persistente em Cloudflare R2;
-- validar upload, URL publica/assinada e delete;
-- testar persistencia entre deploys.
+Se qualquer variavel R2 obrigatoria estiver presente sem as demais, o Django falha cedo com mensagem de configuracao incompleta. Credenciais reais devem existir apenas como variaveis de ambiente no Railway/ambiente de execucao.
+
+STATIC continua no WhiteNoise e nao deve ser enviado para R2.
+
+O bucket R2 permanece privado. URLs de `photo_url` sao temporarias e assinadas pelo `django-storages`, com expiracao padrao de 3600 segundos ajustavel por `R2_QUERYSTRING_EXPIRE`. Nao depender de `r2.dev` nem tornar o bucket publico sem decisao explicita.
+
+Confirmacao segura do storage ativo, sem imprimir segredos:
+
+```bash
+python manage.py shell -c "from django.core.files.storage import storages; print(storages['default'].__class__.__module__ + '.' + storages['default'].__class__.__name__)"
+```
+
+Em producao/R2 o resultado esperado contem `storages.backends.s3.S3Storage`.
 
 ## Checklist PVV-043 Railway
 

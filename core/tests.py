@@ -12,8 +12,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import clear_url_caches, reverse
 from django.utils import timezone
+from storages.backends.s3 import S3Storage
 
 from config.env import env_bool, env_list
+from config.storage import build_media_storage_config
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
 from escalas.models import Escala
 from pessoas.models import Person
@@ -51,6 +53,63 @@ class ProductionReadinessTests(TestCase):
             self.assertFalse(env_bool("FLAG_FALSE", True))
             self.assertTrue(env_bool("FLAG_TRUE", False))
             self.assertEqual(env_list("HOSTS"), ["localhost", "127.0.0.1", "testserver"])
+
+    def test_media_storage_faz_fallback_local_sem_r2(self):
+        config = build_media_storage_config(lambda name, default=None: default)
+
+        self.assertEqual(config["BACKEND"], "django.core.files.storage.FileSystemStorage")
+        self.assertNotIn("OPTIONS", config)
+
+    def test_media_storage_usa_r2_com_configuracao_completa(self):
+        values = {
+            "R2_ACCESS_KEY_ID": "access-key-test",
+            "R2_SECRET_ACCESS_KEY": "secret-key-test",
+            "R2_BUCKET_NAME": "portal-verbo-media",
+            "R2_ENDPOINT_URL": "https://example-account.r2.cloudflarestorage.com",
+        }
+
+        config = build_media_storage_config(lambda name, default=None: values.get(name, default))
+
+        self.assertEqual(config["BACKEND"], "storages.backends.s3.S3Storage")
+        self.assertEqual(config["OPTIONS"]["bucket_name"], "portal-verbo-media")
+        self.assertEqual(config["OPTIONS"]["endpoint_url"], values["R2_ENDPOINT_URL"])
+        self.assertEqual(config["OPTIONS"]["region_name"], "auto")
+        self.assertEqual(config["OPTIONS"]["signature_version"], "s3v4")
+        self.assertEqual(config["OPTIONS"]["default_acl"], "private")
+        self.assertFalse(config["OPTIONS"]["file_overwrite"])
+        self.assertTrue(config["OPTIONS"]["querystring_auth"])
+
+    def test_media_storage_r2_gera_url_assinada_para_bucket_privado(self):
+        storage = S3Storage(
+            access_key="access-key-test",
+            secret_key="secret-key-test",
+            bucket_name="portal-verbo-media",
+            endpoint_url="https://example-account.r2.cloudflarestorage.com",
+            region_name="auto",
+            signature_version="s3v4",
+            default_acl="private",
+            querystring_auth=True,
+            querystring_expire=3600,
+        )
+
+        url = storage.url("people/photos/1/foto.jpg")
+
+        self.assertTrue(url.startswith("https://example-account.r2.cloudflarestorage.com/"))
+        self.assertIn("/portal-verbo-media/people/photos/1/foto.jpg?", url)
+        self.assertIn("X-Amz-Expires=3600", url)
+        self.assertNotIn("secret-key-test", url)
+
+    def test_media_storage_r2_incompleto_falha_sem_expor_segredos(self):
+        values = {
+            "R2_ACCESS_KEY_ID": "access-key-test",
+            "R2_SECRET_ACCESS_KEY": "secret-key-test",
+        }
+
+        with self.assertRaisesMessage(RuntimeError, "R2_BUCKET_NAME, R2_ENDPOINT_URL") as context:
+            build_media_storage_config(lambda name, default=None: values.get(name, default))
+
+        self.assertNotIn("access-key-test", str(context.exception))
+        self.assertNotIn("secret-key-test", str(context.exception))
 
     def test_production_settings_exigem_database_url(self):
         env = os.environ.copy()

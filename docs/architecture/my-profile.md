@@ -6,10 +6,10 @@
 
 ## Modelo
 
-`Person.photo` armazena a foto em storage local durante o desenvolvimento:
+`Person.photo` usa o storage default de MEDIA configurado no Django:
 
-- `MEDIA_ROOT`: definido nos settings do projeto.
-- `MEDIA_URL`: servido em `DEBUG` por `config.urls`.
+- desenvolvimento local sem R2: `FileSystemStorage`, `MEDIA_ROOT` e `MEDIA_URL`;
+- producao com R2 completo: Cloudflare R2 via backend S3 do `django-storages`.
 - Upload path: `people/photos/<person_id>/<uuid>.<ext>`.
 
 O campo aceita vazio/nulo. Remover a foto limpa apenas `Person.photo`; a `Person` nunca e excluida por esse fluxo.
@@ -60,6 +60,11 @@ O upload de foto aceita:
 Limite: 5MB.
 
 Ao substituir ou remover foto, o arquivo anterior e apagado do storage quando ainda existe e pertence ao campo anterior.
+
+Em producao, o bucket R2 permanece privado. `photo_url` e gerada por `photo.url`;
+com R2 isso resulta em uma URL temporaria assinada pelo storage, com expiracao
+padrao de 3600 segundos (`R2_QUERYSTRING_EXPIRE`). Nao habilitar `r2.dev`
+nem dominio publico sem decisao explicita de infraestrutura.
 
 ## Frontend
 
