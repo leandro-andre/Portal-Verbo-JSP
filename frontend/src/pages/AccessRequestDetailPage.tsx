@@ -11,6 +11,7 @@ import {
 } from '../hooks/useAccessRequests'
 import { useCan } from '../hooks/useAuth'
 import type { AccessRequest, AccessRequestPerson } from '../types/accessRequest'
+import { formatBrazilianMobile } from '../utils/phone'
 
 type IdentityResolution =
   | { type: 'existing'; personId: number }
@@ -29,17 +30,6 @@ function formatDate(value?: string | null) {
   }
 
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
-}
-
-function formatBrazilianPhone(value?: string | null) {
-  const digits = (value || '').replace(/\D/g, '')
-  if (digits.length === 11) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  return value || '-'
 }
 
 function DetailItem({ label, value }: { label: string; value: ReactNode }) {
@@ -67,7 +57,7 @@ function CandidateCard({
         <strong>{candidate.display_name}</strong>
         <span>{formatDate(candidate.birth_date)}</span>
         <span>{candidate.email || '-'}</span>
-        <span>{formatBrazilianPhone(candidate.phone)}</span>
+        <span>{formatBrazilianMobile(candidate.phone) || '-'}</span>
       </span>
     </label>
   )
@@ -194,6 +184,10 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
         setDialogError('Esta solicitacao ja foi revisada.')
         return
       }
+      if (error.details.code === 'INVALID_WHATSAPP') {
+        setDialogError('Nao foi possivel aprovar: o celular/WhatsApp informado e invalido.')
+        return
+      }
     }
 
     setDialogError('Nao foi possivel processar a solicitacao. Tente novamente.')
@@ -270,7 +264,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
             <DetailItem label="Nome completo" value={request.full_name} />
             <DetailItem label="Data de nascimento" value={formatDate(request.birth_date)} />
             <DetailItem label="E-mail" value={request.email} />
-            <DetailItem label="Telefone" value={formatBrazilianPhone(request.phone)} />
+            <DetailItem label="Celular / WhatsApp" value={formatBrazilianMobile(request.phone) || '-'} />
             <DetailItem label="Solicitado em" value={formatDate(request.created_at)} />
           </dl>
         </section>
@@ -325,7 +319,7 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
                 />
                 <span>
                   <strong>Criar nova pessoa</strong>
-                  <span>Usar nome, nascimento, e-mail e telefone informados nesta solicitacao.</span>
+                  <span>Usar nome, nascimento, e-mail e celular/WhatsApp informados nesta solicitacao.</span>
                 </span>
               </label>
             </div>

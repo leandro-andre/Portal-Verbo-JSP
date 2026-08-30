@@ -210,6 +210,14 @@ class AccessRequestApiTests(TestCase):
             "message": "Solicitacao recebida.",
         })
 
+    def test_criacao_com_phone_formatado_normaliza_whatsapp(self):
+        response = self.client.post(self.url, self.valid_payload(), content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        access_request = AccessRequest.objects.select_related("usuario").get()
+        self.assertEqual(access_request.phone, "81999999999")
+        self.assertEqual(access_request.usuario.telefone, "81999999999")
+
     def test_status_padrao_pending(self):
         self.client.post(self.url, self.valid_payload(), content_type="application/json")
 
@@ -321,6 +329,26 @@ class AccessRequestApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("phone", response.json())
+
+    def test_phone_com_10_digitos_e_rejeitado(self):
+        payload = self.valid_payload()
+        payload["phone"] = "8187654321"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone", response.json())
+        self.assertFalse(AccessRequest.objects.exists())
+
+    def test_phone_sem_nono_digito_e_rejeitado(self):
+        payload = self.valid_payload()
+        payload["phone"] = "81876543210"
+
+        response = self.client.post(self.url, payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone", response.json())
+        self.assertFalse(AccessRequest.objects.exists())
 
     def test_data_futura_rejeitada(self):
         payload = self.valid_payload()
@@ -1246,7 +1274,7 @@ class AdminAccessRequestApiTests(TestCase):
             full_name="Aprovada",
             birth_date=date(1980, 1, 1),
             email="aprovada@example.com",
-            phone="81111111111",
+            phone="81911111111",
             status=AccessRequest.Status.APPROVED,
         )
         self.client.force_login(self.superuser)
@@ -1260,7 +1288,7 @@ class AdminAccessRequestApiTests(TestCase):
             full_name="Aprovada",
             birth_date=date(1980, 1, 1),
             email="aprovada@example.com",
-            phone="81111111111",
+            phone="81911111111",
             status=AccessRequest.Status.APPROVED,
         )
         self.client.force_login(self.superuser)
@@ -1275,7 +1303,7 @@ class AdminAccessRequestApiTests(TestCase):
             full_name="Rejeitada",
             birth_date=date(1980, 1, 1),
             email="rejeitada@example.com",
-            phone="81222222222",
+            phone="81922222222",
             status=AccessRequest.Status.REJECTED,
         )
         self.client.force_login(self.superuser)
@@ -1358,6 +1386,51 @@ class AdminAccessRequestApiTests(TestCase):
         usuario = self.user_model.objects.get(username="maria.solicitante")
         self.assertEqual(usuario.person, person)
         self.assertTrue(usuario.is_active)
+
+    def test_aprovar_solicitacao_legada_com_whatsapp_invalido_retorna_400_sem_parcial(self):
+        access_request = self.create_new_flow_request()
+        AccessRequest.objects.filter(pk=access_request.pk).update(phone="8187654321")
+        usuario_id = access_request.usuario_id
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "INVALID_WHATSAPP")
+        access_request.refresh_from_db()
+        usuario = self.user_model.objects.get(pk=usuario_id)
+        self.assertEqual(access_request.status, AccessRequest.Status.PENDING)
+        self.assertIsNone(access_request.person)
+        self.assertIsNone(usuario.person)
+        self.assertFalse(usuario.is_active)
+        self.assertFalse(Person.objects.exists())
+
+    def test_aprovar_solicitacao_legada_invalida_com_person_existente_nao_ativa_usuario(self):
+        access_request = self.create_new_flow_request()
+        AccessRequest.objects.filter(pk=access_request.pk).update(phone="8187654321")
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        usuario_id = access_request.usuario_id
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[access_request.pk]),
+            {"person_id": person.pk},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "INVALID_WHATSAPP")
+        access_request.refresh_from_db()
+        usuario = self.user_model.objects.get(pk=usuario_id)
+        self.assertEqual(access_request.status, AccessRequest.Status.PENDING)
+        self.assertIsNone(access_request.person)
+        self.assertIsNone(usuario.person)
+        self.assertFalse(usuario.is_active)
+        self.assertEqual(Person.objects.count(), 1)
 
     def test_login_com_credenciais_do_novo_fluxo_so_funciona_apos_aprovacao(self):
         access_request = self.create_new_flow_request()

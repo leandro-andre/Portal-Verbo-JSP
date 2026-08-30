@@ -1,22 +1,10 @@
-import re
 import uuid
 from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models
 
-
-def normalize_brazilian_mobile(value):
-    return re.sub(r"\D+", "", value or "")
-
-
-def validate_brazilian_mobile(value):
-    digits = normalize_brazilian_mobile(value)
-    if not digits:
-        return ""
-    if len(digits) != 11 or digits[2] != "9":
-        raise ValidationError("Informe um celular brasileiro valido com 11 digitos.")
-    return digits
+from .validators import validate_brazilian_mobile
 
 
 def person_photo_upload_to(instance, filename):

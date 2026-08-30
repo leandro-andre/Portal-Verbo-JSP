@@ -292,7 +292,7 @@ class PublicAccessRequestCreateView(APIView):
                     "code": PENDING_ACCESS_REQUEST_EXISTS_CODE,
                     "message": (
                         "Ja existe uma solicitacao de acesso pendente "
-                        "para este e-mail ou telefone."
+                        "para este e-mail ou celular/WhatsApp."
                     ),
                 },
                 status=status.HTTP_409_CONFLICT,
@@ -379,7 +379,7 @@ class AdminAccessRequestApproveView(APIView):
         except AccessRequestError as exc:
             return Response(
                 {"code": exc.code, "message": exc.message},
-                status=status.HTTP_409_CONFLICT,
+                status=getattr(exc, "http_status", status.HTTP_409_CONFLICT),
             )
 
         response_data = AdminAccessRequestSerializer(approved_request).data

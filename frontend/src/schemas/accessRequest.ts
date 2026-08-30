@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isValidBrazilianMobile } from '../utils/phone'
 
 function isValidDate(value: string) {
   const [year, month, day] = value.split('-').map(Number)
@@ -41,7 +42,8 @@ export const accessRequestSchema = z.object({
   phone: z
     .string()
     .trim()
-    .min(1, 'Informe o telefone.'),
+    .min(1, 'Informe o celular/WhatsApp.')
+    .refine(isValidBrazilianMobile, 'Informe um celular/WhatsApp valido com DDD.'),
   username: z
     .string()
     .trim()

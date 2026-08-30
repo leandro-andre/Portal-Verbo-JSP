@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from pessoas.validators import validate_brazilian_mobile
+
 
 class Usuario(AbstractUser):
     class StatusEclesiastico(models.TextChoices):
@@ -175,7 +177,12 @@ class AccessRequest(models.Model):
         if not self.email:
             errors["email"] = "Informe o e-mail."
         if not self.phone:
-            errors["phone"] = "Informe o telefone."
+            errors["phone"] = "Informe um celular/WhatsApp valido com DDD."
+        else:
+            try:
+                self.phone = validate_brazilian_mobile(self.phone)
+            except ValidationError as exc:
+                errors["phone"] = exc.messages
 
         if errors:
             raise ValidationError(errors)

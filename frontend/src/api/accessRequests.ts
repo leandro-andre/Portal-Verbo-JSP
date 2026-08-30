@@ -107,6 +107,8 @@ function isAccessRequestBusinessErrorResponse(
       value.code === 'PERSON_ALREADY_HAS_USER' ||
       value.code === 'ACCESS_REQUEST_NOT_PENDING' ||
       value.code === 'PERSON_NOT_FOUND' ||
+      value.code === 'INVALID_WHATSAPP' ||
+      value.code === 'ACCESS_REQUEST_APPROVAL_INTEGRITY_ERROR' ||
       value.code === 'USERNAME_ALREADY_EXISTS'
     )
   )
@@ -155,7 +157,7 @@ async function handleAdminResponse(response: Response): Promise<unknown> {
     throw new AccessRequestHttpError(404, 'Solicitacao nao encontrada.')
   }
 
-  if (response.status === 409 && isAccessRequestBusinessErrorResponse(data)) {
+  if ((response.status === 400 || response.status === 409) && isAccessRequestBusinessErrorResponse(data)) {
     throw new AccessRequestBusinessError(data)
   }
 

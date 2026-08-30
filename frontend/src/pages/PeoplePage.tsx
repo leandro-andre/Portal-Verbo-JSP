@@ -73,11 +73,11 @@ function PeoplePage() {
           <span className="search-field__icon" aria-hidden="true">
             <Search size={18} />
           </span>
-          <span className="sr-only">Buscar por nome, e-mail ou telefone</span>
+          <span className="sr-only">Buscar por nome, e-mail ou celular/WhatsApp</span>
           <input
             id="people-search"
             type="search"
-            placeholder="Buscar por nome, e-mail ou telefone..."
+            placeholder="Buscar por nome, e-mail ou celular/WhatsApp..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />

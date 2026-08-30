@@ -10,7 +10,8 @@ from church_journey.selectors import (
     can_create_membership,
 )
 
-from .models import Person, PersonUnavailability, validate_brazilian_mobile
+from .models import Person, PersonUnavailability
+from .validators import validate_brazilian_mobile
 
 
 def get_photo_url(obj, request=None):

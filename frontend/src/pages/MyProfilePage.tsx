@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Camera, RefreshCcw, Save, Trash2, UserRound } from 'lucide-react'
 import { MyProfileError } from '../api/profile'
 import { useMyProfile, useMyProfileMutations } from '../hooks/useMyProfile'
+import { formatBrazilianMobile } from '../utils/phone'
 
 function initials(name: string) {
   return name
@@ -38,7 +39,9 @@ function MyProfilePage() {
   const photoUrl = preview || person?.photo_url || null
   const displayName = person?.display_name || data?.account.display_name || 'Usuario'
   const isSaving = mutations.update.isPending || mutations.uploadPhoto.isPending || mutations.deletePhoto.isPending
-  const phone = person && phoneDraft?.personId === person.id ? phoneDraft.value : person?.phone ?? ''
+  const phone = person && phoneDraft?.personId === person.id
+    ? phoneDraft.value
+    : formatBrazilianMobile(person?.phone ?? '')
 
   useEffect(() => () => {
     if (preview) URL.revokeObjectURL(preview)
@@ -121,7 +124,7 @@ function MyProfilePage() {
       <div className="page-heading">
         <div>
           <h1>Meu Perfil</h1>
-          <p className="page-heading__description">Atualize seu telefone e mantenha sua foto visivel para a equipe.</p>
+          <p className="page-heading__description">Atualize seu celular/WhatsApp e mantenha sua foto visivel para a equipe.</p>
         </div>
       </div>
 
@@ -177,10 +180,10 @@ function MyProfilePage() {
           <h2>Contato</h2>
           <form className="department-inline-form my-profile-form" onSubmit={handleSubmit}>
             <label className="form-field">
-              <span>Telefone</span>
+              <span>Celular / WhatsApp</span>
               <input
                 value={phone}
-                onChange={(event) => setPhoneDraft({ personId: person.id, value: event.target.value })}
+                onChange={(event) => setPhoneDraft({ personId: person.id, value: formatBrazilianMobile(event.target.value) })}
                 aria-invalid={Boolean(phoneError)}
                 placeholder="(81) 99999-9999"
               />
@@ -188,7 +191,7 @@ function MyProfilePage() {
             </label>
             <button className="button button--primary" type="submit" disabled={isSaving}>
               <Save size={17} aria-hidden="true" />
-              {mutations.update.isPending ? 'Salvando...' : 'Salvar telefone'}
+              {mutations.update.isPending ? 'Salvando...' : 'Salvar WhatsApp'}
             </button>
           </form>
         </section>

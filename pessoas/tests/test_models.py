@@ -16,6 +16,32 @@ from pessoas.availability import (
     is_person_available,
 )
 from pessoas.models import Person, PersonUnavailability
+from pessoas.validators import normalize_brazilian_mobile, validate_brazilian_mobile
+
+
+class BrazilianMobileValidatorTests(TestCase):
+    def test_numero_com_11_digitos_e_valido(self):
+        self.assertEqual(validate_brazilian_mobile("81987654321"), "81987654321")
+
+    def test_numero_formatado_e_normalizado(self):
+        self.assertEqual(validate_brazilian_mobile("(81) 98765-4321"), "81987654321")
+
+    def test_numero_com_10_digitos_e_invalido(self):
+        with self.assertRaises(ValidationError):
+            validate_brazilian_mobile("8187654321")
+
+    def test_numero_com_11_digitos_sem_nono_digito_e_invalido(self):
+        with self.assertRaises(ValidationError):
+            validate_brazilian_mobile("81876543210")
+
+    def test_numero_sem_ddd_e_invalido(self):
+        with self.assertRaises(ValidationError):
+            validate_brazilian_mobile("987654321")
+
+    def test_caracteres_de_formatacao_sao_removidos_sem_aceitar_numero_invalido(self):
+        self.assertEqual(normalize_brazilian_mobile("(81) 98765-4321"), "81987654321")
+        with self.assertRaises(ValidationError):
+            validate_brazilian_mobile("celular: 9876")
 
 
 class PersonModelTests(TestCase):

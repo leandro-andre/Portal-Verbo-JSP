@@ -3,12 +3,14 @@ import unicodedata
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 
 from pessoas.models import Person
+from pessoas.validators import validate_brazilian_mobile
 
 from .models import AccessRequest
 
@@ -31,6 +33,18 @@ class PersonAlreadyHasUserError(AccessRequestError):
 class PersonNotFoundError(AccessRequestError):
     code = "PERSON_NOT_FOUND"
     message = "A pessoa selecionada nao foi encontrada."
+
+
+class InvalidAccessRequestWhatsappError(AccessRequestError):
+    code = "INVALID_WHATSAPP"
+    message = "O celular/WhatsApp informado na solicitacao e invalido."
+    http_status = 400
+
+
+class AccessRequestApprovalIntegrityError(AccessRequestError):
+    code = "ACCESS_REQUEST_APPROVAL_INTEGRITY_ERROR"
+    message = "Nao foi possivel aprovar a solicitacao com os dados informados."
+    http_status = 409
 
 
 class UserAccessError(Exception):
@@ -134,6 +148,13 @@ def _ensure_pending(access_request):
         raise AccessRequestNotPendingError
 
 
+def _ensure_valid_access_request_whatsapp(access_request):
+    try:
+        access_request.phone = validate_brazilian_mobile(access_request.phone)
+    except DjangoValidationError as exc:
+        raise InvalidAccessRequestWhatsappError from exc
+
+
 def _get_or_create_person(access_request, *, person_id=None, create_new_person=False):
     if person_id:
         try:
@@ -141,12 +162,19 @@ def _get_or_create_person(access_request, *, person_id=None, create_new_person=F
         except Person.DoesNotExist as exc:
             raise PersonNotFoundError from exc
     if create_new_person:
-        return Person.objects.create(
-            full_name=access_request.full_name,
-            birth_date=access_request.birth_date,
-            email=access_request.email,
-            phone=access_request.phone,
-        )
+        try:
+            return Person.objects.create(
+                full_name=access_request.full_name,
+                birth_date=access_request.birth_date,
+                email=access_request.email,
+                phone=access_request.phone,
+            )
+        except DjangoValidationError as exc:
+            if "phone" in getattr(exc, "message_dict", {}):
+                raise InvalidAccessRequestWhatsappError from exc
+            raise AccessRequestApprovalIntegrityError from exc
+        except IntegrityError as exc:
+            raise AccessRequestApprovalIntegrityError from exc
     raise ValueError("Resolva a identidade antes de aprovar a solicitacao.")
 
 
@@ -156,49 +184,53 @@ def approve_access_request(access_request, *, reviewed_by, person_id=None, creat
         pk=access_request.pk
     )
     _ensure_pending(access_request)
+    _ensure_valid_access_request_whatsapp(access_request)
 
     person = _get_or_create_person(
         access_request,
         person_id=person_id,
         create_new_person=create_new_person,
     )
-    if hasattr(person, "user_account"):
-        raise PersonAlreadyHasUserError
+    try:
+        if hasattr(person, "user_account"):
+            raise PersonAlreadyHasUserError
 
-    usuario = access_request.usuario
-    if usuario is None:
-        first_name, last_name = split_legacy_name(person.full_name)
-        user_model = get_user_model()
-        usuario = user_model(
-            username=generate_username(person.full_name),
-            person=person,
-            first_name=first_name,
-            last_name=last_name,
-            email=person.email,
-            telefone=person.phone,
-            is_active=False,
-        )
-        usuario.set_unusable_password()
-        usuario.save()
-        access_request.usuario = usuario
-    else:
-        first_name, last_name = split_legacy_name(person.full_name)
-        usuario.person = person
-        usuario.first_name = first_name
-        usuario.last_name = last_name
-        usuario.email = person.email or access_request.email
-        usuario.telefone = person.phone or access_request.phone
-        usuario.is_active = True
-        usuario.save(
-            update_fields=[
-                "person",
-                "first_name",
-                "last_name",
-                "email",
-                "telefone",
-                "is_active",
-            ]
-        )
+        usuario = access_request.usuario
+        if usuario is None:
+            first_name, last_name = split_legacy_name(person.full_name)
+            user_model = get_user_model()
+            usuario = user_model(
+                username=generate_username(person.full_name),
+                person=person,
+                first_name=first_name,
+                last_name=last_name,
+                email=person.email,
+                telefone=person.phone,
+                is_active=False,
+            )
+            usuario.set_unusable_password()
+            usuario.save()
+            access_request.usuario = usuario
+        else:
+            first_name, last_name = split_legacy_name(person.full_name)
+            usuario.person = person
+            usuario.first_name = first_name
+            usuario.last_name = last_name
+            usuario.email = person.email or access_request.email
+            usuario.telefone = person.phone or access_request.phone
+            usuario.is_active = True
+            usuario.save(
+                update_fields=[
+                    "person",
+                    "first_name",
+                    "last_name",
+                    "email",
+                    "telefone",
+                    "is_active",
+                ]
+            )
+    except IntegrityError as exc:
+        raise AccessRequestApprovalIntegrityError from exc
 
     access_request.person = person
     access_request.status = AccessRequest.Status.APPROVED

@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { AccessRequest } from '../../types/accessRequest'
+import { formatBrazilianMobile } from '../../utils/phone'
 import AccessRequestStatusBadge from './AccessRequestStatusBadge'
 
 type AccessRequestsTableProps = {
@@ -19,17 +20,6 @@ function formatDate(value: string) {
   }
 
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
-}
-
-function formatBrazilianPhone(value: string) {
-  const digits = value.replace(/\D/g, '')
-  if (digits.length === 11) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  return value || '-'
 }
 
 function AccessRequestsTable({ accessRequests }: AccessRequestsTableProps) {
@@ -59,7 +49,7 @@ function AccessRequestsTable({ accessRequests }: AccessRequestsTableProps) {
               <td>
                 <div className="contact-cell">
                   <span>{accessRequest.email}</span>
-                  <span>{formatBrazilianPhone(accessRequest.phone)}</span>
+                  <span>{formatBrazilianMobile(accessRequest.phone) || '-'}</span>
                 </div>
               </td>
               <td>{formatDate(accessRequest.birth_date)}</td>

@@ -93,6 +93,8 @@ export type AccessRequestBusinessErrorResponse = {
     | 'PERSON_ALREADY_HAS_USER'
     | 'ACCESS_REQUEST_NOT_PENDING'
     | 'PERSON_NOT_FOUND'
+    | 'INVALID_WHATSAPP'
+    | 'ACCESS_REQUEST_APPROVAL_INTEGRITY_ERROR'
     | 'USERNAME_ALREADY_EXISTS'
   message: string
 }

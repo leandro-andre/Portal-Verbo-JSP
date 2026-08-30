@@ -21,6 +21,6 @@ export function formatBrazilianMobile(value?: string | null) {
 }
 
 export function isValidBrazilianMobile(value: string) {
-  const digits = normalizeBrazilianMobile(value)
+  const digits = onlyDigits(value)
   return digits.length === 11 && digits[2] === '9'
 }

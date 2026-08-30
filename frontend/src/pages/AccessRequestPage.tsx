@@ -13,27 +13,10 @@ import {
   type AccessRequestFormData,
   type AccessRequestFormValues,
 } from '../schemas/accessRequest'
+import { formatBrazilianMobile } from '../utils/phone'
 import { Link } from 'react-router-dom'
 
 type SetError = UseFormSetError<AccessRequestFormValues>
-
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, '')
-}
-
-function formatBrazilianPhone(value: string) {
-  const digits = onlyDigits(value).slice(0, 11)
-  if (digits.length <= 2) {
-    return digits ? `(${digits}` : ''
-  }
-  if (digits.length <= 6) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-  }
-  if (digits.length <= 10) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
-  }
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-}
 
 function AccessRequestPage() {
   const createRequest = useCreateAccessRequest()
@@ -96,7 +79,7 @@ function AccessRequestPage() {
             type: 'server',
           })
         } else {
-          setPendingRequestError('Ja existe uma solicitacao pendente para este e-mail ou telefone.')
+          setPendingRequestError('Ja existe uma solicitacao pendente para este e-mail ou celular/WhatsApp.')
         }
         return
       }
@@ -207,7 +190,7 @@ function AccessRequestPage() {
               </div>
 
               <div className="field-group">
-                <label htmlFor="access_phone">Telefone *</label>
+                <label htmlFor="access_phone">Celular / WhatsApp *</label>
                 <input
                   id="access_phone"
                   type="tel"
@@ -216,7 +199,7 @@ function AccessRequestPage() {
                   aria-describedby={errors.phone ? 'access_phone-error' : undefined}
                   {...register('phone', {
                     onChange: (event) => {
-                      setValue('phone', formatBrazilianPhone(event.target.value), {
+                      setValue('phone', formatBrazilianMobile(event.target.value), {
                         shouldDirty: true,
                         shouldValidate: true,
                       })

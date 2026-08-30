@@ -11,7 +11,7 @@ class RegistroForm(UserCreationForm):
     first_name = forms.CharField(label="Nome", max_length=150, required=True)
     last_name = forms.CharField(label="Sobrenome", max_length=150, required=True)
     email = forms.EmailField(label="E-mail", required=True)
-    telefone = forms.CharField(label="Telefone", max_length=20, required=False)
+    telefone = forms.CharField(label="Celular / WhatsApp", max_length=20, required=False)
     person = forms.ModelChoiceField(
         label="Pessoa existente",
         queryset=Person.objects.all(),
@@ -61,6 +61,7 @@ class PerfilForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["telefone"].label = "Celular / WhatsApp"
         for field in self.fields:
             if field != 'data_nascimento':
                 self.fields[field].widget.attrs.update({'class': 'form-control'})

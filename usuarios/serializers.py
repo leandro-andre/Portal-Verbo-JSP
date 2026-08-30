@@ -1,5 +1,3 @@
-import re
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -8,18 +6,14 @@ from PIL import Image, UnidentifiedImageError
 
 from church_journey.selectors import get_discipleship_completed_at, has_completed_discipleship
 from departamentos.models import DepartmentMembership
-from pessoas.models import Person, validate_brazilian_mobile
+from pessoas.models import Person
 from pessoas.serializers import get_photo_url
+from pessoas.validators import validate_brazilian_mobile
 from .services import get_access_status
 from .models import AccessRequest
 
 
 USERNAME_ALREADY_EXISTS_CODE = "USERNAME_ALREADY_EXISTS"
-
-
-def normalize_phone(value):
-    digits = re.sub(r"\D+", "", value or "")
-    return digits or (value or "").strip()
 
 
 class PublicAccessRequestCreateSerializer(serializers.ModelSerializer):
@@ -48,9 +42,13 @@ class PublicAccessRequestCreateSerializer(serializers.ModelSerializer):
         username = user_model.normalize_username((attrs.get("username") or "").strip())
         password = attrs.get("password") or ""
         password_confirm = attrs.get("password_confirm") or ""
-        attrs["phone"] = normalize_phone(attrs.get("phone"))
+        try:
+            attrs["phone"] = validate_brazilian_mobile(attrs.get("phone"))
+        except DjangoValidationError as exc:
+            errors = {"phone": list(exc.messages)}
+        else:
+            errors = {}
 
-        errors = {}
         username_field = user_model._meta.get_field(user_model.USERNAME_FIELD)
         if not username:
             errors["username"] = ["Informe o usuario."]
