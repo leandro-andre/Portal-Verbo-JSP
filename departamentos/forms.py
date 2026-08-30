@@ -10,25 +10,18 @@ from usuarios.permissions import usuario_pode_ser_escalado_departamento
 class DepartamentoForm(forms.ModelForm):
     class Meta:
         model = Departamento
-        fields = ["nome", "codigo", "descricao", "ativo"]
+        fields = ["nome", "descricao", "ativo"]
         widgets = {
             "descricao": forms.Textarea(attrs={"rows": 5, "class": "form-control"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["codigo"].required = False
-        self.fields["codigo"].help_text = (
-            "Use um codigo curto e estavel para regras internas. "
-            "Se deixar em branco, ele sera gerado automaticamente."
-        )
         for name, field in self.fields.items():
             if name == "ativo":
                 field.widget.attrs["class"] = "module-checkbox"
             else:
                 field.widget.attrs.setdefault("class", "form-control")
-
-        self.fields["codigo"].widget.attrs.setdefault("placeholder", "ex.: secretaria")
 
 
 class DepartamentoMembroForm(forms.ModelForm):

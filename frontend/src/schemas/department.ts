@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 export const departmentCreateSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do departamento.'),
-  codigo: z.string().trim().min(1, 'Informe o codigo do departamento.'),
   descricao: z.string().trim(),
 })
 
@@ -18,6 +17,5 @@ export type DepartmentUpdateFormData = z.output<typeof departmentUpdateSchema>
 
 export const departmentCreateDefaultValues: DepartmentCreateFormValues = {
   nome: '',
-  codigo: '',
   descricao: '',
 }

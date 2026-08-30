@@ -125,7 +125,10 @@ class DepartmentListCreateView(APIView):
     def post(self, request):
         serializer = DepartmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        department = serializer.save()
+        try:
+            department = serializer.save()
+        except DepartmentError as exc:
+            return business_error_response(exc)
         return Response(DepartmentSerializer(department).data, status=status.HTTP_201_CREATED)
 
 

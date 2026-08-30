@@ -45,7 +45,6 @@ function DepartmentsPage() {
         }
         return (
           department.nome.toLowerCase().includes(normalizedSearch) ||
-          department.codigo.toLowerCase().includes(normalizedSearch) ||
           department.descricao.toLowerCase().includes(normalizedSearch)
         )
       }),
@@ -79,7 +78,7 @@ function DepartmentsPage() {
           <input
             id="department-search"
             type="search"
-            placeholder="Nome, codigo ou descricao"
+            placeholder="Nome ou descricao"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -129,7 +128,6 @@ function DepartmentsPage() {
             <thead>
               <tr>
                 <th>Departamento</th>
-                <th>Codigo</th>
                 <th>Status</th>
                 <th aria-label="Acao" />
               </tr>
@@ -143,7 +141,6 @@ function DepartmentsPage() {
                     </Link>
                     {department.descricao ? <span className="table-muted">{department.descricao}</span> : null}
                   </td>
-                  <td>{department.codigo}</td>
                   <td><DepartmentStatusBadge ativo={department.ativo} /></td>
                   <td>
                     <Link className="button button--secondary" to={`/departamentos/${department.id}`}>

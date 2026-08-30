@@ -6,6 +6,8 @@ from django.utils.text import slugify
 
 
 class Departamento(models.Model):
+    CODIGO_MAX_LENGTH = 60
+
     class CodigoSistema:
         SECRETARIA = "secretaria"
         MIDIA = "midia"
@@ -69,16 +71,29 @@ class Departamento(models.Model):
         slug_nome = cls.normalizar_codigo(nome)
         return cls.CODIGO_PADRAO_MAP.get(slug_nome, slug_nome)
 
-    def gerar_codigo_unico(self):
-        base_codigo = self.normalizar_codigo(self.codigo) or self.sugerir_codigo(self.nome)
+    @classmethod
+    def ajustar_codigo_ao_limite(cls, base_codigo, contador=None):
+        max_length = cls._meta.get_field("codigo").max_length or cls.CODIGO_MAX_LENGTH
+        if contador is None:
+            return base_codigo[:max_length]
+
+        sufixo = f"-{contador}"
+        return f"{base_codigo[: max_length - len(sufixo)]}{sufixo}"
+
+    @classmethod
+    def gerar_codigo_departamento(cls, nome, codigo_base=""):
+        base_codigo = cls.normalizar_codigo(codigo_base) or cls.sugerir_codigo(nome)
         if not base_codigo:
             base_codigo = "departamento"
+        return cls.ajustar_codigo_ao_limite(base_codigo)
 
+    def gerar_codigo_unico(self):
+        base_codigo = self.gerar_codigo_departamento(self.nome, self.codigo)
         codigo = base_codigo
         contador = 2
         queryset = Departamento.objects.exclude(pk=self.pk)
         while queryset.filter(codigo=codigo).exists():
-            codigo = f"{base_codigo}-{contador}"
+            codigo = self.ajustar_codigo_ao_limite(base_codigo, contador)
             contador += 1
         return codigo
 
@@ -116,7 +131,8 @@ class Departamento(models.Model):
         ).exists()
 
     def save(self, *args, **kwargs):
-        self.codigo = self.gerar_codigo_unico()
+        if self._state.adding or not self.codigo:
+            self.codigo = self.gerar_codigo_unico()
         return super().save(*args, **kwargs)
 
 

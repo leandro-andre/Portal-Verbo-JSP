@@ -35,7 +35,7 @@ function DepartmentEditPage() {
       Object.entries(apiValidationErrors.fieldErrors).forEach(([field, messages]) => {
         const message = messages?.[0]
 
-        if (message && field !== 'codigo') {
+        if (message) {
           setError(field as keyof DepartmentUpdateFormValues, { message, type: 'server' })
         }
       })
@@ -102,7 +102,6 @@ function DepartmentEditPage() {
           </div>
 
           <DepartmentForm
-            codeReadOnlyValue={department.codigo}
             generalError={generalError}
             initialValues={{
               nome: department.nome,

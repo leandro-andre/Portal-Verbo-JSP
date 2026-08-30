@@ -3,7 +3,7 @@ from datetime import date, time, timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -127,6 +127,46 @@ class DepartamentosModelsTests(TestCase):
 
         self.assertEqual(primeiro.codigo, "equipe-de-apoio")
         self.assertEqual(segundo.codigo, "equipe-de-apoio-2")
+
+    def test_departamento_gera_codigo_para_nome_com_acento_e_nome_composto(self):
+        midia = Departamento.objects.create(nome="Mídia")
+        apoio = Departamento.objects.create(nome="Equipe de Apoio")
+
+        self.assertEqual(midia.codigo, "midia")
+        self.assertEqual(apoio.codigo, "equipe-de-apoio")
+
+    def test_departamento_gera_terceira_colisao(self):
+        primeiro = Departamento.objects.create(nome="Equipe de Apoio")
+        segundo = Departamento.objects.create(nome="Equipe-de-Apoio")
+        terceiro = Departamento.objects.create(nome="Equipe de  Apoio")
+
+        self.assertEqual(primeiro.codigo, "equipe-de-apoio")
+        self.assertEqual(segundo.codigo, "equipe-de-apoio-2")
+        self.assertEqual(terceiro.codigo, "equipe-de-apoio-3")
+
+    def test_departamento_respeita_limite_do_codigo_com_sufixo(self):
+        nome = "Departamento " + ("Muito " * 20)
+        primeiro = Departamento.objects.create(nome=nome)
+        segundo = Departamento.objects.create(nome=f"{nome}!")
+
+        self.assertLessEqual(len(primeiro.codigo), Departamento.CODIGO_MAX_LENGTH)
+        self.assertLessEqual(len(segundo.codigo), Departamento.CODIGO_MAX_LENGTH)
+        self.assertTrue(segundo.codigo.endswith("-2"))
+
+    def test_departamento_preserva_codigo_ao_renomear(self):
+        departamento = Departamento.objects.create(nome="Mídia")
+
+        departamento.nome = "Comunicacao e Midia"
+        departamento.save()
+
+        self.assertEqual(departamento.codigo, "midia")
+
+    def test_departamento_unique_codigo_permanece_protegido_no_banco(self):
+        primeiro = Departamento.objects.create(nome="Recepcao")
+        segundo = Departamento.objects.create(nome="Intercessao")
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Departamento.objects.filter(pk=segundo.pk).update(codigo=primeiro.codigo)
 
     def test_nao_permite_duas_participacoes_ativas_no_mesmo_departamento(self):
         infantil = Departamento.objects.create(nome="Infantil")
@@ -1286,17 +1326,47 @@ class DepartmentApiTests(APITestCase):
         response = self.client.post(
             reverse("department-list"),
             {
-                "nome": "Juniores",
-                "codigo": "Departamento Juniores",
+                "nome": "Mídia",
                 "descricao": "Equipe de juniores.",
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.json()["codigo"], "departamento-juniores")
+        self.assertEqual(response.json()["codigo"], "midia")
         self.assertTrue(response.json()["ativo"])
-        self.assertTrue(Departamento.objects.get(codigo="departamento-juniores").ativo)
+        self.assertTrue(Departamento.objects.get(codigo="midia").ativo)
+
+    def test_create_department_ignora_codigo_enviado_e_gera_do_nome(self):
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(
+            reverse("department-list"),
+            {
+                "nome": "Juniores",
+                "codigo": "codigo-manual",
+                "descricao": "Equipe de juniores.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["codigo"], "juniores")
+        self.assertFalse(Departamento.objects.filter(codigo="codigo-manual").exists())
+
+    def test_create_department_resolve_colisao_de_codigo_automaticamente(self):
+        Departamento.objects.create(nome="Juniores")
+        Departamento.objects.create(nome="Júniores")
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(
+            reverse("department-list"),
+            {"nome": "Juniores!", "descricao": "Outra equipe."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["codigo"], "juniores-3")
 
     def test_create_rejeita_overposting_status_e_membros(self):
         self.client.force_authenticate(self.admin)
@@ -1317,7 +1387,7 @@ class DepartmentApiTests(APITestCase):
         self.assertFalse(Departamento.objects.filter(codigo="status-indevido").exists())
         self.assertFalse(Departamento.objects.filter(codigo="membros-indevidos").exists())
 
-    def test_create_valida_nome_e_codigo_unico(self):
+    def test_create_valida_nome_obrigatorio(self):
         self.client.force_authenticate(self.admin)
 
         blank_response = self.client.post(
@@ -1325,14 +1395,8 @@ class DepartmentApiTests(APITestCase):
             {"nome": "   ", "codigo": "novo-codigo"},
             format="json",
         )
-        duplicate_response = self.client.post(
-            reverse("department-list"),
-            {"nome": "Outro Louvor", "codigo": "Louvor API"},
-            format="json",
-        )
 
         self.assertEqual(blank_response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_update_permite_nome_descricao_e_codigo_eh_imutavel(self):
         self.client.force_authenticate(self.secretary)
@@ -1347,14 +1411,16 @@ class DepartmentApiTests(APITestCase):
         )
         codigo_response = self.client.patch(
             reverse("department-detail", args=[self.department.pk]),
-            {"codigo": "outro-codigo"},
+            {"nome": "Louvor Renomeado", "codigo": "outro-codigo"},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["nome"], "Louvor Atualizado")
         self.assertEqual(response.json()["codigo"], "louvor-api")
-        self.assertEqual(codigo_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(codigo_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(codigo_response.json()["nome"], "Louvor Renomeado")
+        self.assertEqual(codigo_response.json()["codigo"], "louvor-api")
 
     def test_lifecycle_api(self):
         self.client.force_authenticate(self.admin)

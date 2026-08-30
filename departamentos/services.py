@@ -19,6 +19,7 @@ DEPARTMENT_ROLE_NOT_ACTIVE = "DEPARTMENT_ROLE_NOT_ACTIVE"
 DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS = "DEPARTMENT_MEMBERSHIP_ALREADY_EXISTS"
 INVALID_DEPARTMENT_ROLE_TRANSITION = "INVALID_DEPARTMENT_ROLE_TRANSITION"
 INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION = "INVALID_DEPARTMENT_MEMBERSHIP_TRANSITION"
+DEPARTMENT_CODE_GENERATION_FAILED = "DEPARTMENT_CODE_GENERATION_FAILED"
 
 
 class DepartmentError(Exception):
@@ -50,6 +51,25 @@ def reactivate_department(department):
     department.ativo = True
     department.save(update_fields=["ativo"])
     return department
+
+
+def create_department(*, nome, descricao="", max_retries=3):
+    for _attempt in range(max_retries):
+        department = Departamento(
+            nome=nome,
+            descricao=descricao,
+            ativo=True,
+        )
+        try:
+            department.save()
+        except IntegrityError:
+            continue
+        return department
+
+    raise DepartmentError(
+        DEPARTMENT_CODE_GENERATION_FAILED,
+        "Nao foi possivel gerar um codigo unico para o departamento.",
+    )
 
 
 def ensure_department_active(department):

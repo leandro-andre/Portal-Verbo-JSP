@@ -457,7 +457,6 @@ function DepartmentDetailPage() {
               <h2>Visao geral</h2>
               <dl className="profile-details">
                 <DetailItem label="Nome" value={department.nome} />
-                <DetailItem label="Codigo" value={department.codigo} />
                 <DetailItem label="Status" value={department.ativo ? 'Ativo' : 'Inativo'} />
                 <DetailItem label="Criado em" value={formatDate(department.criado_em)} />
               </dl>

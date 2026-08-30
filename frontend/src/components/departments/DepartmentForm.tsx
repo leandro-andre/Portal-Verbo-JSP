@@ -16,7 +16,6 @@ type DepartmentFormValues = DepartmentCreateFormValues | DepartmentUpdateFormVal
 type DepartmentFormData = DepartmentCreateFormData | DepartmentUpdateFormData
 
 type DepartmentFormProps = {
-  codeReadOnlyValue?: string
   generalError: string | null
   initialValues?: DepartmentFormValues
   isSubmitting: boolean
@@ -29,7 +28,6 @@ type DepartmentFormProps = {
 }
 
 function DepartmentForm({
-  codeReadOnlyValue,
   generalError,
   initialValues,
   isSubmitting,
@@ -89,29 +87,6 @@ function DepartmentForm({
               </span>
             ) : null}
           </div>
-
-          {mode === 'create' ? (
-            <div className="field-group field-group--wide">
-              <label htmlFor="codigo">Codigo *</label>
-              <input
-                id="codigo"
-                type="text"
-                aria-invalid={Boolean('codigo' in errors && errors.codigo)}
-                aria-describedby={'codigo' in errors && errors.codigo ? 'codigo-error' : undefined}
-                {...register('codigo')}
-              />
-              {'codigo' in errors && errors.codigo ? (
-                <span className="field-error" id="codigo-error">
-                  {errors.codigo.message}
-                </span>
-              ) : null}
-            </div>
-          ) : (
-            <div className="field-group field-group--wide">
-              <label htmlFor="codigo-readonly">Codigo</label>
-              <input id="codigo-readonly" type="text" value={codeReadOnlyValue ?? ''} readOnly />
-            </div>
-          )}
 
           <div className="field-group field-group--wide">
             <label htmlFor="descricao">Descricao</label>

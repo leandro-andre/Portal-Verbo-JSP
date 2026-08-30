@@ -13,6 +13,7 @@ class DepartamentoMembroInline(admin.TabularInline):
 class DepartamentoAdmin(admin.ModelAdmin):
     list_display = ("nome", "codigo", "ativo", "total_membros_ativos", "criado_em")
     list_filter = ("ativo",)
+    readonly_fields = ("codigo",)
     search_fields = ("nome", "codigo", "descricao")
     inlines = [DepartamentoMembroInline]
 

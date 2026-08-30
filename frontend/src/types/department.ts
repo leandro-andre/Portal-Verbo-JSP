@@ -17,7 +17,6 @@ export type DepartmentPermissions = {
 
 export type CreateDepartmentInput = {
   nome: string
-  codigo: string
   descricao: string
 }
 
