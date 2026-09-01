@@ -1854,6 +1854,13 @@
   text-decoration: underline;
 }
 
+.login-forgot-password-link {
+  align-self: flex-end;
+  margin-top: -8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .access-request-success {
   background: #ecfdf3;
   border: 1px solid #bbf7d0;

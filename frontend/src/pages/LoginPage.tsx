@@ -97,14 +97,14 @@ function LoginPage() {
             />
           </div>
 
+          <Link className="public-link login-forgot-password-link" to="/esqueci-minha-senha">
+            Esqueci minha senha
+          </Link>
+
           <button className="button button--primary" type="submit" disabled={login.isPending}>
             <LogIn size={17} aria-hidden="true" />
             {login.isPending ? 'Entrando...' : 'Entrar'}
           </button>
-
-          <Link className="public-link" to="/esqueci-minha-senha">
-            Esqueci minha senha
-          </Link>
 
           <Link className="public-link" to="/pedir-acesso">
             Ainda nao tenho acesso
