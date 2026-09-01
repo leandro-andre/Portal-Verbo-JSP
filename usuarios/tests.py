@@ -21,6 +21,8 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from PIL import Image
 
+from core.email import EmailSendResult
+from core.email.exceptions import EmailDeliveryError
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartamentoMembro, DepartmentMembership, DepartmentRole
 from escalas.models import Escala, EscalaItem, IndisponibilidadeMembro
@@ -39,6 +41,7 @@ from usuarios.roles import (
 )
 
 from .models import AccessRequest
+from .emails import send_access_approval_email
 from .permissions import (
     usuario_eh_lider_departamento,
     usuario_eh_lider_em_algum_departamento,
@@ -55,7 +58,7 @@ from .permissions import (
     usuario_tem_acesso_total_pastoral,
     usuario_tem_acesso_total_sistema,
 )
-from .services import approve_access_request
+from .services import approve_access_request, build_account_activation_path
 
 
 def assign_role(usuario, group_name):
@@ -1348,6 +1351,118 @@ class AdminAccessRequestApiTests(TestCase):
         self.assertEqual(self.access_request.person, person)
         self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
 
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_aprovacao_envia_email_de_ativacao_apos_sucesso(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        self.client.force_login(self.superuser)
+
+        def send_email(**kwargs):
+            persisted_request = AccessRequest.objects.get(pk=self.access_request.pk)
+            self.assertEqual(persisted_request.status, AccessRequest.Status.APPROVED)
+            self.assertEqual(persisted_request.person, person)
+            self.assertTrue(self.user_model.objects.filter(person=person, is_active=False).exists())
+            return EmailSendResult(provider="resend", message_id="email_approval")
+
+        with patch("usuarios.emails.send_transactional_email", side_effect=send_email) as send:
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"person_id": person.pk},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["notification"], {"email_sent": True, "type": "activation"})
+        usuario = self.user_model.objects.get(person=person)
+        activation_link = f"https://portal.example.com{build_account_activation_path(usuario)}"
+        send.assert_called_once()
+        email_kwargs = send.call_args.kwargs
+        self.assertEqual(email_kwargs["to"], "maria@example.com")
+        self.assertEqual(email_kwargs["subject"], "Seu acesso ao Portal Verbo da Vida foi aprovado")
+        self.assertIn(activation_link, email_kwargs["text"])
+        self.assertIn(activation_link, email_kwargs["html"])
+        self.assertEqual(email_kwargs["idempotency_key"], f"access-request-approved:{self.access_request.pk}:activation")
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_falha_de_email_nao_desfaz_aprovacao_nem_retorna_500(self):
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.emails.send_transactional_email", side_effect=EmailDeliveryError("falha")):
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"create_new_person": True},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["notification"],
+            {"email_sent": False, "reason": "delivery_failed", "type": "activation"},
+        )
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
+        person = Person.objects.get(full_name="Maria Silva")
+        usuario = self.user_model.objects.get(person=person)
+        self.assertFalse(usuario.is_active)
+
+    @override_settings(APP_BASE_URL="https://portal.example.com", EMAIL_PROVIDER_ENABLED=False)
+    def test_provider_desabilitado_nao_bloqueia_aprovacao(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(
+            reverse("access-request-admin-approve", args=[self.access_request.pk]),
+            {"create_new_person": True},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["notification"],
+            {"email_sent": False, "reason": "provider_disabled", "type": "activation"},
+        )
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
+
+    @override_settings(APP_BASE_URL="")
+    def test_app_base_url_ausente_nao_gera_link_quebrado(self):
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.emails.send_transactional_email") as send:
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"create_new_person": True},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["notification"],
+            {"email_sent": False, "reason": "missing_app_base_url", "type": "activation"},
+        )
+        send.assert_not_called()
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
+
+    @override_settings(APP_BASE_URL="portal.example.com")
+    def test_app_base_url_invalida_nao_gera_link_relativo(self):
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.emails.send_transactional_email") as send:
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"create_new_person": True},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["notification"],
+            {"email_sent": False, "reason": "missing_app_base_url", "type": "activation"},
+        )
+        send.assert_not_called()
+        self.access_request.refresh_from_db()
+        self.assertEqual(self.access_request.status, AccessRequest.Status.APPROVED)
+
     def test_aprovar_novo_fluxo_nao_cria_segundo_usuario(self):
         access_request = self.create_new_flow_request()
         person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
@@ -1373,6 +1488,123 @@ class AdminAccessRequestApiTests(TestCase):
         self.assertIsNotNone(access_request.reviewed_at)
         self.assertTrue(usuario.check_password("Senha-forte-123"))
         self.assertNotIn("activation_url", response.json()["created_user"])
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_conta_ativa_recebe_email_de_aprovacao_sem_link_de_ativacao(self):
+        access_request = self.create_new_flow_request()
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Mari",
+            birth_date=date(1990, 5, 10),
+        )
+        self.client.force_login(self.superuser)
+
+        with patch(
+            "usuarios.emails.send_transactional_email",
+            return_value=EmailSendResult(provider="resend", message_id="email_active"),
+        ) as send:
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[access_request.pk]),
+                {"person_id": person.pk},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["notification"], {"email_sent": True, "type": "approval-active-account"})
+        email_kwargs = send.call_args.kwargs
+        self.assertEqual(email_kwargs["to"], "maria@example.com")
+        self.assertIn("Ola, Mari!", email_kwargs["text"])
+        self.assertIn("https://portal.example.com", email_kwargs["text"])
+        self.assertNotIn("/ativar-conta/", email_kwargs["text"])
+        self.assertEqual(
+            email_kwargs["idempotency_key"],
+            f"access-request-approved:{access_request.pk}:approval-active-account",
+        )
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_email_de_aprovacao_escapa_nome_no_html(self):
+        access_request = AccessRequest.objects.create(
+            full_name="<Maria Silva>",
+            birth_date=date(1990, 5, 10),
+            email="maria.escape@example.com",
+            phone="81999999999",
+        )
+        usuario = self.user_model.objects.create_user(
+            username="maria.escape",
+            email="maria.escape@example.com",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save(update_fields=["password"])
+
+        with patch(
+            "usuarios.emails.send_transactional_email",
+            return_value=EmailSendResult(provider="resend", message_id="email_escape"),
+        ) as send:
+            result = send_access_approval_email(access_request, usuario)
+
+        self.assertTrue(result.sent)
+        html = send.call_args.kwargs["html"]
+        text = send.call_args.kwargs["text"]
+        self.assertIn("Ola, &lt;Maria Silva&gt;!", html)
+        self.assertNotIn("Ola, <Maria Silva>!", html)
+        self.assertIn("Ola, <Maria Silva>!", text)
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_email_de_aprovacao_usa_fallback_neutro_sem_nome(self):
+        access_request = AccessRequest.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.fallback@example.com",
+            phone="81999999999",
+        )
+        AccessRequest.objects.filter(pk=access_request.pk).update(full_name="")
+        access_request.refresh_from_db()
+        usuario = self.user_model.objects.create_user(
+            username="maria.fallback",
+            email="maria.fallback@example.com",
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save(update_fields=["password"])
+
+        with patch(
+            "usuarios.emails.send_transactional_email",
+            return_value=EmailSendResult(provider="resend", message_id="email_fallback"),
+        ) as send:
+            result = send_access_approval_email(access_request, usuario)
+
+        self.assertTrue(result.sent)
+        self.assertIn("Ola!", send.call_args.kwargs["html"])
+        self.assertIn("Ola!", send.call_args.kwargs["text"])
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_email_de_aprovacao_sem_destinatario_nao_chama_provider(self):
+        person = Person.objects.create(full_name="Maria Silva", birth_date=date(1990, 5, 10))
+        access_request = AccessRequest.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.sem.email@example.com",
+            phone="81999999999",
+            person=person,
+        )
+        AccessRequest.objects.filter(pk=access_request.pk).update(email="")
+        access_request.refresh_from_db()
+        usuario = self.user_model.objects.create_user(
+            username="maria.sem.email",
+            email="",
+            person=person,
+            is_active=False,
+        )
+        usuario.set_unusable_password()
+        usuario.save(update_fields=["password"])
+
+        with patch("usuarios.emails.send_transactional_email") as send:
+            result = send_access_approval_email(access_request, usuario)
+
+        self.assertFalse(result.sent)
+        self.assertEqual(result.reason, "missing_recipient")
+        send.assert_not_called()
 
     def test_aprovar_novo_fluxo_criando_nova_person(self):
         access_request = self.create_new_flow_request()
@@ -1645,14 +1877,16 @@ class AdminAccessRequestApiTests(TestCase):
         self.access_request.save(update_fields=["status"])
         self.client.force_login(self.superuser)
 
-        response = self.client.post(
-            reverse("access-request-admin-approve", args=[self.access_request.pk]),
-            {"create_new_person": True},
-            content_type="application/json",
-        )
+        with patch("usuarios.api_views.send_access_approval_email") as send:
+            response = self.client.post(
+                reverse("access-request-admin-approve", args=[self.access_request.pk]),
+                {"create_new_person": True},
+                content_type="application/json",
+            )
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "ACCESS_REQUEST_NOT_PENDING")
+        send.assert_not_called()
 
     def test_aprovacao_e_atomica(self):
         self.client.force_login(self.superuser)

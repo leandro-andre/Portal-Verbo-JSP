@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from pessoas.models import Person
 from pessoas.serializers import get_photo_url
 from usuarios.dashboard import get_user_dashboard
+from usuarios.emails import send_access_approval_email
 from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
@@ -392,6 +393,10 @@ class AdminAccessRequestApproveView(APIView):
             response_data["created_user"]["activation_url"] = request.build_absolute_uri(
                 build_account_activation_path(usuario),
             )
+        response_data["notification"] = send_access_approval_email(
+            approved_request,
+            usuario,
+        ).as_api_payload()
         return Response(response_data)
 
 

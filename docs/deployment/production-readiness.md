@@ -208,7 +208,8 @@ Em producao/R2 o resultado esperado contem `storages.backends.s3.S3Storage`.
 ## E-mail Transacional
 
 E-mails transacionais usam a camada interna `core.email` e o SDK oficial Python
-do Resend. Nenhum fluxo funcional envia e-mail automaticamente nesta etapa.
+do Resend. A aprovacao de solicitacao de acesso envia a primeira notificacao
+automatica, sem rollback da aprovacao se o provider falhar.
 
 Configuracao minima:
 

@@ -82,6 +82,11 @@ export type ApproveAccessRequestResponse = AccessRequest & {
     is_active: boolean
     activation_url?: string
   }
+  notification?: {
+    email_sent: boolean
+    reason?: 'provider_disabled' | 'delivery_failed' | 'missing_recipient' | 'missing_app_base_url'
+    type?: 'activation' | 'approval-active-account'
+  }
 }
 
 export type RejectAccessRequestInput = {

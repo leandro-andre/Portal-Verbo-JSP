@@ -206,7 +206,11 @@ function AccessRequestDetail({ request }: { request: AccessRequest }) {
           : { create_new_person: true },
       )
       setDialogMode(null)
-      setSuccessMessage('Acesso aprovado. O usuario ja pode entrar no Portal.')
+      setSuccessMessage(
+        response.notification?.email_sent
+          ? 'Acesso aprovado e e-mail enviado.'
+          : 'Acesso aprovado. Nao foi possivel enviar o e-mail agora.',
+      )
       setApprovedUsername(response.created_user.username)
     } catch (error) {
       handleBusinessError(error)

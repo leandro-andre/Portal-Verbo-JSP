@@ -19,7 +19,8 @@ Variaveis esperadas no ambiente:
 servico interno falha de forma explicita e nao faz chamada externa.
 
 `APP_BASE_URL` fica disponivel para proximas features que montarao links para o
-Portal. O valor e normalizado sem barra final nos settings.
+Portal. O valor e normalizado sem barra final nos settings. Para e-mails de
+aprovacao, ele deve ser uma URL absoluta com `http://` ou `https://`.
 
 Nenhuma chave deve ser enviada para o frontend, versionada em `.env.example` ou
 impressa em logs.
@@ -52,10 +53,41 @@ Message ID: <id>
 O comando imprime apenas dados seguros. Em falha de configuracao ou entrega, ele
 retorna `CommandError` com mensagem clara.
 
+## Aprovacao De Acesso
+
+Quando uma solicitacao de acesso e aprovada, a API tenta enviar uma notificacao
+transacional depois que a aprovacao principal foi concluida.
+
+Falha do Resend, provider desabilitado ou `APP_BASE_URL` ausente/invalida nao
+desfaz a aprovacao, nao apaga `Usuario` e nao apaga `Person`. A resposta da API
+inclui um bloco aditivo:
+
+```json
+{
+  "notification": {
+    "email_sent": false,
+    "reason": "delivery_failed",
+    "type": "activation"
+  }
+}
+```
+
+Tipos atuais:
+
+- `activation`: conta criada sem senha utilizavel, recebe link para `/ativar-conta/<uid>/<token>`;
+- `approval-active-account`: conta ja ativa apos aprovacao, recebe link para acessar o Portal.
+
+Formato da idempotency key:
+
+```text
+access-request-approved:<access_request_id>:<type>
+```
+
+A chave nao inclui e-mail, token, nome ou credenciais.
+
 ## Testes Automatizados
 
 Os testes usam mocks/fakes e nao fazem chamadas reais ao Resend.
 
-Nesta etapa nenhum fluxo funcional envia e-mail automaticamente. Aprovacao de
-solicitacao, ativacao de conta, recuperacao de senha e escalas continuam fora
-do escopo ate as proximas PVVs.
+Recuperacao de senha, e-mails de escalas, reenvio manual, fila, webhooks e
+auditoria persistida continuam fora do escopo ate as proximas PVVs.
