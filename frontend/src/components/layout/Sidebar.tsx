@@ -3,11 +3,15 @@ import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
 type SidebarProps = {
+  id?: string
   isCollapsed: boolean
+  isMobileOpen: boolean
+  onNavigate: () => void
 }
 
-function Sidebar({ isCollapsed }: SidebarProps) {
+function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
   const { data: currentUser } = useCurrentUser()
+  const showExpandedContent = !isCollapsed || isMobileOpen
   const capabilities = currentUser?.user?.capabilities ?? []
   const canViewPeople = capabilities.includes('PEOPLE_VIEW')
   const canViewAccessRequests = capabilities.includes('ACCESS_REQUEST_VIEW')
@@ -36,12 +40,16 @@ function Sidebar({ isCollapsed }: SidebarProps) {
     .toUpperCase() || 'UP'
 
   return (
-    <aside className="sidebar" aria-label="Navegacao principal">
+    <aside
+      id={id}
+      className="sidebar"
+      aria-label="Navegacao principal"
+    >
       <div className="sidebar__brand">
         <div className="sidebar__brand-mark" aria-hidden="true">
           VV
         </div>
-        {!isCollapsed ? (
+        {showExpandedContent ? (
           <div className="sidebar__brand-copy">
             <strong>Verbo da Vida</strong>
             <span>Jardim Sao Paulo</span>
@@ -54,123 +62,135 @@ function Sidebar({ isCollapsed }: SidebarProps) {
           className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
           to="/"
           end
+          onClick={onNavigate}
         >
           <House size={18} aria-hidden="true" />
-          {!isCollapsed ? <span>Inicio</span> : null}
+          {showExpandedContent ? <span>Inicio</span> : null}
         </NavLink>
 
-        {!isCollapsed ? <p className="sidebar__section-label">Minha area</p> : null}
+        {showExpandedContent ? <p className="sidebar__section-label">Minha area</p> : null}
         {hasPerson ? (
           <>
             <NavLink
               className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
               to="/minhas-escalas"
+              onClick={onNavigate}
             >
               <CalendarCheck2 size={18} aria-hidden="true" />
-              {!isCollapsed ? <span>Minhas Escalas</span> : null}
+              {showExpandedContent ? <span>Minhas Escalas</span> : null}
             </NavLink>
             <NavLink
               className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
               to="/minhas-indisponibilidades"
+              onClick={onNavigate}
             >
               <CalendarX2 size={18} aria-hidden="true" />
-              {!isCollapsed ? <span>Minhas indisponibilidades</span> : null}
+              {showExpandedContent ? <span>Minhas indisponibilidades</span> : null}
             </NavLink>
           </>
         ) : null}
         <NavLink
           className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
           to="/meu-perfil"
+          onClick={onNavigate}
         >
           <UserRound size={18} aria-hidden="true" />
-          {!isCollapsed ? <span>Meu Perfil</span> : null}
+          {showExpandedContent ? <span>Meu Perfil</span> : null}
         </NavLink>
 
         {canViewPeople ? (
           <>
-            {!isCollapsed ? <p className="sidebar__section-label sidebar__section-label--spaced">Pessoas</p> : null}
+            {showExpandedContent ? <p className="sidebar__section-label sidebar__section-label--spaced">Pessoas</p> : null}
             <NavLink
               className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
               to="/pessoas"
+              onClick={onNavigate}
             >
               <UsersRound size={18} aria-hidden="true" />
-              {!isCollapsed ? <span>Pessoas</span> : null}
+              {showExpandedContent ? <span>Pessoas</span> : null}
             </NavLink>
           </>
         ) : null}
 
-        {hasAccessItems && !isCollapsed ? (
+        {hasAccessItems && showExpandedContent ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Acessos</p>
         ) : null}
         {canViewAccessRequests ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/solicitacoes-acesso"
+            onClick={onNavigate}
           >
             <ClipboardList size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Solicitacoes</span> : null}
+            {showExpandedContent ? <span>Solicitacoes</span> : null}
           </NavLink>
         ) : null}
         {canViewUsers ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/usuarios"
+            onClick={onNavigate}
           >
             <UserCog size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Usuarios</span> : null}
+            {showExpandedContent ? <span>Usuarios</span> : null}
           </NavLink>
         ) : null}
 
-        {(canViewDiscipleship || canViewMembership) && !isCollapsed ? (
+        {(canViewDiscipleship || canViewMembership) && showExpandedContent ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Jornada</p>
         ) : null}
         {canViewDiscipleship ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/discipulado"
+            onClick={onNavigate}
           >
             <BookOpenCheck size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Discipulado</span> : null}
+            {showExpandedContent ? <span>Discipulado</span> : null}
           </NavLink>
         ) : null}
         {canViewMembership ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/membresia"
+            onClick={onNavigate}
           >
             <ShieldCheck size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Membresia</span> : null}
+            {showExpandedContent ? <span>Membresia</span> : null}
           </NavLink>
         ) : null}
 
-        {(canViewDepartments || canViewWorshipSchedule || canViewSchedules) && !isCollapsed ? (
+        {(canViewDepartments || canViewWorshipSchedule || canViewSchedules) && showExpandedContent ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Igreja</p>
         ) : null}
         {canViewWorshipSchedule ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/agenda-cultos"
+            onClick={onNavigate}
           >
             <CalendarClock size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Agenda de Cultos</span> : null}
+            {showExpandedContent ? <span>Agenda de Cultos</span> : null}
           </NavLink>
         ) : null}
         {canViewDepartments ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/departamentos"
+            onClick={onNavigate}
           >
             <Building2 size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Departamentos</span> : null}
+            {showExpandedContent ? <span>Departamentos</span> : null}
           </NavLink>
         ) : null}
         {canViewSchedules ? (
           <NavLink
             className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
             to="/escalas"
+            onClick={onNavigate}
           >
             <CalendarDays size={18} aria-hidden="true" />
-            {!isCollapsed ? <span>Escalas</span> : null}
+            {showExpandedContent ? <span>Escalas</span> : null}
           </NavLink>
         ) : null}
       </nav>
@@ -179,7 +199,7 @@ function Sidebar({ isCollapsed }: SidebarProps) {
         <div className="sidebar__user-avatar" aria-hidden="true">
           {currentUser?.user?.photo_url ? <img src={currentUser.user.photo_url} alt="" /> : initials}
         </div>
-        {!isCollapsed ? (
+        {showExpandedContent ? (
           <div className="sidebar__user-copy">
             <strong>{displayName}</strong>
             <span>{roleLabel}</span>

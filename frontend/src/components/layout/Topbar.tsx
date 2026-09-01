@@ -1,15 +1,24 @@
-import { Bell, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Bell, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLogout, useCurrentUser } from '../../hooks/useAuth'
 
 type TopbarProps = {
   title: string
   isSidebarCollapsed: boolean
-  onToggleSidebar: () => void
+  isMobileSidebarOpen: boolean
+  onToggleDesktopSidebar: () => void
+  onToggleMobileSidebar: () => void
 }
 
-function Topbar({ title, isSidebarCollapsed, onToggleSidebar }: TopbarProps) {
+function Topbar({
+  title,
+  isSidebarCollapsed,
+  isMobileSidebarOpen,
+  onToggleDesktopSidebar,
+  onToggleMobileSidebar,
+}: TopbarProps) {
   const ToggleIcon = isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose
+  const MobileToggleIcon = isMobileSidebarOpen ? X : Menu
   const { data: currentUser } = useCurrentUser()
   const logout = useLogout()
   const displayName = currentUser?.user?.display_name || 'Usuario'
@@ -32,12 +41,24 @@ function Topbar({ title, isSidebarCollapsed, onToggleSidebar }: TopbarProps) {
     <header className="topbar">
       <div className="topbar__left">
         <button
-          className="icon-button"
+          className="icon-button topbar__sidebar-toggle topbar__sidebar-toggle--desktop"
           type="button"
-          onClick={onToggleSidebar}
+          onClick={onToggleDesktopSidebar}
           aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+          aria-expanded={!isSidebarCollapsed}
+          aria-controls="app-sidebar"
         >
           <ToggleIcon size={19} aria-hidden="true" />
+        </button>
+        <button
+          className="icon-button topbar__sidebar-toggle topbar__sidebar-toggle--mobile"
+          type="button"
+          onClick={onToggleMobileSidebar}
+          aria-label={isMobileSidebarOpen ? 'Fechar menu lateral' : 'Abrir menu lateral'}
+          aria-expanded={isMobileSidebarOpen}
+          aria-controls="app-sidebar"
+        >
+          <MobileToggleIcon size={19} aria-hidden="true" />
         </button>
         <span className="topbar__title">{title}</span>
       </div>
