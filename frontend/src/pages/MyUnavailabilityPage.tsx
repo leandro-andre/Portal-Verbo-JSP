@@ -230,4 +230,4 @@ function MyUnavailabilityPage() {
   )
 }
 
-export default MyUnava
+export default MyUnavailabilityPage
