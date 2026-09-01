@@ -1,4 +1,5 @@
 from datetime import timedelta
+from io import StringIO
 import importlib
 from pathlib import Path
 import os
@@ -8,12 +9,17 @@ import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import clear_url_caches, reverse
 from django.utils import timezone
+from resend.exceptions import ResendError
 from storages.backends.s3 import S3Storage
 
+from core.email import EmailSendResult, send_transactional_email
+from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
 from config.env import env_bool, env_list
 from config.storage import build_media_storage_config
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
@@ -190,6 +196,133 @@ class ProductionReadinessTests(TestCase):
                 self.assertNotEqual(static_response.status_code, 200)
                 self.assertNotEqual(media_response.status_code, 200)
             self.reload_project_urlconf()
+
+
+@override_settings(
+    EMAIL_PROVIDER_ENABLED=True,
+    RESEND_API_KEY="fake-key",
+    EMAIL_FROM="Portal <onboarding@resend.dev>",
+)
+class TransactionalEmailTests(TestCase):
+    def test_servico_envia_parametros_corretos_para_resend(self):
+        client = FakeEmailClient({"id": "email_123"})
+
+        result = send_transactional_email(
+            to="destino@example.com",
+            subject="Assunto",
+            html="<p>Conteudo</p>",
+            text="Conteudo",
+            idempotency_key="teste/123",
+            client=client,
+        )
+
+        self.assertEqual(result, EmailSendResult(provider="resend", message_id="email_123"))
+        self.assertEqual(client.params["from"], "Portal <onboarding@resend.dev>")
+        self.assertEqual(client.params["to"], ["destino@example.com"])
+        self.assertEqual(client.params["subject"], "Assunto")
+        self.assertEqual(client.params["html"], "<p>Conteudo</p>")
+        self.assertEqual(client.params["text"], "Conteudo")
+        self.assertEqual(client.idempotency_key, "teste/123")
+
+    def test_servico_aceita_lista_de_destinatarios(self):
+        client = FakeEmailClient({"id": "email_456"})
+
+        send_transactional_email(
+            to=["um@example.com", "dois@example.com"],
+            subject="Assunto",
+            html="<p>Conteudo</p>",
+            client=client,
+        )
+
+        self.assertEqual(client.params["to"], ["um@example.com", "dois@example.com"])
+        self.assertNotIn("text", client.params)
+
+    @override_settings(EMAIL_PROVIDER_ENABLED=False, RESEND_API_KEY="", EMAIL_FROM="")
+    def test_servico_sem_configuracao_nao_chama_provider(self):
+        client = FakeEmailClient({"id": "email_789"})
+
+        with self.assertRaises(EmailConfigurationError):
+            send_transactional_email(
+                to="destino@example.com",
+                subject="Assunto",
+                html="<p>Conteudo</p>",
+                client=client,
+            )
+
+        self.assertIsNone(client.params)
+
+    def test_erro_do_provider_vira_excecao_interna_sem_expor_api_key(self):
+        client = FakeEmailClient(
+            ResendError(
+                code=401,
+                error_type="invalid_api_key",
+                message="fake-secret-key",
+                suggested_action="Troque a chave.",
+            )
+        )
+
+        with self.assertLogs("core.email.service", level="WARNING") as logs:
+            with self.assertRaises(EmailDeliveryError) as context:
+                send_transactional_email(
+                    to="destino@example.com",
+                    subject="Assunto",
+                    html="<p>Conteudo</p>",
+                    client=client,
+                )
+
+        self.assertNotIn("fake-secret-key", str(context.exception))
+        self.assertNotIn("fake-secret-key", "\n".join(logs.output))
+
+    def test_resposta_sem_message_id_vira_erro_interno(self):
+        client = FakeEmailClient({})
+
+        with self.assertRaises(EmailDeliveryError):
+            send_transactional_email(
+                to="destino@example.com",
+                subject="Assunto",
+                html="<p>Conteudo</p>",
+                client=client,
+            )
+
+    @override_settings(EMAIL_PROVIDER_ENABLED=True, RESEND_API_KEY="fake-key", EMAIL_FROM="Portal <onboarding@resend.dev>")
+    def test_management_command_usa_servico_interno(self):
+        out = StringIO()
+
+        with patch(
+            "core.management.commands.send_test_email.send_transactional_email",
+            return_value=EmailSendResult(provider="resend", message_id="email_cmd"),
+        ) as send:
+            call_command("send_test_email", "destino@example.com", stdout=out)
+
+        send.assert_called_once()
+        kwargs = send.call_args.kwargs
+        self.assertEqual(kwargs["to"], "destino@example.com")
+        self.assertEqual(kwargs["subject"], "Teste de e-mail - Portal Verbo da Vida")
+        self.assertIn("Portal Verbo da Vida", kwargs["html"])
+        self.assertIn("Portal Verbo da Vida", kwargs["text"])
+        self.assertIn("Provider: resend", out.getvalue())
+        self.assertIn("Message ID: email_cmd", out.getvalue())
+
+    @override_settings(EMAIL_PROVIDER_ENABLED=False, RESEND_API_KEY="", EMAIL_FROM="")
+    def test_management_command_falha_claramente_sem_configuracao(self):
+        with self.assertRaisesMessage(CommandError, "Envio transacional de e-mail nao configurado."):
+            call_command("send_test_email", "destino@example.com", stdout=StringIO())
+
+
+class FakeEmailClient:
+    provider = "resend"
+
+    def __init__(self, response):
+        self.response = response
+        self.params = None
+        self.idempotency_key = None
+
+    def send(self, params, *, idempotency_key=None):
+        self.params = params
+        self.idempotency_key = idempotency_key
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
 
 
 class ContatoViewTests(TestCase):

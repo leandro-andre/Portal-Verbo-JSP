@@ -62,6 +62,9 @@ Variaveis principais:
 - `R2_BUCKET_NAME`
 - `R2_ENDPOINT_URL`
 - `R2_QUERYSTRING_EXPIRE`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `APP_BASE_URL`
 
 `DJANGO_SECRET_KEY` nunca deve ser versionada com valor real.
 
@@ -201,6 +204,30 @@ python manage.py shell -c "from django.core.files.storage import storages; print
 ```
 
 Em producao/R2 o resultado esperado contem `storages.backends.s3.S3Storage`.
+
+## E-mail Transacional
+
+E-mails transacionais usam a camada interna `core.email` e o SDK oficial Python
+do Resend. Nenhum fluxo funcional envia e-mail automaticamente nesta etapa.
+
+Configuracao minima:
+
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `APP_BASE_URL`
+
+Sem `RESEND_API_KEY` e `EMAIL_FROM`, o envio fica desabilitado e falha de forma
+explicita, sem chamada externa acidental. O remetente `onboarding@resend.dev`
+e provisorio para testes; dominio proprio deve ser verificado futuramente no
+Resend.
+
+Teste administrativo seguro:
+
+```bash
+python manage.py send_test_email destinatario@example.com
+```
+
+Detalhes: `docs/deployment/transactional-email-resend.md`.
 
 ## Checklist PVV-043 Railway
 
