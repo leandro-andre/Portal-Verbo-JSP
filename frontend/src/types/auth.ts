@@ -87,6 +87,21 @@ export type ActivateAccountInput = {
   password_confirm: string
 }
 
+export type PasswordResetRequestInput = {
+  email: string
+}
+
+export type PasswordResetValidateResponse = {
+  valid: boolean
+}
+
+export type PasswordResetConfirmInput = {
+  uid: string
+  token: string
+  new_password: string
+  new_password_confirm: string
+}
+
 export type AuthValidationErrors = Partial<
-  Record<'username' | 'password' | 'password_confirm' | 'uid' | 'token', string[]>
+  Record<'username' | 'password' | 'password_confirm' | 'uid' | 'token' | 'new_password' | 'new_password_confirm', string[]>
 >

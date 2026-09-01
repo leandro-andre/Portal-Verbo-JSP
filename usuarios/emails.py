@@ -1,9 +1,13 @@
 from dataclasses import dataclass
+import hashlib
 from html import escape
 import logging
 from urllib.parse import urlparse
 
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 from core.email import send_transactional_email
 from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
@@ -15,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 ACCESS_APPROVAL_SUBJECT = "Seu acesso ao Portal Verbo da Vida foi aprovado"
+PASSWORD_RESET_SUBJECT = "Redefinicao de senha - Portal Verbo da Vida"
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,14 @@ def _activation_link(usuario):
     if not base_url:
         return ""
     return f"{base_url}{build_account_activation_path(usuario)}"
+
+
+def _password_reset_link(usuario, token):
+    base_url = _app_base_url()
+    if not base_url:
+        return ""
+    uid = urlsafe_base64_encode(force_bytes(usuario.pk))
+    return f"{base_url}/redefinir-senha/{uid}/{token}"
 
 
 def _portal_link():
@@ -100,6 +113,33 @@ def _build_active_account_email(*, name, portal_link):
         "Sua solicitacao de acesso ao Portal Verbo da Vida foi aprovada.\n\n"
         "Voce ja pode acessar o Portal normalmente.\n\n"
         f"{portal_link}\n\n"
+        "Portal Verbo da Vida"
+    )
+    return html, text
+
+
+def _build_password_reset_email(*, name, reset_link):
+    safe_name = escape(name) if name else ""
+    greeting_html = f"Ola, {safe_name}!" if safe_name else "Ola!"
+    greeting_text = f"Ola, {name}!" if name else "Ola!"
+    safe_link = escape(reset_link, quote=True)
+    html = (
+        f"<p>{greeting_html}</p>"
+        "<p>Recebemos uma solicitacao para redefinir sua senha no Portal Verbo da Vida.</p>"
+        "<p>Use o link abaixo para definir uma nova senha:</p>"
+        f'<p><a href="{safe_link}">Redefinir minha senha</a></p>'
+        "<p>Se voce nao solicitou isso, ignore este e-mail.</p>"
+        "<p>Se o botao nao funcionar, copie e cole o link no navegador.</p>"
+        f"<p>{safe_link}</p>"
+        "<p>Portal Verbo da Vida</p>"
+    )
+    text = (
+        f"{greeting_text}\n\n"
+        "Recebemos uma solicitacao para redefinir sua senha no Portal Verbo da Vida.\n\n"
+        "Use o link abaixo para definir uma nova senha:\n\n"
+        f"{reset_link}\n\n"
+        "Se voce nao solicitou isso, ignore este e-mail.\n\n"
+        "Se o botao nao funcionar, copie e cole o link no navegador.\n\n"
         "Portal Verbo da Vida"
     )
     return html, text
@@ -165,3 +205,31 @@ def send_access_approval_email(access_request, usuario):
         message_id=result.message_id,
         type=notification_type,
     )
+
+
+def send_password_reset_email(usuario):
+    recipient = (usuario.email or "").strip()
+    if not recipient:
+        logger.info("E-mail de redefinicao de senha nao enviado: destinatario ausente.", extra={"user_id": usuario.id})
+        return None
+
+    token = default_token_generator.make_token(usuario)
+    reset_link = _password_reset_link(usuario, token)
+    if not reset_link:
+        raise EmailConfigurationError("APP_BASE_URL ausente ou invalida.")
+
+    token_fingerprint = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    html, text = _build_password_reset_email(name=usuario.display_name, reset_link=reset_link)
+    result = send_transactional_email(
+        to=recipient,
+        subject=PASSWORD_RESET_SUBJECT,
+        html=html,
+        text=text,
+        idempotency_key=f"password-reset:{usuario.id}:{token_fingerprint}",
+    )
+
+    logger.info(
+        "E-mail de redefinicao de senha enviado.",
+        extra={"user_id": usuario.id, "provider": result.provider, "message_id": result.message_id},
+    )
+    return result

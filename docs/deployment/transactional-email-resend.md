@@ -85,9 +85,39 @@ access-request-approved:<access_request_id>:<type>
 
 A chave nao inclui e-mail, token, nome ou credenciais.
 
+## Recuperacao De Senha
+
+O fluxo de recuperacao de senha usa os tokens nativos do Django e envia links
+para:
+
+```text
+/redefinir-senha/<uid>/<token>
+```
+
+O endpoint publico de solicitacao sempre retorna a mesma resposta neutra,
+independentemente de o e-mail existir, estar ativo, possuir senha utilizavel ou
+o provider de e-mail falhar. Isso evita enumeracao de usuarios.
+
+Configuracoes:
+
+- `PASSWORD_RESET_TIMEOUT`: validade do token em segundos. Padrao: `3600`.
+- `PASSWORD_RESET_RATE`: throttle simples por IP para a solicitacao publica. Padrao: `5/hour`.
+
+O throttle usa a infraestrutura de cache configurada para o Django. Sem Redis ou
+cache externo, o comportamento fica limitado ao processo em execucao.
+
+Formato da idempotency key:
+
+```text
+password-reset:<user_id>:<token_fingerprint>
+```
+
+`token_fingerprint` e um hash curto do token. A chave nao inclui e-mail, token
+bruto, nome ou credenciais.
+
 ## Testes Automatizados
 
 Os testes usam mocks/fakes e nao fazem chamadas reais ao Resend.
 
-Recuperacao de senha, e-mails de escalas, reenvio manual, fila, webhooks e
-auditoria persistida continuam fora do escopo ate as proximas PVVs.
+E-mails de escalas, reenvio manual, fila, webhooks e auditoria persistida
+continuam fora do escopo ate as proximas PVVs.

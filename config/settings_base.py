@@ -159,6 +159,13 @@ EMAIL_FROM = env("EMAIL_FROM", "")
 APP_BASE_URL = env("APP_BASE_URL", "").rstrip("/")
 EMAIL_PROVIDER = "resend"
 EMAIL_PROVIDER_ENABLED = bool(RESEND_API_KEY and EMAIL_FROM)
+PASSWORD_RESET_TIMEOUT = int(env("PASSWORD_RESET_TIMEOUT", "3600"))
+
+REST_FRAMEWORK = {
+    "DEFAULT_THROTTLE_RATES": {
+        "password_reset": env("PASSWORD_RESET_RATE", "5/hour"),
+    },
+}
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

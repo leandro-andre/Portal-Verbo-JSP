@@ -1,6 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { activateAccount, getCurrentUser, login, logout } from '../api/auth'
-import type { ActivateAccountInput, Capability, CurrentUserResponse, LoginInput } from '../types/auth'
+import {
+  activateAccount,
+  confirmPasswordReset,
+  getCurrentUser,
+  login,
+  logout,
+  requestPasswordReset,
+  validatePasswordResetToken,
+} from '../api/auth'
+import type {
+  ActivateAccountInput,
+  Capability,
+  CurrentUserResponse,
+  LoginInput,
+  PasswordResetConfirmInput,
+  PasswordResetRequestInput,
+} from '../types/auth'
 
 export const currentUserQueryKey = ['auth', 'current-user'] as const
 
@@ -40,6 +55,27 @@ export function useLogout() {
 export function useActivateAccount() {
   return useMutation({
     mutationFn: (payload: ActivateAccountInput) => activateAccount(payload),
+  })
+}
+
+export function useRequestPasswordReset() {
+  return useMutation({
+    mutationFn: (payload: PasswordResetRequestInput) => requestPasswordReset(payload),
+  })
+}
+
+export function useValidatePasswordResetToken(uid: string, token: string) {
+  return useQuery({
+    queryKey: ['auth', 'password-reset', uid, token],
+    queryFn: () => validatePasswordResetToken(uid, token),
+    enabled: Boolean(uid && token),
+    retry: false,
+  })
+}
+
+export function useConfirmPasswordReset() {
+  return useMutation({
+    mutationFn: (payload: PasswordResetConfirmInput) => confirmPasswordReset(payload),
   })
 }
 

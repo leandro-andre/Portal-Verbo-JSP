@@ -1,12 +1,16 @@
 import json
+import logging
 
 from django.contrib.auth import SESSION_KEY, authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
@@ -14,12 +18,14 @@ from django.views.decorators.http import require_GET, require_POST
 from rest_framework import status
 from rest_framework.permissions import AllowAny, BasePermission
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from pessoas.models import Person
 from pessoas.serializers import get_photo_url
 from usuarios.dashboard import get_user_dashboard
-from usuarios.emails import send_access_approval_email
+from usuarios.emails import send_access_approval_email, send_password_reset_email
+from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
 from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
@@ -58,6 +64,12 @@ from .services import (
 
 
 PENDING_ACCESS_REQUEST_EXISTS_CODE = "PENDING_ACCESS_REQUEST_EXISTS"
+PASSWORD_RESET_NEUTRAL_DETAIL = (
+    "Se o e-mail informado estiver vinculado a uma conta ativa, enviaremos as instrucoes de redefinicao."
+)
+PASSWORD_RESET_INVALID_DETAIL = "Link de redefinicao invalido ou expirado."
+
+logger = logging.getLogger(__name__)
 
 
 def _json_request_body(request):
@@ -214,6 +226,118 @@ def activate_account_view(request):
     usuario.is_active = True
     usuario.save(update_fields=["password", "is_active"])
     return JsonResponse({"detail": "Conta ativada com sucesso."})
+
+
+class PasswordResetRequestThrottle(AnonRateThrottle):
+    scope = "password_reset"
+
+
+def _password_reset_neutral_response():
+    return Response({"detail": PASSWORD_RESET_NEUTRAL_DETAIL})
+
+
+def _decode_user_from_uid(uid):
+    user_model = get_user_model()
+    try:
+        user_pk = force_str(urlsafe_base64_decode(uid))
+        return user_model.objects.get(pk=user_pk)
+    except (TypeError, ValueError, OverflowError, user_model.DoesNotExist):
+        return None
+
+
+def _is_password_reset_user_eligible(usuario):
+    return bool(usuario and usuario.is_active and usuario.has_usable_password())
+
+
+def _password_reset_token_is_valid(uid, token):
+    if not uid or not token:
+        return False, None
+    usuario = _decode_user_from_uid(uid)
+    if not _is_password_reset_user_eligible(usuario):
+        return False, None
+    return default_token_generator.check_token(usuario, token), usuario
+
+
+def _delete_user_sessions(usuario):
+    for session in Session.objects.filter(expire_date__gte=timezone.now()):
+        session_data = session.get_decoded()
+        if str(session_data.get(SESSION_KEY)) == str(usuario.pk):
+            session.delete()
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetRequestThrottle]
+
+    def post(self, request):
+        email = str(request.data.get("email") or "").strip()
+        if not email:
+            return _password_reset_neutral_response()
+
+        user_model = get_user_model()
+        usuarios = user_model.objects.filter(email__iexact=email, is_active=True)
+        for usuario in usuarios:
+            if not usuario.has_usable_password():
+                continue
+            try:
+                send_password_reset_email(usuario)
+            except (EmailConfigurationError, EmailDeliveryError):
+                logger.warning(
+                    "E-mail de redefinicao de senha nao enviado.",
+                    exc_info=True,
+                    extra={"user_id": usuario.id},
+                )
+
+        return _password_reset_neutral_response()
+
+
+class PasswordResetValidateView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, uid, token):
+        is_valid, _usuario = _password_reset_token_is_valid(uid, token)
+        return Response({"valid": is_valid})
+
+
+@method_decorator(csrf_protect, name="dispatch")
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uid = str(request.data.get("uid") or "").strip()
+        token = str(request.data.get("token") or "").strip()
+        password = request.data.get("new_password") or ""
+        password_confirm = request.data.get("new_password_confirm") or ""
+        errors = {}
+
+        if not uid:
+            errors["uid"] = [PASSWORD_RESET_INVALID_DETAIL]
+        if not token:
+            errors["token"] = [PASSWORD_RESET_INVALID_DETAIL]
+        if not password:
+            errors["new_password"] = ["Informe a nova senha."]
+        if password != password_confirm:
+            errors["new_password_confirm"] = ["As senhas nao conferem."]
+
+        token_is_valid, usuario = _password_reset_token_is_valid(uid, token)
+        if uid and token and not token_is_valid:
+            errors["token"] = [PASSWORD_RESET_INVALID_DETAIL]
+
+        if usuario is not None and password:
+            try:
+                validate_password(password, usuario)
+            except DjangoValidationError as exc:
+                errors["new_password"] = list(exc.messages)
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            usuario.set_password(password)
+            usuario.save(update_fields=["password"])
+            _delete_user_sessions(usuario)
+        return Response({"detail": "Senha redefinida com sucesso."})
 
 
 class CanReviewAccessRequests(BasePermission):

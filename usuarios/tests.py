@@ -1,4 +1,4 @@
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from io import BytesIO, StringIO
 from os import environ
 import shutil
@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sessions.models import Session
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -491,6 +492,7 @@ class AccessRequestApiTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+@override_settings(REST_FRAMEWORK={"DEFAULT_THROTTLE_RATES": {"password_reset": "1000/hour"}})
 class AuthApiTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()
@@ -509,6 +511,16 @@ class AuthApiTests(TestCase):
             "token": token,
             "password": password,
             "password_confirm": password,
+        }
+
+    def _password_reset_payload(self, usuario, password="Nova-senha-123"):
+        uid = urlsafe_base64_encode(force_bytes(usuario.pk))
+        token = default_token_generator.make_token(usuario)
+        return {
+            "uid": uid,
+            "token": token,
+            "new_password": password,
+            "new_password_confirm": password,
         }
 
     def test_current_user_anonimo_retorna_nao_autenticado(self):
@@ -763,6 +775,300 @@ class AuthApiTests(TestCase):
         self.assertIn("password", response.json())
         usuario.refresh_from_db()
         self.assertFalse(usuario.is_active)
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_password_reset_request_retorna_resposta_neutra_para_qualquer_email(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.neutral",
+            password="Senha-forte-123",
+            email="reset.neutral@example.com",
+        )
+        inactive = self.user_model.objects.create_user(
+            username="reset.inactive",
+            password="Senha-forte-123",
+            email="reset.inactive@example.com",
+            is_active=False,
+        )
+        unusable = self.user_model.objects.create_user(
+            username="reset.unusable",
+            email="reset.unusable@example.com",
+        )
+        unusable.set_unusable_password()
+        unusable.save(update_fields=["password"])
+        headers = self._csrf_headers()
+        expected = {
+            "detail": "Se o e-mail informado estiver vinculado a uma conta ativa, enviaremos as instrucoes de redefinicao."
+        }
+
+        with patch("usuarios.emails.send_transactional_email", return_value=EmailSendResult(provider="resend", message_id="email_reset")) as send_email:
+            responses = []
+            for index, email in enumerate(
+                [
+                    usuario.email,
+                    "ninguem@example.com",
+                    inactive.email,
+                    unusable.email,
+                    "email-invalido",
+                    "",
+                ],
+                start=1,
+            ):
+                responses.append(
+                    self.client.post(
+                        reverse("auth-password-reset-request"),
+                        {"email": email},
+                        content_type="application/json",
+                        REMOTE_ADDR=f"127.0.0.{index}",
+                        **headers,
+                    )
+                )
+
+        self.assertTrue(all(response.status_code == 200 for response in responses))
+        self.assertTrue(all(response.json() == expected for response in responses))
+        self.assertEqual(send_email.call_count, 1)
+        kwargs = send_email.call_args.kwargs
+        self.assertEqual(kwargs["to"], usuario.email)
+        self.assertIn("/redefinir-senha/", kwargs["html"])
+        self.assertNotIn(usuario.email, kwargs["idempotency_key"])
+        self.assertNotIn("/redefinir-senha/", kwargs["idempotency_key"])
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_password_reset_request_mantem_resposta_neutra_em_falha_de_envio(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.delivery",
+            password="Senha-forte-123",
+            email="reset.delivery@example.com",
+        )
+        headers = self._csrf_headers()
+
+        with patch("usuarios.emails.send_transactional_email", side_effect=EmailDeliveryError("falha")):
+            response = self.client.post(
+                reverse("auth-password-reset-request"),
+                {"email": usuario.email},
+                content_type="application/json",
+                **headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "detail": "Se o e-mail informado estiver vinculado a uma conta ativa, enviaremos as instrucoes de redefinicao."
+            },
+        )
+
+    def test_password_reset_request_exige_csrf(self):
+        response = self.client.post(
+            reverse("auth-password-reset-request"),
+            {"email": "reset.csrf@example.com"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_password_reset_validate_retorna_apenas_validade(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.validate",
+            password="Senha-forte-123",
+            email="reset.validate@example.com",
+        )
+        payload = self._password_reset_payload(usuario)
+
+        response = self.client.get(
+            reverse(
+                "auth-password-reset-validate",
+                kwargs={"uid": payload["uid"], "token": payload["token"]},
+            )
+        )
+        invalid = self.client.get(
+            reverse(
+                "auth-password-reset-validate",
+                kwargs={"uid": payload["uid"], "token": "token-invalido"},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"valid": True})
+        self.assertEqual(invalid.status_code, 200)
+        self.assertEqual(invalid.json(), {"valid": False})
+
+    def test_password_reset_validate_rejeita_usuario_inativo_ou_sem_senha_utilizavel(self):
+        inactive = self.user_model.objects.create_user(
+            username="reset.validate.inactive",
+            password="Senha-forte-123",
+            email="reset.validate.inactive@example.com",
+            is_active=False,
+        )
+        unusable = self.user_model.objects.create_user(
+            username="reset.validate.unusable",
+            email="reset.validate.unusable@example.com",
+        )
+        unusable.set_unusable_password()
+        unusable.save(update_fields=["password"])
+
+        for usuario in [inactive, unusable]:
+            payload = self._password_reset_payload(usuario)
+            response = self.client.get(
+                reverse(
+                    "auth-password-reset-validate",
+                    kwargs={"uid": payload["uid"], "token": payload["token"]},
+                )
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"valid": False})
+
+    @override_settings(PASSWORD_RESET_TIMEOUT=3600)
+    def test_password_reset_validate_rejeita_token_expirado(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.expired",
+            password="Senha-forte-123",
+            email="reset.expired@example.com",
+        )
+        uid = urlsafe_base64_encode(force_bytes(usuario.pk))
+        created_at = datetime(2026, 1, 1, 12, 0, 0)
+        expired_at = created_at + timedelta(seconds=3601)
+
+        with patch.object(default_token_generator, "_now", return_value=created_at):
+            token = default_token_generator.make_token(usuario)
+
+        with patch.object(default_token_generator, "_now", return_value=expired_at):
+            response = self.client.get(
+                reverse(
+                    "auth-password-reset-validate",
+                    kwargs={"uid": uid, "token": token},
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"valid": False})
+
+    def test_password_reset_confirm_exige_csrf(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.confirm.csrf",
+            password="Senha-forte-123",
+            email="reset.confirm.csrf@example.com",
+        )
+
+        response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            self._password_reset_payload(usuario),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_password_reset_confirm_define_senha_e_invalida_token(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.confirm",
+            password="Senha-antiga-123",
+            email="reset.confirm@example.com",
+        )
+        payload = self._password_reset_payload(usuario)
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.check_password("Nova-senha-123"))
+        validate_response = self.client.get(
+            reverse(
+                "auth-password-reset-validate",
+                kwargs={"uid": payload["uid"], "token": payload["token"]},
+            )
+        )
+        self.assertEqual(validate_response.json(), {"valid": False})
+
+    def test_password_reset_confirm_nao_ativa_usuario_inativo(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.inactive.confirm",
+            password="Senha-forte-123",
+            email="reset.inactive.confirm@example.com",
+            is_active=False,
+        )
+        payload = self._password_reset_payload(usuario)
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        usuario.refresh_from_db()
+        self.assertFalse(usuario.is_active)
+        self.assertTrue(usuario.check_password("Senha-forte-123"))
+
+    def test_password_reset_confirm_usa_validadores_de_senha_do_django(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.weak",
+            password="Senha-forte-123",
+            email="reset.weak@example.com",
+        )
+        payload = self._password_reset_payload(usuario, password="123")
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("new_password", response.json())
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.check_password("Senha-forte-123"))
+
+    def test_password_reset_confirm_invalida_sessoes_existentes(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.sessions",
+            password="Senha-antiga-123",
+            email="reset.sessions@example.com",
+        )
+        self.client.force_login(usuario)
+        session_key = self.client.session.session_key
+        payload = self._password_reset_payload(usuario)
+        headers = self._csrf_headers()
+
+        response = self.client.post(
+            reverse("auth-password-reset-confirm"),
+            payload,
+            content_type="application/json",
+            **headers,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Session.objects.filter(session_key=session_key).exists())
+
+    def test_password_reset_confirm_falha_posterior_faz_rollback(self):
+        usuario = self.user_model.objects.create_user(
+            username="reset.rollback",
+            password="Senha-antiga-123",
+            email="reset.rollback@example.com",
+        )
+        payload = self._password_reset_payload(usuario)
+        headers = self._csrf_headers()
+        self.client.raise_request_exception = False
+
+        with patch("usuarios.api_views._delete_user_sessions", side_effect=RuntimeError("falha")):
+            response = self.client.post(
+                reverse("auth-password-reset-confirm"),
+                payload,
+                content_type="application/json",
+                **headers,
+            )
+
+        self.assertEqual(response.status_code, 500)
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.check_password("Senha-antiga-123"))
 
 
 class MyProfileApiTests(TestCase):

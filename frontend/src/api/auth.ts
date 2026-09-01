@@ -3,6 +3,9 @@ import type {
   AuthValidationErrors,
   CurrentUserResponse,
   LoginInput,
+  PasswordResetConfirmInput,
+  PasswordResetRequestInput,
+  PasswordResetValidateResponse,
 } from '../types/auth'
 import { csrfJsonHeaders } from './http'
 
@@ -38,6 +41,8 @@ function parseAuthErrors(value: unknown): AuthValidationErrors {
     'password_confirm',
     'uid',
     'token',
+    'new_password',
+    'new_password_confirm',
   ]
 
   fields.forEach((field) => {
@@ -125,5 +130,50 @@ export async function activateAccount(payload: ActivateAccountInput): Promise<vo
 
   if (!response.ok) {
     throw new Error('Nao foi possivel ativar sua conta.')
+  }
+}
+
+export async function requestPasswordReset(payload: PasswordResetRequestInput): Promise<void> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch('/api/auth/password-reset/request/', {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel solicitar a redefinicao de senha.')
+  }
+}
+
+export async function validatePasswordResetToken(uid: string, token: string): Promise<PasswordResetValidateResponse> {
+  const response = await fetch(`/api/auth/password-reset/validate/${uid}/${token}/`, {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel validar o link de redefinicao.')
+  }
+
+  return response.json() as Promise<PasswordResetValidateResponse>
+}
+
+export async function confirmPasswordReset(payload: PasswordResetConfirmInput): Promise<void> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch('/api/auth/password-reset/confirm/', {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseJson(response)
+
+  if (response.status === 400) {
+    throw new AuthValidationError(parseAuthErrors(data))
+  }
+
+  if (!response.ok) {
+    throw new Error('Nao foi possivel redefinir sua senha.')
   }
 }

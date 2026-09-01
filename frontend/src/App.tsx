@@ -16,6 +16,7 @@ import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
 import DiscipleshipClassesPage from './pages/DiscipleshipClassesPage'
 import DiscipleshipAttendancePage from './pages/DiscipleshipAttendancePage'
 import HomePage from './pages/HomePage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import LoginPage from './pages/LoginPage'
 import MembershipPage from './pages/MembershipPage'
 import MyProfilePage from './pages/MyProfilePage'
@@ -27,6 +28,7 @@ import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
 import ScheduleDetailPage from './pages/ScheduleDetailPage'
 import SchedulesPage from './pages/SchedulesPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
 import WorshipSchedulePage from './pages/WorshipSchedulePage'
@@ -145,6 +147,8 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/pedir-acesso" element={<AccessRequestPage />} />
         <Route path="/ativar-conta/:uid/:token" element={<ActivateAccountPage />} />
+        <Route path="/esqueci-minha-senha" element={<ForgotPasswordPage />} />
+        <Route path="/redefinir-senha/:uid/:token" element={<ResetPasswordPage />} />
         <Route path="/*" element={<AdminRoutes />} />
       </Routes>
     </BrowserRouter>

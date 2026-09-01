@@ -102,6 +102,10 @@ function LoginPage() {
             {login.isPending ? 'Entrando...' : 'Entrar'}
           </button>
 
+          <Link className="public-link" to="/esqueci-minha-senha">
+            Esqueci minha senha
+          </Link>
+
           <Link className="public-link" to="/pedir-acesso">
             Ainda nao tenho acesso
           </Link>
