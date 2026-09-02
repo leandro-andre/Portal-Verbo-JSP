@@ -7,6 +7,7 @@ import type {
   MembershipStatus,
   MembershipStatusHistory,
   Person,
+  Person360,
   PersonUnavailability,
   PersonUnavailabilityInput,
   PossibleDuplicateResponse,
@@ -72,6 +73,22 @@ export async function getPerson(id: number): Promise<Person> {
   }
 
   return response.json() as Promise<Person>
+}
+
+export async function getPerson360(id: number): Promise<Person360> {
+  const response = await fetch(`/api/people/${id}/360/`, {
+    credentials: 'same-origin',
+  })
+
+  if (response.status === 404) {
+    throw new ApiHttpError(404, 'Pessoa nao encontrada.')
+  }
+
+  if (!response.ok) {
+    throw new ApiHttpError(response.status, 'Nao foi possivel carregar a ficha 360 da pessoa.')
+  }
+
+  return response.json() as Promise<Person360>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -10,6 +10,7 @@ from .views import (
     PersonUnavailabilityDetailView,
     PersonUnavailabilityListCreateView,
     PersonUnavailabilityReactivateView,
+    Person360View,
     PersonViewSet,
 )
 
@@ -50,5 +51,6 @@ urlpatterns = [
         PersonUnavailabilityReactivateView.as_view(),
         name="person-unavailability-reactivate",
     ),
+    path("<int:person_id>/360/", Person360View.as_view(), name="person-360"),
     path("", include(router.urls)),
 ]

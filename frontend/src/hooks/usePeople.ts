@@ -15,6 +15,7 @@ import {
   getMyUnavailability,
   getPeople,
   getPerson,
+  getPerson360,
   getPersonUnavailability,
   reactivateMembership,
   reactivateMyUnavailability,
@@ -36,6 +37,10 @@ export const peopleQueryKey = ['people']
 
 export function personQueryKey(id: number) {
   return ['people', id] as const
+}
+
+export function person360QueryKey(id: number) {
+  return ['people', id, '360'] as const
 }
 
 export function churchJourneyQueryKey(personId: number) {
@@ -81,6 +86,14 @@ export function usePerson(id: number) {
   return useQuery({
     queryKey: personQueryKey(id),
     queryFn: () => getPerson(id),
+    enabled: Number.isFinite(id),
+  })
+}
+
+export function usePerson360(id: number) {
+  return useQuery({
+    queryKey: person360QueryKey(id),
+    queryFn: () => getPerson360(id),
     enabled: Number.isFinite(id),
   })
 }

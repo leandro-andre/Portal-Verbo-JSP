@@ -14,6 +14,7 @@ from .availability import (
     update_person_unavailability,
 )
 from .models import Person, PersonUnavailability
+from .projections import build_person_360
 from .serializers import PersonSerializer, PersonUnavailabilitySerializer
 
 
@@ -130,6 +131,23 @@ class PersonViewSet(
 
         self.perform_update(serializer)
         return Response(serializer.data)
+
+
+class CanViewPerson360(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm("pessoas.view_person")
+        )
+
+
+class Person360View(APIView):
+    permission_classes = [CanViewPerson360]
+
+    def get(self, request, person_id):
+        person = get_object_or_404(Person, pk=person_id)
+        return Response(build_person_360(person, viewer=request.user, request=request))
 
 
 class IsActiveUser(BasePermission):

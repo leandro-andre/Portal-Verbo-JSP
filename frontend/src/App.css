@@ -1465,6 +1465,183 @@
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
 }
 
+.person360-content {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.person360-header {
+  align-items: flex-start;
+}
+
+.person360-header .person-avatar,
+.person360-photo {
+  flex: 0 0 72px;
+  height: 72px;
+  width: 72px;
+}
+
+.person360-photo {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.person360-header__identity {
+  gap: 10px;
+}
+
+.person360-badges,
+.person360-contact-line,
+.person360-footer-actions,
+.person360-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.person360-contact-line {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.person360-tabs {
+  border-bottom: 1px solid var(--color-border-soft);
+  overflow-x: auto;
+  padding-bottom: 0;
+}
+
+.person360-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 12px 4px;
+  white-space: nowrap;
+}
+
+.person360-tab--active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.person360-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.person360-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+}
+
+.person360-section:last-child {
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.person360-section--wide {
+  grid-column: 1 / -1;
+}
+
+.person360-badge--success {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.person360-badge--success .status-badge__dot {
+  background: #22c55e;
+}
+
+.person360-badge--warning {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.person360-badge--warning .status-badge__dot {
+  background: #f59e0b;
+}
+
+.person360-badge--danger {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.person360-badge--danger .status-badge__dot {
+  background: #ef4444;
+}
+
+.person360-badge--neutral .status-badge__dot {
+  background: #98a2b3;
+}
+
+.person360-pending-list,
+.person360-compact-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.person360-compact-list li,
+.person360-pending-item {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.person360-compact-list span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.person360-pending-item {
+  justify-content: flex-start;
+}
+
+.person360-pending-item--warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.person360-pending-item--danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.person360-eligibility {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.person360-eligibility > span:last-child {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.person360-department-table {
+  min-width: 760px;
+}
+
+.person360-footer-actions {
+  justify-content: flex-end;
+}
+
 .profile-section {
   border-bottom: 1px solid var(--color-border-soft);
   padding: 22px 24px;
@@ -2041,6 +2218,28 @@
 
   .profile-section {
     padding: 18px;
+  }
+
+  .person360-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .person360-tabs {
+    flex-wrap: nowrap;
+  }
+
+  .person360-tab {
+    flex: 0 0 auto;
+  }
+
+  .person360-contact-line,
+  .person360-footer-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .person360-footer-actions .button {
+    width: 100%;
   }
 
   .attendance-summary-grid {

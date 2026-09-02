@@ -6,8 +6,239 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
+from departamentos.models import Departamento, DepartamentoMembro, DepartmentMembership, DepartmentRole
 from pessoas.models import Person, PersonUnavailability
 from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
+
+
+class Person360ApiTests(APITestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.admin = self.make_user("person360.admin", PORTAL_ADMIN_GROUP)
+        self.secretary = self.make_user("person360.secretary", SECRETARY_GROUP)
+        self.pastor = self.make_user("person360.pastor", PASTOR_GROUP)
+        self.common = self.user_model.objects.create_user(
+            username="person360.common",
+            password="senha-forte-123",
+        )
+        self.person = Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Mari",
+            birth_date=date(1990, 5, 10),
+            email="maria.person@example.com",
+            phone="81999999999",
+        )
+
+    def make_user(self, username, group_name, **kwargs):
+        user = self.user_model.objects.create_user(username=username, password="senha-forte-123", **kwargs)
+        user.groups.add(Group.objects.get(name=group_name))
+        return user
+
+    def get_360(self, person=None):
+        return self.client.get(reverse("person-360", args=[(person or self.person).pk]))
+
+    def authenticate(self, user):
+        self.client.force_authenticate(user)
+
+    def make_completed_discipleship(self, person=None):
+        person = person or self.person
+        teacher = Person.objects.create(full_name="Professor Discipulado", birth_date=date(1980, 1, 1))
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Fundamentos",
+            teacher=teacher,
+            start_date=date(2026, 1, 1),
+            expected_end_date=date(2026, 3, 1),
+            planned_sessions=8,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        return DiscipleshipEnrollment.objects.create(
+            person=person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            enrolled_at=date(2026, 1, 5),
+            completed_at=date(2026, 3, 5),
+        )
+
+    def test_admin_secretaria_e_pastor_acessam_ficha_360(self):
+        for user in [self.admin, self.secretary, self.pastor]:
+            self.authenticate(user)
+            response = self.get_360()
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.json()["person"]["display_name"], "Mari")
+
+    def test_usuario_sem_permissao_nao_acessa_ficha_360(self):
+        self.authenticate(self.common)
+
+        response = self.get_360()
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_person_inexistente_retorna_404(self):
+        self.authenticate(self.admin)
+
+        response = self.client.get(reverse("person-360", args=[999999]))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_ficha_sem_usuario_membresia_discipulado_ou_departamentos(self):
+        self.authenticate(self.admin)
+
+        response = self.get_360()
+        body = response.json()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(body["access"]["status"], "NO_ACCESS")
+        self.assertFalse(body["membership"]["has_membership"])
+        self.assertEqual(body["discipleship"]["status"], "NOT_STARTED")
+        self.assertEqual(body["departments"], {"active": [], "inactive": []})
+        self.assertIn("NO_PORTAL_USER", [item["code"] for item in body["pending_items"]])
+        self.assertNotIn("password", str(body).lower())
+        self.assertNotIn("token", str(body).lower())
+
+    def test_ficha_com_usuario_active_pending_activation_e_blocked(self):
+        self.authenticate(self.admin)
+        active_user = self.user_model.objects.create_user(
+            username="person360.active",
+            password="senha-forte-123",
+            email="active@example.com",
+            person=self.person,
+        )
+        active_response = self.get_360().json()
+        self.assertEqual(active_response["access"]["status"], "ACTIVE")
+        self.assertEqual(active_response["access"]["username"], active_user.username)
+
+        pending_person = Person.objects.create(full_name="Pendente Ativacao", birth_date=date(1991, 1, 1))
+        pending_user = self.user_model.objects.create_user(
+            username="person360.pending",
+            email="pending@example.com",
+            person=pending_person,
+            is_active=False,
+        )
+        pending_user.set_unusable_password()
+        pending_user.save(update_fields=["password"])
+        pending_response = self.get_360(pending_person).json()
+        self.assertEqual(pending_response["access"]["status"], "PENDING_ACTIVATION")
+        self.assertIn("ACCOUNT_PENDING_ACTIVATION", [item["code"] for item in pending_response["pending_items"]])
+
+        blocked_person = Person.objects.create(full_name="Bloqueada Portal", birth_date=date(1992, 1, 1))
+        self.user_model.objects.create_user(
+            username="person360.blocked",
+            password="senha-forte-123",
+            person=blocked_person,
+            is_active=False,
+        )
+        blocked_response = self.get_360(blocked_person).json()
+        self.assertEqual(blocked_response["access"]["status"], "BLOCKED")
+        self.assertIn("ACCOUNT_BLOCKED", [item["code"] for item in blocked_response["pending_items"]])
+
+    def test_jornada_visitante_membro_ativo_e_membro_inativo(self):
+        self.authenticate(self.admin)
+        ChurchJourney.objects.create(person=self.person, started_at=date(2025, 2, 1))
+        visitor = self.get_360().json()
+        self.assertEqual(visitor["church"]["status"], "VISITOR")
+
+        self.make_completed_discipleship()
+        membership = Membership.objects.create(
+            person=self.person,
+            status=Membership.Status.ACTIVE,
+            member_since=date(2026, 3, 5),
+            approved_by=self.admin,
+        )
+        active = self.get_360().json()
+        self.assertEqual(active["church"]["status"], "MEMBER")
+        self.assertEqual(active["membership"]["approved_by"]["display_name"], self.admin.display_name)
+
+        membership.status = Membership.Status.INACTIVE
+        membership.save(update_fields=["status", "updated_at"])
+        inactive = self.get_360().json()
+        self.assertEqual(inactive["church"]["status"], "INACTIVE_MEMBER")
+        self.assertIn("MEMBERSHIP_INACTIVE", [item["code"] for item in inactive["pending_items"]])
+
+    def test_discipulado_em_andamento_e_concluido(self):
+        self.authenticate(self.admin)
+        teacher = Person.objects.create(full_name="Professor Atual", birth_date=date(1980, 1, 1))
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Nova Vida",
+            teacher=teacher,
+            start_date=date(2026, 4, 1),
+            expected_end_date=date(2026, 6, 1),
+            planned_sessions=8,
+            status=DiscipleshipClass.Status.IN_PROGRESS,
+        )
+        enrollment = DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.ENROLLED,
+            enrolled_at=date(2026, 4, 2),
+        )
+
+        in_progress = self.get_360().json()
+        self.assertEqual(in_progress["discipleship"]["status"], "IN_PROGRESS")
+        self.assertEqual(in_progress["discipleship"]["class"]["name"], "Nova Vida")
+
+        enrollment.status = DiscipleshipEnrollment.Status.COMPLETED
+        enrollment.completed_at = date(2026, 6, 2)
+        enrollment.save(update_fields=["status", "completed_at", "updated_at"])
+        completed = self.get_360().json()
+        self.assertEqual(completed["discipleship"]["status"], "COMPLETED")
+        self.assertIn(
+            "MEMBERSHIP_ELIGIBLE_PENDING_APPROVAL",
+            [item["code"] for item in completed["pending_items"]],
+        )
+
+    def test_departamentos_ativos_inativos_e_inelegibilidade_reutilizam_departmentmembership(self):
+        self.authenticate(self.admin)
+        department = Departamento.objects.create(nome="Infantil 360")
+        inactive_department = Departamento.objects.create(nome="Recepcao 360", ativo=False)
+        role = DepartmentRole.objects.create(department=department, name="Professor", code="professor")
+        inactive_role = DepartmentRole.objects.create(department=inactive_department, name="Voluntario", code="voluntario")
+        active_membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=department,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+            joined_at=date(2026, 7, 1),
+        )
+        inactive_membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=inactive_department,
+            role=inactive_role,
+            status=DepartmentMembership.Status.INACTIVE,
+            joined_at=date(2026, 1, 1),
+            left_at=date(2026, 2, 1),
+        )
+
+        response = self.get_360().json()
+
+        self.assertEqual(response["departments"]["active"][0]["id"], active_membership.id)
+        self.assertEqual(response["departments"]["inactive"][0]["id"], inactive_membership.id)
+        self.assertFalse(response["departments"]["active"][0]["operationally_eligible"])
+        self.assertIn("MEMBERSHIP_NOT_ACTIVE", [item["code"] for item in response["departments"]["active"][0]["eligibility"]["reasons"]])
+        self.assertIn(
+            "DEPARTMENT_MEMBERSHIP_OPERATIONALLY_INELIGIBLE",
+            [item["code"] for item in response["pending_items"]],
+        )
+
+    def test_departamento_legado_nao_alimenta_ficha_360_operacional(self):
+        self.authenticate(self.admin)
+        usuario = self.user_model.objects.create_user(
+            username="person360.legacy",
+            password="senha-forte-123",
+            person=self.person,
+        )
+        department = Departamento.objects.create(nome="Legado 360")
+        DepartamentoMembro.objects.create(
+            departamento=department,
+            membro=usuario,
+            papel=DepartamentoMembro.Papel.VOLUNTARIO,
+        )
+
+        response = self.get_360()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["departments"], {"active": [], "inactive": []})
 
 
 class PersonApiTests(APITestCase):

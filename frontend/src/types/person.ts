@@ -188,3 +188,120 @@ export type MyProfileResponse = {
 export type MyProfileUpdateInput = {
   phone: string
 }
+
+export type Person360PendingSeverity = 'info' | 'warning' | 'danger'
+
+export type Person360PendingItem = {
+  code: string
+  severity: Person360PendingSeverity
+  label: string
+}
+
+export type Person360DepartmentMembership = {
+  id: number
+  status: 'ACTIVE' | 'INACTIVE'
+  joined_at: string | null
+  left_at: string | null
+  department: {
+    id: number
+    name: string
+    code: string
+    active: boolean
+  }
+  role: {
+    id: number
+    name: string
+    code: string
+    active: boolean
+    can_manage_department: boolean
+    can_manage_members: boolean
+    can_manage_schedules: boolean
+  }
+  operationally_eligible: boolean
+  eligibility: {
+    eligible: boolean
+    reasons: Array<{
+      code: string
+      message: string
+    }>
+  }
+}
+
+export type Person360 = {
+  person: {
+    id: number
+    full_name: string
+    preferred_name: string
+    display_name: string
+    birth_date: string | null
+    age: number | null
+    email: string
+    phone: string
+    photo_url: string | null
+    status: PersonStatus
+    created_at: string | null
+    updated_at: string | null
+  }
+  church: {
+    status: ChurchJourneyStatus
+    label: string
+    has_church_journey: boolean
+    started_at: string | null
+  }
+  discipleship: {
+    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'WITHDRAWN'
+    label: string
+    enrolled_at: string | null
+    completed_at: string | null
+    withdrawn_at: string | null
+    class: {
+      id: number
+      name: string
+      status: string
+      start_date: string | null
+      expected_end_date: string | null
+    } | null
+    membership_eligible: boolean
+    membership_can_create: boolean
+  }
+  membership: {
+    has_membership: boolean
+    status: MembershipStatus | null
+    label: string
+    member_since: string | null
+    approved_at: string | null
+    approved_by: {
+      id: number
+      display_name: string
+    } | null
+    created_at: string | null
+    updated_at: string | null
+  }
+  access: {
+    has_user: boolean
+    id: number | null
+    username: string | null
+    email: string | null
+    status: AccessStatus | 'NO_ACCESS'
+    label: string
+    is_active: boolean
+    last_login: string | null
+    date_joined: string | null
+  }
+  departments: {
+    active: Person360DepartmentMembership[]
+    inactive: Person360DepartmentMembership[]
+  }
+  pending_items: Person360PendingItem[]
+  summary: {
+    church_label: string
+    discipleship_label: string
+    membership_label: string
+    access_label: string
+    active_departments_count: number
+  }
+  actions: {
+    edit_person_url: string
+    manage_access_url: string | null
+  }
+}
