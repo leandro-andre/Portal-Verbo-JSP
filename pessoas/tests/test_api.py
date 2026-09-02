@@ -1,15 +1,20 @@
-from datetime import date, time
+from datetime import date, timedelta, time
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from departamentos.models import Departamento, DepartamentoMembro, DepartmentMembership, DepartmentRole
+from escalas.models import Escala, EscalaItem, IndisponibilidadeMembro
 from pessoas.models import Person, PersonUnavailability
+from scheduling.models import Schedule, ScheduleAssignment
+from usuarios.models import AccessRequest
 from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
+from worship.models import WorshipService
 
 
 class Person360ApiTests(APITestCase):
@@ -239,6 +244,159 @@ class Person360ApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.json()["departments"], {"active": [], "inactive": []})
+
+    def test_escalas_operacionais_usam_scheduling_e_separam_futuras_recentes(self):
+        self.authenticate(self.admin)
+        department = Departamento.objects.create(nome="Operacao 360")
+        role = DepartmentRole.objects.create(department=department, name="Voluntario", code="voluntario")
+        membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=department,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+            joined_at=timezone.localdate(),
+        )
+        future_service = WorshipService.objects.create(
+            name="Culto Futuro 360",
+            date=timezone.localdate() + timedelta(days=7),
+            time=time(19, 30),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        past_service = WorshipService.objects.create(
+            name="Culto Passado 360",
+            date=timezone.localdate() - timedelta(days=7),
+            time=time(18, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.SCHEDULED,
+        )
+        cancelled_service = WorshipService.objects.create(
+            name="Culto Cancelado 360",
+            date=timezone.localdate() + timedelta(days=8),
+            time=time(18, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+            status=WorshipService.Status.CANCELLED,
+        )
+        future_schedule = Schedule.objects.create(
+            department=department,
+            worship_service=future_service,
+            status=Schedule.Status.PUBLISHED,
+        )
+        past_schedule = Schedule.objects.create(
+            department=department,
+            worship_service=past_service,
+            status=Schedule.Status.PUBLISHED,
+        )
+        draft_schedule = Schedule.objects.create(
+            department=department,
+            worship_service=cancelled_service,
+            status=Schedule.Status.DRAFT,
+        )
+        ScheduleAssignment.objects.create(schedule=future_schedule, department_membership=membership)
+        ScheduleAssignment.objects.create(schedule=past_schedule, department_membership=membership)
+        ScheduleAssignment.objects.create(schedule=draft_schedule, department_membership=membership)
+
+        body = self.get_360().json()
+
+        self.assertEqual([item["worship_service"]["name"] for item in body["schedules"]["upcoming"]], ["Culto Futuro 360"])
+        self.assertEqual([item["worship_service"]["name"] for item in body["schedules"]["recent"]], ["Culto Passado 360"])
+        self.assertEqual(body["summary"]["upcoming_schedules_count"], 1)
+        self.assertEqual(body["summary"]["next_schedule"]["department"]["name"], "Operacao 360")
+
+    def test_indisponibilidades_360_usam_personunavailability_sem_expor_motivo(self):
+        self.authenticate(self.admin)
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=timezone.localdate() + timedelta(days=2),
+            end_date=timezone.localdate() + timedelta(days=3),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            reason="Motivo pastoral sensivel",
+        )
+        PersonUnavailability.objects.create(
+            person=self.person,
+            start_date=timezone.localdate() - timedelta(days=5),
+            end_date=timezone.localdate() - timedelta(days=4),
+            reason="Motivo antigo",
+        )
+
+        body = self.get_360().json()
+
+        self.assertEqual(len(body["unavailability"]["upcoming"]), 1)
+        upcoming = body["unavailability"]["upcoming"][0]
+        self.assertEqual(upcoming["start_time"], "09:00")
+        self.assertNotIn("reason", upcoming)
+        self.assertNotIn("Motivo pastoral sensivel", str(body))
+        self.assertEqual(body["summary"]["upcoming_unavailability_count"], 1)
+
+    def test_historico_360_usa_eventos_reais_e_ordenados(self):
+        self.authenticate(self.admin)
+        ChurchJourney.objects.create(person=self.person, started_at=date(2026, 1, 1))
+        enrollment = self.make_completed_discipleship()
+        Membership.objects.create(
+            person=self.person,
+            status=Membership.Status.ACTIVE,
+            member_since=enrollment.completed_at,
+            approved_by=self.admin,
+            approved_at=timezone.now(),
+        )
+        AccessRequest.objects.create(
+            full_name=self.person.full_name,
+            birth_date=self.person.birth_date,
+            email=self.person.email,
+            phone=self.person.phone,
+            status=AccessRequest.Status.APPROVED,
+            person=self.person,
+            reviewed_by=self.admin,
+            reviewed_at=timezone.now(),
+        )
+
+        body = self.get_360().json()
+        codes = [item["code"] for item in body["timeline"]]
+
+        self.assertIn("PERSON_CREATED", codes)
+        self.assertIn("CHURCH_JOURNEY_STARTED", codes)
+        self.assertIn("DISCIPLESHIP_ENROLLED", codes)
+        self.assertIn("DISCIPLESHIP_COMPLETED", codes)
+        self.assertIn("MEMBERSHIP_STARTED", codes)
+        self.assertIn("MEMBERSHIP_APPROVED", codes)
+        self.assertIn("ACCESS_REQUESTED", codes)
+        self.assertIn("ACCESS_REQUEST_REVIEWED", codes)
+        self.assertEqual(body["timeline"], sorted(body["timeline"], key=lambda item: item["occurred_at"], reverse=True))
+
+    def test_legados_de_escalas_e_indisponibilidades_nao_alimentam_blocos_operacionais_360(self):
+        self.authenticate(self.admin)
+        usuario = self.user_model.objects.create_user(
+            username="person360.legacy.operation",
+            password="senha-forte-123",
+            person=self.person,
+        )
+        department = Departamento.objects.create(nome="Legado Operacional 360")
+        participacao = DepartamentoMembro.objects.create(
+            departamento=department,
+            membro=usuario,
+            papel=DepartamentoMembro.Papel.VOLUNTARIO,
+        )
+        escala = Escala.objects.create(
+            departamento=department,
+            titulo="Escala Legada 360",
+            data=timezone.localdate() + timedelta(days=5),
+            horario=time(19, 0),
+        )
+        EscalaItem.objects.create(escala=escala, participacao=participacao, funcao="Apoio")
+        IndisponibilidadeMembro.objects.create(
+            membro=usuario,
+            data_inicio=timezone.localdate() + timedelta(days=1),
+            data_fim=timezone.localdate() + timedelta(days=2),
+            motivo="Legado nao deve aparecer",
+        )
+
+        body = self.get_360().json()
+
+        self.assertEqual(body["schedules"], {"upcoming": [], "recent": []})
+        self.assertEqual(body["unavailability"], {"upcoming": []})
+        self.assertNotIn("Escala Legada 360", str(body))
+        self.assertNotIn("Legado nao deve aparecer", str(body))
 
 
 class PersonApiTests(APITestCase):

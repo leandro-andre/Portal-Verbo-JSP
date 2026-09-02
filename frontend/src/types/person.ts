@@ -227,6 +227,52 @@ export type Person360DepartmentMembership = {
   }
 }
 
+export type Person360ScheduleItem = {
+  id: number
+  schedule_id: number
+  schedule_status: 'PUBLISHED'
+  worship_service: {
+    id: number
+    name: string
+    date: string
+    time: string | null
+    status: 'SCHEDULED'
+    kind: string
+  }
+  department: {
+    id: number
+    name: string
+    code: string
+  }
+  role: {
+    id: number
+    name: string
+    code: string
+  }
+  assigned_at: string | null
+}
+
+export type Person360UnavailabilityItem = {
+  id: number
+  start_date: string
+  end_date: string
+  start_time: string | null
+  end_time: string | null
+  is_full_day: boolean
+  status: PersonUnavailabilityStatus
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type Person360TimelineItem = {
+  code: string
+  label: string
+  description: string
+  occurred_at: string
+  date_only: boolean
+  source: string
+}
+
 export type Person360 = {
   person: {
     id: number
@@ -292,6 +338,14 @@ export type Person360 = {
     active: Person360DepartmentMembership[]
     inactive: Person360DepartmentMembership[]
   }
+  schedules: {
+    upcoming: Person360ScheduleItem[]
+    recent: Person360ScheduleItem[]
+  }
+  unavailability: {
+    upcoming: Person360UnavailabilityItem[]
+  }
+  timeline: Person360TimelineItem[]
   pending_items: Person360PendingItem[]
   summary: {
     church_label: string
@@ -299,6 +353,10 @@ export type Person360 = {
     membership_label: string
     access_label: string
     active_departments_count: number
+    upcoming_schedules_count: number
+    next_schedule: Person360ScheduleItem | null
+    upcoming_unavailability_count: number
+    next_unavailability: Person360UnavailabilityItem | null
   }
   actions: {
     edit_person_url: string

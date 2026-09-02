@@ -1,7 +1,10 @@
+from datetime import date as date_type, datetime, time as datetime_time
+
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Q
 from django.utils import timezone
 
-from church_journey.models import ChurchJourney, DiscipleshipEnrollment, Membership
+from church_journey.models import ChurchJourney, DiscipleshipEnrollment, Membership, MembershipStatusHistory
 from church_journey.selectors import (
     can_create_membership,
     get_church_status,
@@ -12,8 +15,12 @@ from church_journey.selectors import (
 )
 from departamentos.models import DepartmentMembership
 from departamentos.selectors import get_department_membership_eligibility
+from scheduling.models import Schedule, ScheduleAssignment
+from usuarios.models import AccessRequest
 from usuarios.services import AccessStatus, get_access_status
+from worship.models import WorshipService
 
+from .models import PersonUnavailability
 from .serializers import get_photo_url
 
 
@@ -50,6 +57,29 @@ def _date(value):
 
 def _datetime(value):
     return value.isoformat() if value else None
+
+
+def _time(value):
+    return value.isoformat(timespec="minutes") if value else None
+
+
+def _date_or_datetime(value):
+    if isinstance(value, datetime):
+        return _datetime(value)
+    return _date(value)
+
+
+def _sort_datetime(value):
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            value = date_type.fromisoformat(value)
+    if isinstance(value, datetime):
+        if timezone.is_naive(value):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
+    return timezone.make_aware(datetime.combine(value, datetime_time.min), timezone.get_current_timezone())
 
 
 def _age(birth_date):
@@ -244,6 +274,245 @@ def _departments_payload(person):
     return {"active": active, "inactive": inactive}
 
 
+def _schedule_assignment_payload(assignment):
+    schedule = assignment.schedule
+    worship_service = schedule.worship_service
+    department = schedule.department
+    department_membership = assignment.department_membership
+    role = department_membership.role
+
+    return {
+        "id": assignment.id,
+        "schedule_id": schedule.id,
+        "schedule_status": schedule.status,
+        "worship_service": {
+            "id": worship_service.id,
+            "name": worship_service.name,
+            "date": _date(worship_service.date),
+            "time": _time(worship_service.time),
+            "status": worship_service.status,
+            "kind": worship_service.kind,
+        },
+        "department": {
+            "id": department.id,
+            "name": department.nome,
+            "code": department.codigo,
+        },
+        "role": {
+            "id": role.id,
+            "name": role.name,
+            "code": role.code,
+        },
+        "assigned_at": _datetime(assignment.created_at),
+    }
+
+
+def _schedule_assignments_queryset(person):
+    return (
+        ScheduleAssignment.objects.filter(
+            department_membership__person=person,
+            schedule__status=Schedule.Status.PUBLISHED,
+        )
+        .exclude(schedule__worship_service__status=WorshipService.Status.CANCELLED)
+        .select_related(
+            "schedule",
+            "schedule__department",
+            "schedule__worship_service",
+            "department_membership",
+            "department_membership__role",
+        )
+    )
+
+
+def _schedules_payload(person):
+    today = timezone.localdate()
+    upcoming = (
+        _schedule_assignments_queryset(person)
+        .filter(schedule__worship_service__date__gte=today)
+        .order_by(
+            "schedule__worship_service__date",
+            "schedule__worship_service__time",
+            "schedule__department__nome",
+            "department_membership__role__name",
+            "id",
+        )[:20]
+    )
+    recent = (
+        _schedule_assignments_queryset(person)
+        .filter(schedule__worship_service__date__lt=today)
+        .order_by(
+            "-schedule__worship_service__date",
+            "-schedule__worship_service__time",
+            "schedule__department__nome",
+            "department_membership__role__name",
+            "id",
+        )[:20]
+    )
+
+    return {
+        "upcoming": [_schedule_assignment_payload(assignment) for assignment in upcoming],
+        "recent": [_schedule_assignment_payload(assignment) for assignment in recent],
+    }
+
+
+def _unavailability_payload(unavailability):
+    return {
+        "id": unavailability.id,
+        "start_date": _date(unavailability.start_date),
+        "end_date": _date(unavailability.end_date),
+        "start_time": _time(unavailability.start_time),
+        "end_time": _time(unavailability.end_time),
+        "is_full_day": unavailability.is_full_day,
+        "status": unavailability.status,
+        "created_at": _datetime(unavailability.created_at),
+        "updated_at": _datetime(unavailability.updated_at),
+    }
+
+
+def _unavailabilities_payload(person):
+    today = timezone.localdate()
+    upcoming = (
+        PersonUnavailability.objects.filter(
+            person=person,
+            status=PersonUnavailability.Status.ACTIVE,
+            end_date__gte=today,
+        )
+        .order_by("start_date", "start_time", "end_date", "id")[:20]
+    )
+    return {"upcoming": [_unavailability_payload(unavailability) for unavailability in upcoming]}
+
+
+def _timeline_item(code, label, occurred_at, source, description=""):
+    return {
+        "code": code,
+        "label": label,
+        "description": description,
+        "occurred_at": _date_or_datetime(occurred_at),
+        "date_only": not isinstance(occurred_at, datetime),
+        "source": source,
+    }
+
+
+def _timeline_payload(person):
+    items = []
+
+    if person.created_at:
+        items.append(_timeline_item("PERSON_CREATED", "Pessoa cadastrada", person.created_at, "pessoas.Person"))
+
+    journey = ChurchJourney.objects.filter(person=person).first()
+    if journey is not None:
+        items.append(
+            _timeline_item(
+                "CHURCH_JOURNEY_STARTED",
+                "Jornada eclesiastica iniciada",
+                journey.started_at,
+                "church_journey.ChurchJourney",
+            )
+        )
+
+    enrollments = (
+        DiscipleshipEnrollment.objects.filter(person=person)
+        .select_related("discipleship_class")
+        .order_by("-enrolled_at", "-id")[:10]
+    )
+    for enrollment in enrollments:
+        items.append(
+            _timeline_item(
+                "DISCIPLESHIP_ENROLLED",
+                "Discipulado iniciado",
+                enrollment.enrolled_at,
+                "church_journey.DiscipleshipEnrollment",
+                enrollment.discipleship_class.name,
+            )
+        )
+        if enrollment.completed_at:
+            items.append(
+                _timeline_item(
+                    "DISCIPLESHIP_COMPLETED",
+                    "Discipulado concluido",
+                    enrollment.completed_at,
+                    "church_journey.DiscipleshipEnrollment",
+                    enrollment.discipleship_class.name,
+                )
+            )
+        if enrollment.withdrawn_at:
+            items.append(
+                _timeline_item(
+                    "DISCIPLESHIP_WITHDRAWN",
+                    "Discipulado encerrado",
+                    enrollment.withdrawn_at,
+                    "church_journey.DiscipleshipEnrollment",
+                    enrollment.discipleship_class.name,
+                )
+            )
+
+    membership = get_membership(person)
+    if membership is not None:
+        items.append(_timeline_item("MEMBERSHIP_STARTED", "Membresia iniciada", membership.member_since, "church_journey.Membership"))
+        if membership.approved_at:
+            items.append(_timeline_item("MEMBERSHIP_APPROVED", "Membresia aprovada", membership.approved_at, "church_journey.Membership"))
+        histories = MembershipStatusHistory.objects.filter(membership=membership).order_by("-changed_at", "-id")[:10]
+        for history in histories:
+            items.append(
+                _timeline_item(
+                    "MEMBERSHIP_STATUS_CHANGED",
+                    "Status de membresia alterado",
+                    history.changed_at,
+                    "church_journey.MembershipStatusHistory",
+                    f"{history.from_status} para {history.to_status}",
+                )
+            )
+
+    for department_membership in (
+        DepartmentMembership.objects.filter(person=person)
+        .select_related("department", "role")
+        .order_by("-joined_at", "-id")[:20]
+    ):
+        items.append(
+            _timeline_item(
+                "DEPARTMENT_JOINED",
+                "Entrada em departamento",
+                department_membership.joined_at,
+                "departamentos.DepartmentMembership",
+                f"{department_membership.department.nome} - {department_membership.role.name}",
+            )
+        )
+        if department_membership.left_at:
+            items.append(
+                _timeline_item(
+                    "DEPARTMENT_LEFT",
+                    "Saida de departamento",
+                    department_membership.left_at,
+                    "departamentos.DepartmentMembership",
+                    f"{department_membership.department.nome} - {department_membership.role.name}",
+                )
+            )
+
+    try:
+        usuario = person.user_account
+    except ObjectDoesNotExist:
+        usuario = None
+    if usuario is not None and usuario.date_joined:
+        items.append(_timeline_item("USER_CREATED", "Usuario do Portal criado", usuario.date_joined, "usuarios.Usuario"))
+
+    access_request_filter = Q(person=person)
+    if usuario is not None:
+        access_request_filter |= Q(usuario=usuario)
+    for access_request in (
+        AccessRequest.objects.filter(access_request_filter)
+        .select_related("reviewed_by")
+        .distinct()
+        .order_by("-created_at", "-id")[:10]
+    ):
+        items.append(_timeline_item("ACCESS_REQUESTED", "Solicitacao de acesso criada", access_request.created_at, "usuarios.AccessRequest"))
+        if access_request.reviewed_at:
+            label = "Solicitacao de acesso aprovada" if access_request.status == AccessRequest.Status.APPROVED else "Solicitacao de acesso revisada"
+            items.append(_timeline_item("ACCESS_REQUEST_REVIEWED", label, access_request.reviewed_at, "usuarios.AccessRequest"))
+
+    items = sorted(items, key=lambda item: _sort_datetime(item["occurred_at"]), reverse=True)
+    return items[:30]
+
+
 def _pending(code, severity, label):
     return {"code": code, "severity": severity, "label": label}
 
@@ -284,6 +553,9 @@ def build_person_360(person, viewer=None, request=None):
     membership = _membership_payload(person)
     access = _access_payload(person)
     departments = _departments_payload(person)
+    schedules = _schedules_payload(person)
+    unavailability = _unavailabilities_payload(person)
+    timeline = _timeline_payload(person)
     pending_items = _pending_items(
         person=person,
         access=access,
@@ -300,6 +572,9 @@ def build_person_360(person, viewer=None, request=None):
         "membership": membership,
         "access": access,
         "departments": departments,
+        "schedules": schedules,
+        "unavailability": unavailability,
+        "timeline": timeline,
         "pending_items": pending_items,
         "summary": {
             "church_label": church["label"],
@@ -307,6 +582,10 @@ def build_person_360(person, viewer=None, request=None):
             "membership_label": membership["label"],
             "access_label": access["label"],
             "active_departments_count": active_departments_count,
+            "upcoming_schedules_count": len(schedules["upcoming"]),
+            "next_schedule": schedules["upcoming"][0] if schedules["upcoming"] else None,
+            "upcoming_unavailability_count": len(unavailability["upcoming"]),
+            "next_unavailability": unavailability["upcoming"][0] if unavailability["upcoming"] else None,
         },
         "actions": {
             "edit_person_url": f"/pessoas/{person.id}/editar",

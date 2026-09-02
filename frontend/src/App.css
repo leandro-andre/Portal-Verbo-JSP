@@ -1582,7 +1582,9 @@
 }
 
 .person360-pending-list,
-.person360-compact-list {
+.person360-compact-list,
+.person360-operation-list,
+.person360-timeline {
   display: grid;
   gap: 10px;
   list-style: none;
@@ -1605,6 +1607,83 @@
 .person360-compact-list span {
   color: var(--color-text-muted);
   font-size: 13px;
+}
+
+.person360-featured-item,
+.person360-operation-list li,
+.person360-timeline li {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 12px;
+  padding: 13px 14px;
+}
+
+.person360-featured-item > div:last-child,
+.person360-operation-main,
+.person360-operation-meta,
+.person360-timeline li > div:last-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.person360-featured-item strong,
+.person360-operation-main strong,
+.person360-timeline strong {
+  color: var(--color-text);
+}
+
+.person360-featured-item span,
+.person360-featured-item small,
+.person360-operation-main span,
+.person360-operation-meta,
+.person360-operation-meta small,
+.person360-timeline span,
+.person360-timeline small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.person360-inline-action {
+  margin-top: 12px;
+}
+
+.person360-operation-list li {
+  align-items: center;
+}
+
+.person360-operation-icon,
+.person360-timeline__marker {
+  align-items: center;
+  background: #eef4ff;
+  border-radius: 999px;
+  color: var(--color-primary);
+  display: inline-flex;
+  flex: 0 0 34px;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.person360-operation-icon--warning {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.person360-operation-main {
+  flex: 1 1 auto;
+}
+
+.person360-operation-meta {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.person360-timeline li {
+  position: relative;
 }
 
 .person360-pending-item {
@@ -2236,6 +2315,16 @@
   .person360-footer-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .person360-operation-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .person360-operation-meta {
+    align-items: flex-start;
+    text-align: left;
   }
 
   .person360-footer-actions .button {

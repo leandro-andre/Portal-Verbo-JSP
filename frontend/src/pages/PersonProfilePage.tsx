@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, Edit3, ExternalLink, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, CalendarCheck, CalendarX2, Edit3, ExternalLink, History, ShieldCheck } from 'lucide-react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiHttpError } from '../api/people'
 import PersonAvatar from '../components/people/PersonAvatar'
@@ -7,16 +7,26 @@ import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
 import { usePerson360 } from '../hooks/usePeople'
-import type { Person360, Person360DepartmentMembership, Person360PendingItem } from '../types/person'
+import type {
+  Person360,
+  Person360DepartmentMembership,
+  Person360PendingItem,
+  Person360ScheduleItem,
+  Person360TimelineItem,
+  Person360UnavailabilityItem,
+} from '../types/person'
 import { formatBrazilianMobile } from '../utils/phone'
 
-type Person360Tab = 'summary' | 'journey' | 'departments' | 'access'
+type Person360Tab = 'summary' | 'journey' | 'departments' | 'schedules' | 'unavailability' | 'access' | 'timeline'
 
 const tabs: Array<{ id: Person360Tab; label: string }> = [
   { id: 'summary', label: 'Resumo' },
   { id: 'journey', label: 'Jornada' },
   { id: 'departments', label: 'Departamentos' },
+  { id: 'schedules', label: 'Escalas' },
+  { id: 'unavailability', label: 'Indisponibilidades' },
   { id: 'access', label: 'Acesso' },
+  { id: 'timeline', label: 'Historico' },
 ]
 
 function formatDate(value: string | null) {
@@ -44,6 +54,27 @@ function formatDateTime(value: string | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date)
+}
+
+function formatTime(value: string | null) {
+  return value ? value.slice(0, 5) : null
+}
+
+function formatScheduleDateTime(schedule: Person360ScheduleItem) {
+  return [formatDate(schedule.worship_service.date), formatTime(schedule.worship_service.time)]
+    .filter(Boolean)
+    .join(' as ')
+}
+
+function formatUnavailabilityPeriod(unavailability: Person360UnavailabilityItem) {
+  const dates = unavailability.start_date === unavailability.end_date
+    ? formatDate(unavailability.start_date)
+    : `${formatDate(unavailability.start_date)} a ${formatDate(unavailability.end_date)}`
+  const times = unavailability.is_full_day
+    ? 'Dia inteiro'
+    : [formatTime(unavailability.start_time), formatTime(unavailability.end_time)].filter(Boolean).join(' as ')
+
+  return [dates, times].filter(Boolean).join(' - ')
 }
 
 function DetailItem({ label, value }: { label: string; value: ReactNode }) {
@@ -100,7 +131,15 @@ function Section({
   )
 }
 
-function SummaryTab({ profile }: { profile: Person360 }) {
+function SummaryTab({
+  onOpenSchedules,
+  onOpenUnavailability,
+  profile,
+}: {
+  onOpenSchedules: () => void
+  onOpenUnavailability: () => void
+  profile: Person360
+}) {
   const departmentPreview = profile.departments.active.slice(0, 4)
 
   return (
@@ -146,6 +185,43 @@ function SummaryTab({ profile }: { profile: Person360 }) {
         ) : (
           <p className="page-heading__description">Esta pessoa ainda nao participa de departamentos.</p>
         )}
+      </Section>
+
+      <Section title="Proximas escalas">
+        {profile.summary.next_schedule ? (
+          <div className="person360-featured-item">
+            <CalendarCheck size={20} aria-hidden="true" />
+            <div>
+              <strong>{profile.summary.next_schedule.worship_service.name}</strong>
+              <span>
+                Escalado para {profile.summary.next_schedule.department.name} - {profile.summary.next_schedule.role.name}
+              </span>
+              <small>{formatScheduleDateTime(profile.summary.next_schedule)}</small>
+            </div>
+          </div>
+        ) : (
+          <p className="page-heading__description">Nenhuma escala futura publicada para esta pessoa.</p>
+        )}
+        <button className="button button--secondary person360-inline-action" type="button" onClick={onOpenSchedules}>
+          Ver escalas
+        </button>
+      </Section>
+
+      <Section title="Indisponibilidades futuras">
+        {profile.summary.next_unavailability ? (
+          <div className="person360-featured-item">
+            <CalendarX2 size={20} aria-hidden="true" />
+            <div>
+              <strong>{formatUnavailabilityPeriod(profile.summary.next_unavailability)}</strong>
+              <span>Indisponibilidade ativa cadastrada</span>
+            </div>
+          </div>
+        ) : (
+          <p className="page-heading__description">Nenhuma indisponibilidade futura ativa registrada.</p>
+        )}
+        <button className="button button--secondary person360-inline-action" type="button" onClick={onOpenUnavailability}>
+          Ver indisponibilidades
+        </button>
       </Section>
 
       <section className="profile-section person360-section person360-section--wide">
@@ -264,6 +340,109 @@ function DepartmentsTab({ profile }: { profile: Person360 }) {
       <DepartmentTable items={profile.departments.active} title="Ativos" />
       <DepartmentTable items={profile.departments.inactive} title="Historico/Inativos" />
     </>
+  )
+}
+
+function ScheduleList({
+  emptyMessage,
+  items,
+}: {
+  emptyMessage: string
+  items: Person360ScheduleItem[]
+}) {
+  if (!items.length) {
+    return <p className="page-heading__description">{emptyMessage}</p>
+  }
+
+  return (
+    <ul className="person360-operation-list">
+      {items.map((item) => (
+        <li key={item.id}>
+          <div className="person360-operation-icon" aria-hidden="true">
+            <CalendarCheck size={18} />
+          </div>
+          <div className="person360-operation-main">
+            <strong>{item.worship_service.name}</strong>
+            <span>{formatScheduleDateTime(item)}</span>
+          </div>
+          <div className="person360-operation-meta">
+            <span>{item.department.name}</span>
+            <small>{item.role.name}</small>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function SchedulesTab({ profile }: { profile: Person360 }) {
+  return (
+    <>
+      <Section title="Proximas escalas publicadas">
+        <ScheduleList
+          emptyMessage="Nenhuma escala futura publicada para esta pessoa."
+          items={profile.schedules.upcoming}
+        />
+      </Section>
+      <Section title="Escalas recentes">
+        <ScheduleList
+          emptyMessage="Nenhuma escala recente publicada para esta pessoa."
+          items={profile.schedules.recent}
+        />
+      </Section>
+    </>
+  )
+}
+
+function UnavailabilityTab({ profile }: { profile: Person360 }) {
+  return (
+    <Section title="Indisponibilidades futuras ativas">
+      {profile.unavailability.upcoming.length ? (
+        <ul className="person360-operation-list">
+          {profile.unavailability.upcoming.map((item) => (
+            <li key={item.id}>
+              <div className="person360-operation-icon person360-operation-icon--warning" aria-hidden="true">
+                <CalendarX2 size={18} />
+              </div>
+              <div className="person360-operation-main">
+                <strong>{formatUnavailabilityPeriod(item)}</strong>
+                <span>{item.is_full_day ? 'Periodo integral' : 'Periodo com horario definido'}</span>
+              </div>
+              <div className="person360-operation-meta">
+                <StatusBadge tone="warning">Ativa</StatusBadge>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="page-heading__description">Nenhuma indisponibilidade futura ativa registrada.</p>
+      )}
+    </Section>
+  )
+}
+
+function TimelineTab({ profile }: { profile: Person360 }) {
+  return (
+    <Section title="Historico">
+      {profile.timeline.length ? (
+        <ol className="person360-timeline">
+          {profile.timeline.map((item: Person360TimelineItem, index) => (
+            <li key={`${item.code}-${item.occurred_at}-${index}`}>
+              <div className="person360-timeline__marker" aria-hidden="true">
+                <History size={16} />
+              </div>
+              <div>
+                <strong>{item.label}</strong>
+                {item.description ? <span>{item.description}</span> : null}
+                <small>{item.date_only ? formatDate(item.occurred_at) : formatDateTime(item.occurred_at)}</small>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="page-heading__description">Nenhum evento historico encontrado.</p>
+      )}
+    </Section>
   )
 }
 
@@ -386,10 +565,25 @@ function PersonProfilePage() {
     if (activeTab === 'departments') {
       return <DepartmentsTab profile={profile} />
     }
+    if (activeTab === 'schedules') {
+      return <SchedulesTab profile={profile} />
+    }
+    if (activeTab === 'unavailability') {
+      return <UnavailabilityTab profile={profile} />
+    }
     if (activeTab === 'access') {
       return <AccessTab canViewUsers={canViewUsers} profile={profile} />
     }
-    return <SummaryTab profile={profile} />
+    if (activeTab === 'timeline') {
+      return <TimelineTab profile={profile} />
+    }
+    return (
+      <SummaryTab
+        onOpenSchedules={() => setActiveTab('schedules')}
+        onOpenUnavailability={() => setActiveTab('unavailability')}
+        profile={profile}
+      />
+    )
   }
 
   return (
