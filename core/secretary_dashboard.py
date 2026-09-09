@@ -165,6 +165,25 @@ def _department_eligibility_payload():
     }
 
 
+def _without_journey_payload():
+    queryset = Person.objects.filter(
+        status=Person.Status.ACTIVE,
+        church_journey__isnull=True,
+    ).order_by("created_at", "id")
+    return {
+        "count": queryset.count(),
+        "items": [
+            {
+                "person": _person_summary(person),
+                "created_at": _datetime(person.created_at),
+                "resolution_url": f"/pessoas/{person.id}",
+            }
+            for person in queryset[:PREVIEW_LIMIT]
+        ],
+        "list_url": "/pessoas",
+    }
+
+
 def _without_portal_access_payload():
     queryset = Person.objects.filter(user_account__isnull=True).order_by("full_name", "id")
     return {
@@ -219,6 +238,7 @@ def build_secretary_dashboard(viewer=None):
     activation = _pending_activation_payload()
     incomplete_profiles = _incomplete_profiles_payload()
     department_eligibility = _department_eligibility_payload()
+    without_journey = _without_journey_payload()
     without_portal_access = _without_portal_access_payload()
     inactive_memberships = _inactive_memberships_payload()
     action_required = access_requests["count"] + membership_approvals["count"]
@@ -238,6 +258,7 @@ def build_secretary_dashboard(viewer=None):
             "activation": activation,
             "incomplete_profiles": incomplete_profiles,
             "department_eligibility": department_eligibility,
+            "without_journey": without_journey,
         },
         "monitoring": {
             "without_portal_access": without_portal_access,

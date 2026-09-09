@@ -69,6 +69,12 @@ export type SecretaryDepartmentEligibilityItem = {
   resolution_url: string
 }
 
+export type SecretaryWithoutJourneyItem = {
+  person: SecretaryDashboardPerson
+  created_at: string | null
+  resolution_url: string
+}
+
 export type SecretaryWithoutPortalAccessItem = {
   person: SecretaryDashboardPerson
   resolution_url: string
@@ -98,6 +104,7 @@ export type SecretaryDashboardResponse = {
       missing_whatsapp_count: number
     }
     department_eligibility: SecretaryDashboardPreview<SecretaryDepartmentEligibilityItem>
+    without_journey: SecretaryDashboardPreview<SecretaryWithoutJourneyItem>
   }
   monitoring: {
     without_portal_access: SecretaryDashboardPreview<SecretaryWithoutPortalAccessItem>

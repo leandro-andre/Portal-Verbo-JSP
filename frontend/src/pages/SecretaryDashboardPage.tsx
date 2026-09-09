@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowRight,
+  BookOpenCheck,
   ClipboardList,
   RefreshCcw,
   ShieldCheck,
@@ -20,6 +21,7 @@ import type {
   SecretaryIncompleteProfileItem,
   SecretaryInactiveMembershipItem,
   SecretaryMembershipApprovalItem,
+  SecretaryWithoutJourneyItem,
   SecretaryWithoutPortalAccessItem,
 } from '../types/secretaryDashboard'
 
@@ -80,7 +82,7 @@ function CardBlock({
   actionLabel?: string
   children: ReactNode
   count: number
-  icon: React.ReactNode
+  icon: ReactNode
   title: string
   to: string
 }) {
@@ -193,6 +195,24 @@ function DepartmentEligibilityItems({ items }: { items: SecretaryDepartmentEligi
   )
 }
 
+function WithoutJourneyItems({ items }: { items: SecretaryWithoutJourneyItem[] }) {
+  if (!items.length) return <EmptySection message="Todas as pessoas aplicaveis possuem jornada iniciada." />
+  return (
+    <ul className="secretary-item-list">
+      {items.map((item) => (
+        <li key={item.person.id}>
+          <div>
+            <strong>{item.person.display_name}</strong>
+            <span>Pessoa cadastrada que ainda nao possui jornada iniciada.</span>
+            <small>Cadastrada em {formatDate(item.created_at)}</small>
+          </div>
+          <Link to={item.resolution_url}>Ver pessoa</Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function WithoutPortalAccessItems({ items }: { items: SecretaryWithoutPortalAccessItem[] }) {
   if (!items.length) return <EmptySection message="Todas as pessoas listadas aqui possuem usuario vinculado." />
   return (
@@ -256,7 +276,8 @@ function SecretaryDashboardPage() {
     data.summary.action_required === 0 &&
     data.summary.pending_activation === 0 &&
     data.summary.incomplete_profiles === 0 &&
-    data.pending.department_eligibility.count === 0
+    data.pending.department_eligibility.count === 0 &&
+    data.pending.without_journey.count === 0
 
   return (
     <section className="secretary-page">
@@ -317,6 +338,9 @@ function SecretaryDashboardPage() {
           </CardBlock>
           <CardBlock count={data.pending.department_eligibility.count} icon={<UsersRound size={19} aria-hidden="true" />} title="Vinculos departamentais" to={data.pending.department_eligibility.list_url} actionLabel="Ver departamentos">
             <DepartmentEligibilityItems items={data.pending.department_eligibility.items} />
+          </CardBlock>
+          <CardBlock count={data.pending.without_journey.count} icon={<BookOpenCheck size={19} aria-hidden="true" />} title="Pessoas sem jornada iniciada" to={data.pending.without_journey.list_url} actionLabel="Revisar pessoas">
+            <WithoutJourneyItems items={data.pending.without_journey.items} />
           </CardBlock>
         </div>
       </Section>

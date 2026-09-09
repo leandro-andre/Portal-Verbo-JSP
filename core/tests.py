@@ -381,6 +381,71 @@ class SecretaryDashboardTests(TestCase):
         self.assertNotIn("token", serialized)
         self.assertNotIn("reason", serialized)
 
+    def test_pessoas_ativas_sem_jornada_aparecem_em_pendencias_sem_action_required(self):
+        self.client.force_login(self.secretary)
+        without_journey = Person.objects.create(full_name="Sem Jornada", birth_date=timezone.localdate())
+        with_journey = Person.objects.create(full_name="Com Jornada", birth_date=timezone.localdate())
+        inactive_without_journey = Person.objects.create(
+            full_name="Inativa Sem Jornada",
+            birth_date=timezone.localdate(),
+            status=Person.Status.INACTIVE,
+        )
+        ChurchJourney.objects.create(person=with_journey)
+
+        body = self.client.get(self.url).json()
+        without_journey_items = body["pending"]["without_journey"]
+        item_ids = [item["person"]["id"] for item in without_journey_items["items"]]
+
+        self.assertEqual(without_journey_items["count"], 1)
+        self.assertIn(without_journey.id, item_ids)
+        self.assertNotIn(with_journey.id, item_ids)
+        self.assertNotIn(inactive_without_journey.id, item_ids)
+        self.assertEqual(without_journey_items["items"][0]["resolution_url"], f"/pessoas/{without_journey.id}")
+        self.assertEqual(body["summary"]["action_required"], 0)
+
+    def test_iniciar_jornada_remove_pessoa_da_pendencia_apos_novo_request(self):
+        self.client.force_login(self.secretary)
+        person = Person.objects.create(full_name="Jornada Pelo Fluxo", birth_date=timezone.localdate())
+
+        first_response = self.client.get(self.url)
+        self.assertEqual(first_response.json()["pending"]["without_journey"]["count"], 1)
+
+        create_response = self.client.post(
+            reverse("person-church-journey", args=[person.id]),
+            {"started_at": str(timezone.localdate())},
+        )
+        self.assertEqual(create_response.status_code, 201)
+
+        second_response = self.client.get(self.url)
+        self.assertEqual(second_response.json()["pending"]["without_journey"]["count"], 0)
+
+    def test_pessoas_sem_jornada_respeitam_limite_e_count_total(self):
+        self.client.force_login(self.secretary)
+        created = []
+        for index in range(7):
+            person = Person.objects.create(full_name=f"Sem Jornada {index}", birth_date=timezone.localdate())
+            Person.objects.filter(pk=person.pk).update(created_at=timezone.now() + timedelta(minutes=index))
+            created.append(person)
+
+        body = self.client.get(self.url).json()
+        without_journey = body["pending"]["without_journey"]
+
+        self.assertEqual(without_journey["count"], 7)
+        self.assertEqual(len(without_journey["items"]), body["meta"]["preview_limit"])
+        self.assertEqual(without_journey["items"][0]["person"]["id"], created[0].id)
+
+    def test_pessoa_sem_jornada_e_com_cadastro_incompleto_nao_duplica_action_required(self):
+        self.client.force_login(self.secretary)
+        person = Person.objects.create(full_name="Sem Jornada E Sem Contato", birth_date=timezone.localdate())
+
+        body = self.client.get(self.url).json()
+
+        self.assertEqual(body["pending"]["without_journey"]["count"], 1)
+        self.assertEqual(body["pending"]["incomplete_profiles"]["count"], 1)
+        self.assertEqual(body["pending"]["without_journey"]["items"][0]["person"]["id"], person.id)
+        self.assertEqual(body["pending"]["incomplete_profiles"]["items"][0]["person"]["id"], person.id)
+        self.assertEqual(body["summary"]["action_required"], 0)
+
     def test_previews_respeitam_limite(self):
         self.client.force_login(self.secretary)
         for index in range(7):
