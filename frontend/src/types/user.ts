@@ -66,6 +66,8 @@ export type UserAdminProfile = {
   actions: {
     can_view_person_profile: boolean
     person_profile_url: string | null
+    can_link_person: boolean
+    link_person_url: string | null
     can_block: boolean
     block_url: string | null
     can_unblock: boolean
@@ -95,6 +97,7 @@ export type UserAccessBusinessErrorResponse = {
     | 'USER_ACCESS_NOT_BLOCKED'
     | 'PERSON_NOT_FOUND'
     | 'PERSON_ALREADY_HAS_USER'
+    | 'USER_ALREADY_LINKED_TO_PERSON'
     | 'USER_ACTIVATION_EMAIL_NOT_ALLOWED'
     | 'USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED'
     | 'USER_EMAIL_MISSING'
@@ -106,4 +109,17 @@ export type UserAccessBusinessErrorResponse = {
 
 export type LinkUserPersonInput = {
   person_id: number
+}
+
+export type UserPersonCandidate = {
+  id: number
+  display_name: string
+  full_name: string
+  photo_url: string | null
+  email: string
+  phone: string
+  status: 'ACTIVE' | 'INACTIVE'
+  status_label: string
+  church_status: 'UNKNOWN' | 'VISITOR' | 'MEMBER' | 'INACTIVE_MEMBER'
+  church_status_label: string
 }

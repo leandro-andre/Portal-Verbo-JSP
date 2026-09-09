@@ -2117,6 +2117,14 @@
   padding: 14px 16px;
 }
 
+.user-admin-empty {
+  flex-wrap: wrap;
+}
+
+.user-admin-empty .button {
+  margin-left: 34px;
+}
+
 .user-admin-empty p,
 .user-admin-readonly-card p {
   color: var(--color-text-muted);
@@ -2129,6 +2137,79 @@
 
 .user-admin-section-note {
   margin: 16px 0 0;
+}
+
+.user-person-link-dialog {
+  max-width: 640px;
+}
+
+.user-person-link-dialog .field {
+  display: grid;
+  gap: 7px;
+}
+
+.input-with-icon {
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.input-with-icon:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.input-with-icon input {
+  border: 0;
+  flex: 1;
+  min-width: 0;
+  outline: 0;
+  padding: 10px 0;
+}
+
+.user-person-candidates {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.user-person-candidate {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.user-person-candidate:hover,
+.user-person-candidate--selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.user-person-candidate img,
+.user-person-candidate .person-avatar {
+  height: 44px;
+  width: 44px;
+}
+
+.user-person-candidate span {
+  display: grid;
+  gap: 3px;
+}
+
+.user-person-candidate small {
+  color: var(--color-text-muted);
 }
 
 .church-journey-empty {

@@ -4,11 +4,11 @@ import {
   enableUser,
   getUser,
   getUserAdminProfile,
+  getUserPersonCandidates,
   getUsers,
   linkUserPerson,
   resendUserActivation,
   sendUserPasswordReset,
-  unlinkUserPerson,
 } from '../api/users'
 import { currentUserQueryKey } from './useAuth'
 import type { LinkUserPersonInput } from '../types/user'
@@ -21,6 +21,10 @@ export function userQueryKey(id: number) {
 
 export function userAdminProfileQueryKey(id: number) {
   return ['users', id, 'admin-profile'] as const
+}
+
+export function userPersonCandidatesQueryKey(id: number, search: string) {
+  return ['users', id, 'person-candidates', search.trim()] as const
 }
 
 export function useUsers() {
@@ -43,6 +47,15 @@ export function useUserAdminProfile(id: number) {
     queryKey: userAdminProfileQueryKey(id),
     queryFn: () => getUserAdminProfile(id),
     enabled: Number.isFinite(id) && id > 0,
+  })
+}
+
+export function useUserPersonCandidates(id: number, search: string, enabled = true) {
+  const normalizedSearch = search.trim()
+  return useQuery({
+    queryKey: userPersonCandidatesQueryKey(id, normalizedSearch),
+    queryFn: () => getUserPersonCandidates(id, normalizedSearch),
+    enabled: enabled && Number.isFinite(id) && id > 0 && normalizedSearch.length >= 2,
   })
 }
 
@@ -104,19 +117,7 @@ export function useLinkUserPerson(id: number) {
     onSuccess: async (user) => {
       queryClient.setQueryData(userQueryKey(id), user)
       await queryClient.invalidateQueries({ queryKey: usersQueryKey })
-      await queryClient.invalidateQueries({ queryKey: ['people'] })
-    },
-  })
-}
-
-export function useUnlinkUserPerson(id: number) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: () => unlinkUserPerson(id),
-    onSuccess: async (user) => {
-      queryClient.setQueryData(userQueryKey(id), user)
-      await queryClient.invalidateQueries({ queryKey: usersQueryKey })
+      await queryClient.invalidateQueries({ queryKey: userAdminProfileQueryKey(id) })
       await queryClient.invalidateQueries({ queryKey: ['people'] })
     },
   })

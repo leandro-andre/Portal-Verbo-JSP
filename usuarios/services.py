@@ -89,6 +89,11 @@ class UserPersonAlreadyHasUserError(UserPersonLinkError):
     message = "Esta pessoa ja possui outro usuario vinculado."
 
 
+class UserAlreadyLinkedToPersonError(UserPersonLinkError):
+    code = "USER_ALREADY_LINKED_TO_PERSON"
+    message = "Esta conta ja possui uma pessoa vinculada."
+
+
 class UserActivationEmailNotAllowedError(UserAccessError):
     code = "USER_ACTIVATION_EMAIL_NOT_ALLOWED"
     message = "Somente contas aguardando ativacao podem receber reenvio de ativacao."
@@ -347,6 +352,9 @@ def enable_user_access(usuario):
 def link_user_to_person(usuario, *, person_id):
     user_model = get_user_model()
     usuario = user_model.objects.select_for_update().get(pk=usuario.pk)
+    if usuario.person_id:
+        raise UserAlreadyLinkedToPersonError
+
     try:
         person = Person.objects.select_for_update().get(pk=person_id)
     except Person.DoesNotExist as exc:
@@ -357,7 +365,10 @@ def link_user_to_person(usuario, *, person_id):
         raise UserPersonAlreadyHasUserError
 
     usuario.person = person
-    usuario.save(update_fields=["person"])
+    try:
+        usuario.save(update_fields=["person"])
+    except IntegrityError as exc:
+        raise UserPersonAlreadyHasUserError from exc
     return usuario
 
 

@@ -4,6 +4,7 @@ import type {
   UserAccessBusinessErrorResponse,
   UserAdminOperationResponse,
   UserAdminProfile,
+  UserPersonCandidate,
 } from '../types/user'
 import { csrfJsonHeaders } from './http'
 
@@ -43,6 +44,7 @@ function isUserAccessBusinessErrorResponse(
       value.code === 'USER_ACCESS_NOT_BLOCKED' ||
       value.code === 'PERSON_NOT_FOUND' ||
       value.code === 'PERSON_ALREADY_HAS_USER' ||
+      value.code === 'USER_ALREADY_LINKED_TO_PERSON' ||
       value.code === 'USER_ACTIVATION_EMAIL_NOT_ALLOWED' ||
       value.code === 'USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED' ||
       value.code === 'USER_EMAIL_MISSING' ||
@@ -99,6 +101,14 @@ export async function getUserAdminProfile(id: number): Promise<UserAdminProfile>
   return await handleUserResponse(response) as UserAdminProfile
 }
 
+export async function getUserPersonCandidates(id: number, search: string): Promise<UserPersonCandidate[]> {
+  const params = new URLSearchParams({ q: search.trim() })
+  const response = await fetch(`/api/users/${id}/person-candidates/?${params.toString()}`, {
+    credentials: 'same-origin',
+  })
+  return await handleUserResponse(response) as UserPersonCandidate[]
+}
+
 export async function disableUser(id: number): Promise<UserAdminOperationResponse> {
   const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/users/${id}/disable/`, {
@@ -144,21 +154,11 @@ export async function linkUserPerson(
   payload: LinkUserPersonInput,
 ): Promise<PortalUser> {
   const headers = await csrfJsonHeaders()
-  const response = await fetch(`/api/users/${id}/person/`, {
-    method: 'PATCH',
+  const response = await fetch(`/api/users/${id}/link-person/`, {
+    method: 'POST',
     credentials: 'same-origin',
     headers,
     body: JSON.stringify(payload),
-  })
-  return await handleUserResponse(response) as PortalUser
-}
-
-export async function unlinkUserPerson(id: number): Promise<PortalUser> {
-  const headers = await csrfJsonHeaders()
-  const response = await fetch(`/api/users/${id}/person/`, {
-    method: 'DELETE',
-    credentials: 'same-origin',
-    headers,
   })
   return await handleUserResponse(response) as PortalUser
 }

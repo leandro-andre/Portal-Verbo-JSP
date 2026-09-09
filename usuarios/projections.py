@@ -57,6 +57,7 @@ def build_user_admin_profile(usuario, viewer, request=None):
     person = getattr(usuario, "person", None)
     access_status = get_access_status(usuario)
     can_view_person_profile = bool(person and viewer.has_perm(PEOPLE_VIEW))
+    can_link_person = bool(person is None and viewer.has_perm(USER_ENABLE) and viewer.has_perm(PEOPLE_VIEW))
     has_email = bool((usuario.email or "").strip())
     can_block = bool(
         access_status == AccessStatus.ACTIVE
@@ -117,6 +118,8 @@ def build_user_admin_profile(usuario, viewer, request=None):
         "actions": {
             "can_view_person_profile": can_view_person_profile,
             "person_profile_url": f"/pessoas/{person.id}" if can_view_person_profile else None,
+            "can_link_person": can_link_person,
+            "link_person_url": f"/api/users/{usuario.id}/link-person/" if can_link_person else None,
             "can_block": can_block,
             "block_url": f"/api/users/{usuario.id}/disable/" if can_block else None,
             "can_unblock": can_unblock,

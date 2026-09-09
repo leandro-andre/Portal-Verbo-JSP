@@ -2421,6 +2421,8 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertEqual(data["person"]["profile_url"], f"/pessoas/{self.person.pk}")
         self.assertTrue(data["actions"]["can_view_person_profile"])
         self.assertEqual(data["actions"]["person_profile_url"], f"/pessoas/{self.person.pk}")
+        self.assertFalse(data["actions"]["can_link_person"])
+        self.assertIsNone(data["actions"]["link_person_url"])
 
     def test_admin_profile_sem_person_retorna_estado_explicito(self):
         legacy_user = self.user_model.objects.create_user(
@@ -2439,6 +2441,8 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertFalse(data["account"]["person_linked"])
         self.assertFalse(data["actions"]["can_view_person_profile"])
         self.assertIsNone(data["actions"]["person_profile_url"])
+        self.assertTrue(data["actions"]["can_link_person"])
+        self.assertEqual(data["actions"]["link_person_url"], f"/api/users/{legacy_user.pk}/link-person/")
 
     def test_admin_profile_access_status_active(self):
         self.client.force_login(self.superuser)
@@ -2572,8 +2576,8 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         target_person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
         self.client.force_login(self.superuser)
 
-        response = self.client.patch(
-            reverse("admin-user-person", args=[legacy_user.pk]),
+        response = self.client.post(
+            reverse("admin-user-link-person", args=[legacy_user.pk]),
             {"person_id": target_person.pk},
             content_type="application/json",
         )
@@ -2581,54 +2585,64 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         legacy_user.refresh_from_db()
         self.assertEqual(legacy_user.person, target_person)
+        self.assertEqual(target_person.user_account, legacy_user)
         self.assertEqual(response.json()["person"]["display_name"], "Ana Souza")
 
-    def test_altera_vinculo_de_usuario(self):
+    def test_usuario_ja_vinculado_nao_pode_trocar_person(self):
         target_person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
         self.client.force_login(self.superuser)
 
-        response = self.client.patch(
-            reverse("admin-user-person", args=[self.portal_user.pk]),
+        response = self.client.post(
+            reverse("admin-user-link-person", args=[self.portal_user.pk]),
             {"person_id": target_person.pk},
             content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_ALREADY_LINKED_TO_PERSON")
         self.portal_user.refresh_from_db()
-        self.assertEqual(self.portal_user.person, target_person)
+        self.assertEqual(self.portal_user.person, self.person)
 
-    def test_remove_vinculo_sem_excluir_usuario_ou_person(self):
+    def test_desvinculo_nao_esta_disponivel_nesta_pvv(self):
         self.client.force_login(self.superuser)
 
         response = self.client.delete(reverse("admin-user-person", args=[self.portal_user.pk]))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 405)
         self.portal_user.refresh_from_db()
-        self.assertIsNone(self.portal_user.person)
+        self.assertEqual(self.portal_user.person, self.person)
         self.assertTrue(self.user_model.objects.filter(pk=self.portal_user.pk).exists())
         self.assertTrue(Person.objects.filter(pk=self.person.pk).exists())
 
     def test_vinculo_com_person_ja_usada_retorna_conflito(self):
         target_person = Person.objects.create(full_name="Ana Souza", birth_date=date(1985, 2, 20))
         self.user_model.objects.create_user(username="ana.user", person=target_person)
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.person.used",
+            password="Senha-forte-123",
+        )
         self.client.force_login(self.superuser)
 
-        response = self.client.patch(
-            reverse("admin-user-person", args=[self.portal_user.pk]),
+        response = self.client.post(
+            reverse("admin-user-link-person", args=[legacy_user.pk]),
             {"person_id": target_person.pk},
             content_type="application/json",
         )
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "PERSON_ALREADY_HAS_USER")
-        self.portal_user.refresh_from_db()
-        self.assertEqual(self.portal_user.person, self.person)
+        legacy_user.refresh_from_db()
+        self.assertIsNone(legacy_user.person)
 
     def test_vinculo_com_person_inexistente_retorna_conflito(self):
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.missing.person",
+            password="Senha-forte-123",
+        )
         self.client.force_login(self.superuser)
 
-        response = self.client.patch(
-            reverse("admin-user-person", args=[self.portal_user.pk]),
+        response = self.client.post(
+            reverse("admin-user-link-person", args=[legacy_user.pk]),
             {"person_id": 999999},
             content_type="application/json",
         )
@@ -2639,11 +2653,194 @@ class AdminUserAccessLifecycleApiTests(TestCase):
     def test_usuario_comum_nao_altera_vinculo(self):
         self.client.force_login(self.regular_user)
 
-        response = self.client.delete(reverse("admin-user-person", args=[self.portal_user.pk]))
+        response = self.client.post(
+            reverse("admin-user-link-person", args=[self.portal_user.pk]),
+            {"person_id": self.person.pk},
+            content_type="application/json",
+        )
 
         self.assertEqual(response.status_code, 403)
         self.portal_user.refresh_from_db()
         self.assertEqual(self.portal_user.person, self.person)
+
+    def test_candidatos_retorna_person_sem_usuario(self):
+        candidate = Person.objects.create(
+            full_name="Candidata Livre",
+            birth_date=date(1992, 3, 4),
+            email="candidata@example.com",
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "Candidata"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["id"], candidate.pk)
+
+    def test_candidatos_nao_retorna_person_ja_vinculada(self):
+        linked_person = Person.objects.create(full_name="Pessoa Ocupada", birth_date=date(1992, 3, 4))
+        self.user_model.objects.create_user(username="ocupada", person=linked_person)
+        free_person = Person.objects.create(full_name="Pessoa Livre", birth_date=date(1993, 3, 4))
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "Pessoa"})
+        ids = {item["id"] for item in response.json()}
+
+        self.assertIn(free_person.pk, ids)
+        self.assertNotIn(linked_person.pk, ids)
+
+    def test_candidatos_busca_por_nome_email_e_telefone(self):
+        by_name = Person.objects.create(full_name="Maria Busca", birth_date=date(1990, 1, 1))
+        by_email = Person.objects.create(
+            full_name="Outra Pessoa",
+            birth_date=date(1991, 1, 1),
+            email="maria.email@example.com",
+        )
+        by_phone = Person.objects.create(
+            full_name="Telefone Pessoa",
+            birth_date=date(1992, 1, 1),
+            phone="81999999999",
+        )
+        self.client.force_login(self.superuser)
+
+        name_response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "Maria Busca"})
+        email_response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "maria.email"})
+        phone_response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "(81) 99999-9999"})
+
+        self.assertIn(by_name.pk, {item["id"] for item in name_response.json()})
+        self.assertIn(by_email.pk, {item["id"] for item in email_response.json()})
+        self.assertIn(by_phone.pk, {item["id"] for item in phone_response.json()})
+
+    def test_candidatos_limite_ordenacao_e_dados_minimos(self):
+        for index in range(25):
+            Person.objects.create(full_name=f"Maria Candidata {index:02d}", birth_date=date(1990, 1, index + 1))
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "Maria Candidata"})
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(data), 20)
+        self.assertEqual([item["full_name"] for item in data], sorted(item["full_name"] for item in data))
+        self.assertNotIn("birth_date", data[0])
+        self.assertNotIn("portal_user", data[0])
+
+    def test_candidatos_sem_permission_recebe_403(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("admin-user-person-candidates", args=[self.regular_user.pk]), {"q": "Maria"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_candidatos_usuario_ja_vinculado_retorna_conflito(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-person-candidates", args=[self.portal_user.pk]), {"q": "Maria"})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_ALREADY_LINKED_TO_PERSON")
+
+    def test_vinculo_preserva_access_request_status_acesso_senha_e_nao_envia_email(self):
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.link.invariants",
+            password="Senha-forte-123",
+            is_active=False,
+        )
+        access_request = AccessRequest.objects.create(
+            full_name="Conta Legada",
+            birth_date=date(1990, 1, 1),
+            email="legacy.link@example.com",
+            phone="81999999999",
+            usuario=legacy_user,
+        )
+        target_person = Person.objects.create(full_name="Pessoa Para Vinculo", birth_date=date(1990, 1, 1))
+        original_password = legacy_user.password
+        original_status = access_request.status
+        self.client.force_login(self.superuser)
+
+        with (
+            patch("usuarios.api_views.send_access_approval_email") as approval_email,
+            patch("usuarios.api_views.send_account_activation_email") as activation_email,
+            patch("usuarios.api_views.send_password_reset_email") as reset_email,
+        ):
+            response = self.client.post(
+                reverse("admin-user-link-person", args=[legacy_user.pk]),
+                {"person_id": target_person.pk},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        legacy_user.refresh_from_db()
+        access_request.refresh_from_db()
+        self.assertEqual(legacy_user.person, target_person)
+        self.assertFalse(legacy_user.is_active)
+        self.assertEqual(legacy_user.password, original_password)
+        self.assertEqual(access_request.status, original_status)
+        self.assertEqual(access_request.usuario, legacy_user)
+        self.assertEqual(response.json()["access_status"], "PENDING_APPROVAL")
+        approval_email.assert_not_called()
+        activation_email.assert_not_called()
+        reset_email.assert_not_called()
+        payload = json.dumps(response.json())
+        self.assertNotIn("token", payload.lower())
+        self.assertNotIn(original_password, payload)
+
+    def test_vinculo_preserva_dominios_relacionados_da_person(self):
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.link.domains",
+            password="Senha-forte-123",
+        )
+        target_person = Person.objects.create(full_name="Pessoa Dominio", birth_date=date(1990, 1, 1))
+        journey = ChurchJourney.objects.create(person=target_person)
+        teacher = Person.objects.create(full_name="Professor Vinculo", birth_date=date(1980, 1, 1))
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Vinculo",
+            teacher=teacher,
+            start_date=date(2026, 7, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=8,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        DiscipleshipEnrollment.objects.create(
+            person=target_person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            completed_at=date(2026, 8, 18),
+        )
+        membership = Membership.objects.create(person=target_person, member_since=date(2026, 8, 18))
+        department = Departamento.objects.create(nome="Recepcao", codigo="recepcao")
+        role = DepartmentRole.objects.create(department=department, name="Recepcionista", code="recepcao")
+        department_membership = DepartmentMembership.objects.create(
+            person=target_person,
+            department=department,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        worship_service = WorshipService.objects.create(
+            name="Culto Vinculo",
+            date=date(2026, 9, 20),
+            time=time(19, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+        )
+        schedule = Schedule.objects.create(department=department, worship_service=worship_service, status=Schedule.Status.PUBLISHED)
+        assignment = ScheduleAssignment.objects.create(schedule=schedule, department_membership=department_membership)
+        self.client.force_login(self.superuser)
+
+        self.client.post(
+            reverse("admin-user-link-person", args=[legacy_user.pk]),
+            {"person_id": target_person.pk},
+            content_type="application/json",
+        )
+
+        self.assertTrue(ChurchJourney.objects.filter(pk=journey.pk, person=target_person).exists())
+        self.assertTrue(Membership.objects.filter(pk=membership.pk, person=target_person, status=Membership.Status.ACTIVE).exists())
+        self.assertTrue(
+            DepartmentMembership.objects.filter(
+                pk=department_membership.pk,
+                person=target_person,
+                status=DepartmentMembership.Status.ACTIVE,
+            ).exists()
+        )
+        self.assertTrue(ScheduleAssignment.objects.filter(pk=assignment.pk).exists())
 
     def test_access_status_pending_activation(self):
         pending = self.user_model.objects.create_user(
@@ -2918,6 +3115,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertFalse(actions["can_resend_activation"])
         self.assertTrue(actions["can_send_password_reset"])
         self.assertEqual(actions["password_reset_url"], f"/api/users/{self.portal_user.pk}/password-reset/")
+        self.assertFalse(actions["can_link_person"])
 
     def test_admin_profile_actions_pending_activation(self):
         pending = self.user_model.objects.create_user(
@@ -2949,6 +3147,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertEqual(actions["unblock_url"], f"/api/users/{self.portal_user.pk}/enable/")
         self.assertFalse(actions["can_resend_activation"])
         self.assertFalse(actions["can_send_password_reset"])
+        self.assertFalse(actions["can_link_person"])
 
     def test_admin_profile_actions_viewer_readonly_nao_tem_acoes_sensiveis(self):
         secretaria = self.user_model.objects.create_user(
@@ -2965,6 +3164,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertFalse(actions["can_unblock"])
         self.assertFalse(actions["can_resend_activation"])
         self.assertFalse(actions["can_send_password_reset"])
+        self.assertFalse(actions["can_link_person"])
 
     @override_settings(APP_BASE_URL="https://portal.example.com")
     def test_reenviar_ativacao_pending_activation_usa_email_oficial_sem_expor_token(self):

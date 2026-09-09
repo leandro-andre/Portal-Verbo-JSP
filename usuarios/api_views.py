@@ -5,7 +5,7 @@ from django.contrib.auth import SESSION_KEY, authenticate, get_user_model, login
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -30,6 +30,7 @@ from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
     ACCESS_REQUEST_VIEW,
+    PEOPLE_VIEW,
     USER_DISABLE,
     USER_ENABLE,
     USER_VIEW,
@@ -65,7 +66,6 @@ from .services import (
     get_access_status,
     link_user_to_person,
     reject_access_request,
-    unlink_user_from_person,
 )
 
 
@@ -393,6 +393,16 @@ class CanEnableUsers(BasePermission):
         )
 
 
+class CanLinkUserPerson(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user.is_authenticated
+            and request.user.is_active
+            and request.user.has_perm(USER_ENABLE)
+            and request.user.has_perm(PEOPLE_VIEW)
+        )
+
+
 class IsActiveAuthenticatedUser(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user.is_authenticated and request.user.is_active)
@@ -681,10 +691,80 @@ class AdminUserPasswordResetView(AdminUserDetailView):
         )
 
 
-class AdminUserPersonLinkView(AdminUserDetailView):
-    permission_classes = [CanManageUsers]
+PERSON_LINK_CANDIDATES_LIMIT = 20
 
-    def patch(self, request, pk):
+
+def _digits_only(value):
+    return "".join(char for char in str(value or "") if char.isdigit())
+
+
+def _church_status_payload(person):
+    membership = getattr(person, "membership", None)
+    if membership is not None:
+        if membership.status == "ACTIVE":
+            return "MEMBER", "Membro"
+        return "INACTIVE_MEMBER", "Membro inativo"
+    if hasattr(person, "church_journey"):
+        return "VISITOR", "Visitante"
+    return "UNKNOWN", "Sem jornada"
+
+
+def _person_candidate_payload(person, request):
+    church_status, church_status_label = _church_status_payload(person)
+    return {
+        "id": person.id,
+        "display_name": person.display_name,
+        "full_name": person.full_name,
+        "photo_url": get_photo_url(person, request),
+        "email": person.email,
+        "phone": person.phone,
+        "status": person.status,
+        "status_label": person.get_status_display(),
+        "church_status": church_status,
+        "church_status_label": church_status_label,
+    }
+
+
+class AdminUserPersonCandidatesView(AdminUserDetailView):
+    permission_classes = [CanLinkUserPerson]
+
+    def get(self, request, pk):
+        usuario = self.get_object(pk)
+        if usuario.person_id:
+            return Response(
+                {
+                    "code": "USER_ALREADY_LINKED_TO_PERSON",
+                    "message": "Esta conta ja possui uma pessoa vinculada.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        search = str(request.query_params.get("q") or "").strip()
+        if len(search) < 2:
+            return Response([])
+
+        phone_digits = _digits_only(search)
+        query = (
+            models.Q(full_name__icontains=search)
+            | models.Q(preferred_name__icontains=search)
+            | models.Q(email__icontains=search)
+        )
+        if phone_digits:
+            query |= models.Q(phone__icontains=phone_digits)
+
+        candidates = (
+            Person.objects.filter(user_account__isnull=True)
+            .filter(query)
+            .select_related("membership", "church_journey")
+            .order_by("full_name", "birth_date", "id")[:PERSON_LINK_CANDIDATES_LIMIT]
+        )
+        return Response([_person_candidate_payload(person, request) for person in candidates])
+
+
+class AdminUserPersonLinkView(AdminUserDetailView):
+    permission_classes = [CanLinkUserPerson]
+
+    def post(self, request, pk):
         serializer = LinkUserPersonSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         usuario = self.get_object(pk)
@@ -700,10 +780,8 @@ class AdminUserPersonLinkView(AdminUserDetailView):
             )
         return Response(PortalUserSerializer(usuario).data)
 
-    def delete(self, request, pk):
-        usuario = self.get_object(pk)
-        usuario = unlink_user_from_person(usuario)
-        return Response(PortalUserSerializer(usuario).data)
+    def patch(self, request, pk):
+        return self.post(request, pk)
 
 
 class MyProfileView(APIView):

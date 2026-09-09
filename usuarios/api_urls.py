@@ -9,6 +9,7 @@ from .api_views import (
     AdminUserDisableView,
     AdminUserEnableView,
     AdminUserPasswordResetView,
+    AdminUserPersonCandidatesView,
     AdminUserPersonLinkView,
     AdminUserProfileView,
     AdminUserResendActivationView,
@@ -53,6 +54,12 @@ urlpatterns = [
     path("users/<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("users/<int:pk>/disable/", AdminUserDisableView.as_view(), name="admin-user-disable"),
     path("users/<int:pk>/enable/", AdminUserEnableView.as_view(), name="admin-user-enable"),
+    path(
+        "users/<int:pk>/person-candidates/",
+        AdminUserPersonCandidatesView.as_view(),
+        name="admin-user-person-candidates",
+    ),
+    path("users/<int:pk>/link-person/", AdminUserPersonLinkView.as_view(), name="admin-user-link-person"),
     path(
         "users/<int:pk>/resend-activation/",
         AdminUserResendActivationView.as_view(),

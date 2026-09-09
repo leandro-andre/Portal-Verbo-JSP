@@ -1,5 +1,17 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, ExternalLink, KeyRound, Lock, Mail, Send, ShieldCheck, Unlock, UserRound } from 'lucide-react'
+import {
+  ArrowLeft,
+  ExternalLink,
+  KeyRound,
+  LinkIcon,
+  Lock,
+  Mail,
+  Search,
+  Send,
+  ShieldCheck,
+  Unlock,
+  UserRound,
+} from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { UserAccessBusinessError, UserAccessHttpError } from '../api/users'
 import PersonAvatar from '../components/people/PersonAvatar'
@@ -8,10 +20,13 @@ import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import {
   useDisableUser,
   useEnableUser,
+  useLinkUserPerson,
   useResendUserActivation,
   useSendUserPasswordReset,
   useUserAdminProfile,
+  useUserPersonCandidates,
 } from '../hooks/useUsers'
+import type { UserPersonCandidate } from '../types/user'
 
 type AccessOperation = 'block' | 'unblock' | 'resend_activation' | 'password_reset'
 
@@ -19,6 +34,12 @@ function errorMessageFor(error: unknown) {
   if (error instanceof UserAccessBusinessError) {
     if (error.details.code === 'USER_EMAIL_CONFIGURATION_ERROR' || error.details.code === 'USER_EMAIL_DELIVERY_ERROR') {
       return 'Nao foi possivel enviar o e-mail.'
+    }
+    if (error.details.code === 'PERSON_ALREADY_HAS_USER') {
+      return 'Esta pessoa ja foi vinculada a outra conta. Atualize a busca e tente novamente.'
+    }
+    if (error.details.code === 'USER_ALREADY_LINKED_TO_PERSON') {
+      return 'Esta conta ja possui uma pessoa vinculada.'
     }
     return error.details.message
   }
@@ -109,6 +130,140 @@ function AccessActionDialog({
   )
 }
 
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return value || 'Telefone nao informado'
+}
+
+function PersonLinkDialog({
+  accountEmail,
+  candidates,
+  error,
+  isLoading,
+  isPending,
+  onClose,
+  onConfirm,
+  onSearchChange,
+  search,
+}: {
+  accountEmail: string
+  candidates: UserPersonCandidate[]
+  error: string | null
+  isLoading: boolean
+  isPending: boolean
+  onClose: () => void
+  onConfirm: (person: UserPersonCandidate) => void
+  onSearchChange: (value: string) => void
+  search: string
+}) {
+  const [selectedPerson, setSelectedPerson] = useState<UserPersonCandidate | null>(null)
+  const [isConfirming, setIsConfirming] = useState(false)
+  const canContinue = selectedPerson !== null
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog user-person-link-dialog" role="dialog" aria-modal="true" aria-labelledby="user-person-link-title">
+        <h2 id="user-person-link-title">{isConfirming ? 'Confirmar vinculo' : 'Vincular pessoa'}</h2>
+        {error ? (
+          <div className="form-alert form-alert--error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {isConfirming && selectedPerson ? (
+          <div className="dialog-copy">
+            <p>Vincular esta conta a {selectedPerson.display_name}?</p>
+            <dl className="profile-details">
+              <DetailItem label="Conta" value={accountEmail} />
+              <DetailItem label="Pessoa" value={selectedPerson.display_name} />
+              <DetailItem label="E-mail da pessoa" value={selectedPerson.email || 'E-mail nao informado'} />
+            </dl>
+            <p>Esse vinculo conecta a conta de acesso a identidade da pessoa no Portal.</p>
+            <p>Esta operacao nao podera ser trocada ou desfeita por esta tela.</p>
+          </div>
+        ) : (
+          <>
+            <label className="field" htmlFor="person-link-search">
+              <span>Buscar por nome, e-mail ou telefone</span>
+              <div className="input-with-icon">
+                <Search size={17} aria-hidden="true" />
+                <input
+                  id="person-link-search"
+                  type="search"
+                  value={search}
+                  onChange={(event) => {
+                    setSelectedPerson(null)
+                    onSearchChange(event.target.value)
+                  }}
+                  autoFocus
+                />
+              </div>
+            </label>
+            <div className="user-person-candidates" role="listbox" aria-label="Pessoas disponiveis para vinculo">
+              {search.trim().length < 2 ? (
+                <p className="page-heading__description">Digite ao menos 2 caracteres para buscar.</p>
+              ) : isLoading ? (
+                <p className="page-heading__description">Buscando pessoas...</p>
+              ) : candidates.length ? (
+                candidates.map((person) => {
+                  const selected = selectedPerson?.id === person.id
+                  return (
+                    <button
+                      key={person.id}
+                      className={`user-person-candidate${selected ? ' user-person-candidate--selected' : ''}`}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => setSelectedPerson(person)}
+                    >
+                      {person.photo_url ? (
+                        <img src={person.photo_url} alt="" />
+                      ) : (
+                        <PersonAvatar name={person.display_name} />
+                      )}
+                      <span>
+                        <strong>{person.display_name}</strong>
+                        <small>{person.church_status_label} · {person.email || 'E-mail nao informado'}</small>
+                        <small>{formatPhone(person.phone)}</small>
+                      </span>
+                    </button>
+                  )
+                })
+              ) : (
+                <p className="page-heading__description">Nenhuma pessoa disponivel encontrada.</p>
+              )}
+            </div>
+          </>
+        )}
+        <div className="profile-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Cancelar
+          </button>
+          {isConfirming && selectedPerson ? (
+            <button className="button button--primary" type="button" disabled={isPending} onClick={() => onConfirm(selectedPerson)}>
+              {isPending ? 'Vinculando...' : 'Vincular pessoa'}
+            </button>
+          ) : (
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={!canContinue || isPending}
+              onClick={() => setIsConfirming(true)}
+            >
+              Continuar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UserAccessPage() {
   const { id } = useParams()
   const userId = Number(id)
@@ -118,9 +273,17 @@ function UserAccessPage() {
   const unblockUser = useEnableUser(userId)
   const resendActivation = useResendUserActivation(userId)
   const sendPasswordReset = useSendUserPasswordReset(userId)
+  const linkUserPerson = useLinkUserPerson(userId)
   const [dialogOperation, setDialogOperation] = useState<AccessOperation | null>(null)
+  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false)
+  const [personSearch, setPersonSearch] = useState('')
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
+  const { data: personCandidates = [], isLoading: isLoadingPersonCandidates } = useUserPersonCandidates(
+    userId,
+    personSearch,
+    isLinkDialogOpen,
+  )
   const isForbidden = error instanceof UserAccessHttpError && error.status === 403
   const isNotFound = !isValidId || (error instanceof UserAccessHttpError && error.status === 404)
   const accountEmail = profile?.account.email || 'E-mail nao informado'
@@ -128,7 +291,8 @@ function UserAccessPage() {
     blockUser.isPending ||
     unblockUser.isPending ||
     resendActivation.isPending ||
-    sendPasswordReset.isPending
+    sendPasswordReset.isPending ||
+    linkUserPerson.isPending
 
   const runOperation = async (operation: AccessOperation) => {
     setOperationMessage(null)
@@ -145,6 +309,19 @@ function UserAccessPage() {
       }
       setOperationMessage(successMessageFor(operation))
       setDialogOperation(null)
+    } catch (caught) {
+      setOperationError(errorMessageFor(caught))
+    }
+  }
+
+  const handleLinkPerson = async (person: UserPersonCandidate) => {
+    setOperationMessage(null)
+    setOperationError(null)
+    try {
+      await linkUserPerson.mutateAsync({ person_id: person.id })
+      setOperationMessage('Pessoa vinculada com sucesso.')
+      setIsLinkDialogOpen(false)
+      setPersonSearch('')
     } catch (caught) {
       setOperationError(errorMessageFor(caught))
     }
@@ -209,6 +386,17 @@ function UserAccessPage() {
             </div>
           </header>
 
+          {operationMessage ? (
+            <div className="form-alert form-alert--success" role="status">
+              {operationMessage}
+            </div>
+          ) : null}
+          {operationError ? (
+            <div className="form-alert form-alert--error" role="alert">
+              {operationError}
+            </div>
+          ) : null}
+
           <div className="profile-content user-admin-content">
             <section className="profile-section">
               <h2>Conta</h2>
@@ -260,6 +448,12 @@ function UserAccessPage() {
                 <div className="user-admin-empty">
                   <UserRound size={22} aria-hidden="true" />
                   <p>Esta conta ainda nao esta vinculada a uma pessoa.</p>
+                  {profile.actions.can_link_person ? (
+                    <button className="button button--primary" type="button" onClick={() => setIsLinkDialogOpen(true)}>
+                      <LinkIcon size={17} aria-hidden="true" />
+                      Vincular pessoa
+                    </button>
+                  ) : null}
                 </div>
               )}
             </section>
@@ -277,16 +471,6 @@ function UserAccessPage() {
 
             <section className="profile-section">
               <h2>Seguranca e acesso</h2>
-              {operationMessage ? (
-                <div className="form-alert form-alert--success" role="status">
-                  {operationMessage}
-                </div>
-              ) : null}
-              {operationError ? (
-                <div className="form-alert form-alert--error" role="alert">
-                  {operationError}
-                </div>
-              ) : null}
               <dl className="profile-details">
                 <DetailItem label="Status" value={<AccessStatusBadge status={profile.security.status} />} />
                 <DetailItem label="Conta habilitada" value={yesNo(profile.security.is_active)} />
@@ -381,6 +565,19 @@ function UserAccessPage() {
               operation={dialogOperation}
               onClose={() => setDialogOperation(null)}
               onConfirm={() => void runOperation(dialogOperation)}
+            />
+          ) : null}
+          {isLinkDialogOpen ? (
+            <PersonLinkDialog
+              accountEmail={accountEmail}
+              candidates={personCandidates}
+              error={operationError}
+              isLoading={isLoadingPersonCandidates}
+              isPending={linkUserPerson.isPending}
+              onClose={() => setIsLinkDialogOpen(false)}
+              onConfirm={(person) => void handleLinkPerson(person)}
+              onSearchChange={setPersonSearch}
+              search={personSearch}
             />
           ) : null}
         </>
