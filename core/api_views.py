@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from usuarios.roles import ACCESS_REQUEST_VIEW, MEMBERSHIP_VIEW, PEOPLE_VIEW
 
+from .global_search import search_global
 from .secretary_dashboard import build_secretary_dashboard
 
 
@@ -23,3 +24,21 @@ class SecretaryDashboardView(APIView):
 
     def get(self, request):
         return Response(build_secretary_dashboard(viewer=request.user))
+
+
+class IsActiveAuthenticated(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user.is_authenticated and request.user.is_active)
+
+
+class GlobalSearchView(APIView):
+    permission_classes = [IsActiveAuthenticated]
+
+    def get(self, request):
+        return Response(
+            search_global(
+                viewer=request.user,
+                query=request.query_params.get("q"),
+                request=request,
+            )
+        )

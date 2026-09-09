@@ -1,6 +1,7 @@
 import { Bell, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLogout, useCurrentUser } from '../../hooks/useAuth'
+import GlobalSearch from '../search/GlobalSearch'
 
 type TopbarProps = {
   title: string
@@ -62,6 +63,8 @@ function Topbar({
         </button>
         <span className="topbar__title">{title}</span>
       </div>
+
+      <GlobalSearch />
 
       <div className="topbar__actions">
         <button className="icon-button" type="button" aria-label="Notificacoes">

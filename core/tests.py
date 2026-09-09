@@ -9,7 +9,7 @@ import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -30,7 +30,15 @@ from escalas.models import Escala
 from pessoas.models import Person
 from scheduling.models import Schedule, ScheduleAssignment
 from usuarios.models import AccessRequest
-from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
+from usuarios.roles import (
+    DEPARTMENT_VIEW,
+    PASTOR_GROUP,
+    PEOPLE_VIEW,
+    PORTAL_ADMIN_GROUP,
+    SECRETARY_GROUP,
+    USER_VIEW,
+    setup_portal_roles,
+)
 from worship.models import WorshipService
 
 from .views import react_app
@@ -460,6 +468,155 @@ class SecretaryDashboardTests(TestCase):
 
         self.assertEqual(body["action_required"]["access_requests"]["count"], 7)
         self.assertEqual(len(body["action_required"]["access_requests"]["items"]), body["meta"]["preview_limit"])
+
+
+class GlobalSearchApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.url = reverse("global-search")
+
+    def make_user(self, username, *permission_paths):
+        user = self.user_model.objects.create_user(username=username, password="senha-forte-123")
+        for permission_path in permission_paths:
+            app_label, codename = permission_path.split(".", 1)
+            user.user_permissions.add(
+                Permission.objects.get(content_type__app_label=app_label, codename=codename)
+            )
+        return user
+
+    def search(self, user, query):
+        self.client.force_login(user)
+        return self.client.get(self.url, {"q": query})
+
+    def group(self, body, group_type):
+        return next((group for group in body["groups"] if group["type"] == group_type), None)
+
+    def group_types(self, body):
+        return [group["type"] for group in body["groups"]]
+
+    def test_usuario_nao_autenticado_nao_acessa_busca_global(self):
+        response = self.client.get(self.url, {"q": "Maria"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_people_view_encontra_pessoa_por_nome_preferido_email_e_telefone(self):
+        viewer = self.make_user("global.people", PEOPLE_VIEW)
+        person = Person.objects.create(
+            full_name="Maria Silva",
+            preferred_name="Mari",
+            birth_date=timezone.localdate(),
+            email="maria.silva@example.com",
+            phone="81999999999",
+        )
+
+        for query in ["maria", "Mari", "SILVA@EXAMPLE", "99999"]:
+            with self.subTest(query=query):
+                body = self.search(viewer, query).json()
+                people = self.group(body, "people")
+                self.assertIsNotNone(people)
+                self.assertIn(person.id, [item["id"] for item in people["items"]])
+                self.assertEqual(people["items"][0]["url"], f"/pessoas/{person.id}")
+                self.assertIn("subtitle", people["items"][0])
+
+    def test_sem_people_view_nao_recebe_grupo_nem_descobre_pessoa(self):
+        viewer = self.make_user("global.no.people", USER_VIEW)
+        Person.objects.create(
+            full_name="Nome Sigiloso",
+            birth_date=timezone.localdate(),
+            email="sigiloso@example.com",
+        )
+
+        body = self.search(viewer, "Nome Sigiloso").json()
+
+        self.assertNotIn("people", self.group_types(body))
+        self.assertNotIn("Nome Sigiloso", str(body["groups"]))
+        self.assertNotIn("sigiloso@example.com", str(body["groups"]))
+
+    def test_user_view_encontra_usuario_por_username_email_e_nome_da_person_sem_dados_sensiveis(self):
+        viewer = self.make_user("global.users.viewer", USER_VIEW)
+        person = Person.objects.create(full_name="Leandro Andre", birth_date=timezone.localdate())
+        usuario = self.user_model.objects.create_user(
+            username="leandro.portal",
+            email="leandro.portal@example.com",
+            password="senha-forte-123",
+            person=person,
+        )
+
+        for query in ["leandro.portal", "portal@example", "Leandro Andre"]:
+            with self.subTest(query=query):
+                body = self.search(viewer, query).json()
+                users = self.group(body, "users")
+                self.assertIsNotNone(users)
+                self.assertIn(usuario.id, [item["id"] for item in users["items"]])
+
+        serialized = str(self.search(viewer, "leandro").json()).lower()
+        self.assertNotIn("password", serialized)
+        self.assertNotIn("token", serialized)
+        self.assertNotIn("session", serialized)
+        self.assertNotIn("activation", serialized)
+
+    def test_sem_user_view_nao_recebe_grupo_usuarios(self):
+        viewer = self.make_user("global.no.users", PEOPLE_VIEW)
+        self.user_model.objects.create_user(
+            username="usuario.sigilo",
+            email="usuario.sigilo@example.com",
+            password="senha-forte-123",
+        )
+
+        body = self.search(viewer, "usuario.sigilo").json()
+
+        self.assertNotIn("users", self.group_types(body))
+        self.assertNotIn("usuario.sigilo", str(body["groups"]))
+        self.assertNotIn("usuario.sigilo@example.com", str(body["groups"]))
+
+    def test_department_view_controla_grupo_departamentos(self):
+        department = Departamento.objects.create(nome="Juniores", descricao="Criancas maiores")
+        allowed = self.make_user("global.departments.allowed", DEPARTMENT_VIEW)
+        denied = self.make_user("global.departments.denied", PEOPLE_VIEW)
+
+        allowed_body = self.search(allowed, "juniores").json()
+        denied_body = self.search(denied, "juniores").json()
+
+        departments = self.group(allowed_body, "departments")
+        self.assertIsNotNone(departments)
+        self.assertEqual(departments["items"][0]["id"], department.id)
+        self.assertEqual(departments["items"][0]["url"], f"/departamentos/{department.id}")
+        self.assertNotIn("departments", self.group_types(denied_body))
+        self.assertNotIn("Juniores", str(denied_body))
+
+    def test_combinacao_de_capabilities_retorna_somente_grupos_permitidos(self):
+        viewer = self.make_user("global.combo", PEOPLE_VIEW, DEPARTMENT_VIEW)
+        Person.objects.create(full_name="Central Combo", birth_date=timezone.localdate())
+        self.user_model.objects.create_user(username="central.combo", password="senha-forte-123")
+        Departamento.objects.create(nome="Central Combo")
+
+        body = self.search(viewer, "Central Combo").json()
+
+        self.assertEqual(self.group_types(body), ["people", "departments"])
+
+    def test_query_curta_retorna_vazio_sem_grupos(self):
+        viewer = self.make_user("global.short", PEOPLE_VIEW, USER_VIEW, DEPARTMENT_VIEW)
+        Person.objects.create(full_name="Ana Curta", birth_date=timezone.localdate())
+
+        body = self.search(viewer, " A ").json()
+
+        self.assertEqual(body, {"query": "A", "groups": []})
+
+    def test_busca_aplica_trim_limite_ordenacao_case_insensitive_e_sem_resultados(self):
+        viewer = self.make_user("global.order", PEOPLE_VIEW)
+        exact = Person.objects.create(full_name="Maria", birth_date=timezone.localdate())
+        starts = Person.objects.create(full_name="Maria Alice", birth_date=timezone.localdate())
+        contains = Person.objects.create(full_name="Zara Maria", birth_date=timezone.localdate())
+        for index in range(6):
+            Person.objects.create(full_name=f"Zara Maria Limite {index}", birth_date=timezone.localdate())
+
+        body = self.search(viewer, "  mARIA  ").json()
+        people_items = self.group(body, "people")["items"]
+
+        self.assertEqual(body["query"], "mARIA")
+        self.assertEqual([item["id"] for item in people_items[:3]], [exact.id, starts.id, contains.id])
+        self.assertEqual(len(people_items), 5)
+        self.assertEqual(self.group(self.search(viewer, "zzzz").json(), "people")["items"], [])
 
 
 @override_settings(
