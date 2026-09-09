@@ -1,4 +1,10 @@
-import type { LinkUserPersonInput, PortalUser, UserAccessBusinessErrorResponse, UserAdminProfile } from '../types/user'
+import type {
+  LinkUserPersonInput,
+  PortalUser,
+  UserAccessBusinessErrorResponse,
+  UserAdminOperationResponse,
+  UserAdminProfile,
+} from '../types/user'
 import { csrfJsonHeaders } from './http'
 
 export class UserAccessBusinessError extends Error {
@@ -36,7 +42,12 @@ function isUserAccessBusinessErrorResponse(
       value.code === 'USER_ACCESS_NOT_ACTIVE' ||
       value.code === 'USER_ACCESS_NOT_BLOCKED' ||
       value.code === 'PERSON_NOT_FOUND' ||
-      value.code === 'PERSON_ALREADY_HAS_USER'
+      value.code === 'PERSON_ALREADY_HAS_USER' ||
+      value.code === 'USER_ACTIVATION_EMAIL_NOT_ALLOWED' ||
+      value.code === 'USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED' ||
+      value.code === 'USER_EMAIL_MISSING' ||
+      value.code === 'USER_EMAIL_CONFIGURATION_ERROR' ||
+      value.code === 'USER_EMAIL_DELIVERY_ERROR'
     )
   )
 }
@@ -56,7 +67,7 @@ async function handleUserResponse(response: Response): Promise<unknown> {
     throw new UserAccessHttpError(404, 'Usuario nao encontrado.')
   }
 
-  if (response.status === 409 && isUserAccessBusinessErrorResponse(data)) {
+  if ((response.status === 409 || response.status === 503) && isUserAccessBusinessErrorResponse(data)) {
     throw new UserAccessBusinessError(data)
   }
 
@@ -88,24 +99,44 @@ export async function getUserAdminProfile(id: number): Promise<UserAdminProfile>
   return await handleUserResponse(response) as UserAdminProfile
 }
 
-export async function disableUser(id: number): Promise<PortalUser> {
+export async function disableUser(id: number): Promise<UserAdminOperationResponse> {
   const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/users/${id}/disable/`, {
     method: 'POST',
     credentials: 'same-origin',
     headers,
   })
-  return await handleUserResponse(response) as PortalUser
+  return await handleUserResponse(response) as UserAdminOperationResponse
 }
 
-export async function enableUser(id: number): Promise<PortalUser> {
+export async function enableUser(id: number): Promise<UserAdminOperationResponse> {
   const headers = await csrfJsonHeaders()
   const response = await fetch(`/api/users/${id}/enable/`, {
     method: 'POST',
     credentials: 'same-origin',
     headers,
   })
-  return await handleUserResponse(response) as PortalUser
+  return await handleUserResponse(response) as UserAdminOperationResponse
+}
+
+export async function resendUserActivation(id: number): Promise<UserAdminOperationResponse> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/users/${id}/resend-activation/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  return await handleUserResponse(response) as UserAdminOperationResponse
+}
+
+export async function sendUserPasswordReset(id: number): Promise<UserAdminOperationResponse> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/users/${id}/password-reset/`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+  })
+  return await handleUserResponse(response) as UserAdminOperationResponse
 }
 
 export async function linkUserPerson(

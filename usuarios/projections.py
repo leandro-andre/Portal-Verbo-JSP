@@ -1,5 +1,5 @@
 from pessoas.serializers import get_photo_url
-from usuarios.roles import PEOPLE_VIEW
+from usuarios.roles import PEOPLE_VIEW, USER_DISABLE, USER_ENABLE
 from usuarios.services import AccessStatus, get_access_status
 
 from .models import AccessRequest
@@ -57,6 +57,25 @@ def build_user_admin_profile(usuario, viewer, request=None):
     person = getattr(usuario, "person", None)
     access_status = get_access_status(usuario)
     can_view_person_profile = bool(person and viewer.has_perm(PEOPLE_VIEW))
+    has_email = bool((usuario.email or "").strip())
+    can_block = bool(
+        access_status == AccessStatus.ACTIVE
+        and viewer.has_perm(USER_DISABLE)
+        and usuario.pk != viewer.pk
+        and not usuario.is_superuser
+    )
+    can_unblock = bool(access_status == AccessStatus.BLOCKED and viewer.has_perm(USER_ENABLE))
+    can_resend_activation = bool(
+        access_status == AccessStatus.PENDING_ACTIVATION
+        and viewer.has_perm(USER_ENABLE)
+        and has_email
+    )
+    can_send_password_reset = bool(
+        access_status == AccessStatus.ACTIVE
+        and usuario.has_usable_password()
+        and viewer.has_perm(USER_ENABLE)
+        and has_email
+    )
 
     return {
         "id": usuario.id,
@@ -92,11 +111,19 @@ def build_user_admin_profile(usuario, viewer, request=None):
             "is_active": usuario.is_active,
             "status": access_status,
             "status_label": ACCESS_STATUS_LABELS[access_status],
-            "message": "As acoes administrativas de acesso serao disponibilizadas em etapa posterior.",
+            "message": "Acoes sensiveis sao autorizadas pelo backend conforme estado da conta.",
         },
         "access_request": _access_request_payload(usuario),
         "actions": {
             "can_view_person_profile": can_view_person_profile,
             "person_profile_url": f"/pessoas/{person.id}" if can_view_person_profile else None,
+            "can_block": can_block,
+            "block_url": f"/api/users/{usuario.id}/disable/" if can_block else None,
+            "can_unblock": can_unblock,
+            "unblock_url": f"/api/users/{usuario.id}/enable/" if can_unblock else None,
+            "can_resend_activation": can_resend_activation,
+            "resend_activation_url": f"/api/users/{usuario.id}/resend-activation/" if can_resend_activation else None,
+            "can_send_password_reset": can_send_password_reset,
+            "password_reset_url": f"/api/users/{usuario.id}/password-reset/" if can_send_password_reset else None,
         },
     }

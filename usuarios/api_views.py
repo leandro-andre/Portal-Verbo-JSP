@@ -4,7 +4,6 @@ import logging
 from django.contrib.auth import SESSION_KEY, authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.http import JsonResponse
@@ -24,7 +23,7 @@ from rest_framework.views import APIView
 from pessoas.models import Person
 from pessoas.serializers import get_photo_url
 from usuarios.dashboard import get_user_dashboard
-from usuarios.emails import send_access_approval_email, send_password_reset_email
+from usuarios.emails import send_access_approval_email, send_account_activation_email, send_password_reset_email
 from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
 from usuarios.projections import build_user_admin_profile
 from usuarios.roles import (
@@ -54,10 +53,16 @@ from .serializers import (
 from .services import (
     AccessRequestError,
     UserAccessError,
+    UserEmailConfigurationError,
+    UserEmailDeliveryError,
     approve_access_request,
     build_account_activation_path,
+    delete_user_sessions,
     disable_user_access,
     enable_user_access,
+    ensure_can_send_activation_email,
+    ensure_can_send_password_reset_email,
+    get_access_status,
     link_user_to_person,
     reject_access_request,
     unlink_user_from_person,
@@ -259,13 +264,6 @@ def _password_reset_token_is_valid(uid, token):
     return default_token_generator.check_token(usuario, token), usuario
 
 
-def _delete_user_sessions(usuario):
-    for session in Session.objects.filter(expire_date__gte=timezone.now()):
-        session_data = session.get_decoded()
-        if str(session_data.get(SESSION_KEY)) == str(usuario.pk):
-            session.delete()
-
-
 @method_decorator(csrf_protect, name="dispatch")
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
@@ -337,7 +335,7 @@ class PasswordResetConfirmView(APIView):
         with transaction.atomic():
             usuario.set_password(password)
             usuario.save(update_fields=["password"])
-            _delete_user_sessions(usuario)
+            delete_user_sessions(usuario)
         return Response({"detail": "Senha redefinida com sucesso."})
 
 
@@ -589,7 +587,7 @@ class AdminUserDisableView(AdminUserDetailView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        return Response(PortalUserSerializer(usuario).data)
+        return Response({"status": "ok", "access_status": get_access_status(usuario)})
 
 
 class AdminUserEnableView(AdminUserDetailView):
@@ -605,7 +603,82 @@ class AdminUserEnableView(AdminUserDetailView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        return Response(PortalUserSerializer(usuario).data)
+        return Response({"status": "ok", "access_status": get_access_status(usuario)})
+
+
+class AdminUserResendActivationView(AdminUserDetailView):
+    permission_classes = [CanEnableUsers]
+
+    def post(self, request, pk):
+        usuario = self.get_object(pk)
+        try:
+            ensure_can_send_activation_email(usuario)
+        except UserAccessError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=getattr(exc, "http_status", status.HTTP_409_CONFLICT),
+            )
+
+        notification = send_account_activation_email(usuario).as_api_payload()
+        if not notification["email_sent"]:
+            return Response(
+                {
+                    "code": "USER_EMAIL_DELIVERY_ERROR",
+                    "message": "Nao foi possivel enviar o e-mail agora.",
+                    "notification": notification,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                "status": "ok",
+                "access_status": get_access_status(usuario),
+                "notification": notification,
+            }
+        )
+
+
+class AdminUserPasswordResetView(AdminUserDetailView):
+    permission_classes = [CanEnableUsers]
+
+    def post(self, request, pk):
+        usuario = self.get_object(pk)
+        try:
+            ensure_can_send_password_reset_email(usuario)
+            result = send_password_reset_email(usuario)
+        except (EmailConfigurationError, UserEmailConfigurationError) as exc:
+            return Response(
+                {
+                    "code": "USER_EMAIL_CONFIGURATION_ERROR",
+                    "message": "O envio de e-mail nao esta configurado.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except (EmailDeliveryError, UserEmailDeliveryError) as exc:
+            return Response(
+                {
+                    "code": "USER_EMAIL_DELIVERY_ERROR",
+                    "message": "Nao foi possivel enviar o e-mail agora.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except UserAccessError as exc:
+            return Response(
+                {"code": exc.code, "message": exc.message},
+                status=getattr(exc, "http_status", status.HTTP_409_CONFLICT),
+            )
+
+        return Response(
+            {
+                "status": "ok",
+                "access_status": get_access_status(usuario),
+                "notification": {
+                    "email_sent": result is not None,
+                    "type": "password_reset",
+                },
+            }
+        )
 
 
 class AdminUserPersonLinkView(AdminUserDetailView):

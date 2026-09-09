@@ -2,7 +2,9 @@ import re
 import unicodedata
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth import SESSION_KEY
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils.encoding import force_bytes
@@ -87,6 +89,33 @@ class UserPersonAlreadyHasUserError(UserPersonLinkError):
     message = "Esta pessoa ja possui outro usuario vinculado."
 
 
+class UserActivationEmailNotAllowedError(UserAccessError):
+    code = "USER_ACTIVATION_EMAIL_NOT_ALLOWED"
+    message = "Somente contas aguardando ativacao podem receber reenvio de ativacao."
+
+
+class UserPasswordResetEmailNotAllowedError(UserAccessError):
+    code = "USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED"
+    message = "Somente contas ativas com senha configurada podem receber recuperacao de senha."
+
+
+class UserEmailMissingError(UserAccessError):
+    code = "USER_EMAIL_MISSING"
+    message = "Esta conta nao possui e-mail cadastrado."
+
+
+class UserEmailConfigurationError(UserAccessError):
+    code = "USER_EMAIL_CONFIGURATION_ERROR"
+    message = "O envio de e-mail nao esta configurado."
+    http_status = 503
+
+
+class UserEmailDeliveryError(UserAccessError):
+    code = "USER_EMAIL_DELIVERY_ERROR"
+    message = "Nao foi possivel enviar o e-mail agora."
+    http_status = 503
+
+
 class AccessStatus:
     PENDING_APPROVAL = "PENDING_APPROVAL"
     PENDING_ACTIVATION = "PENDING_ACTIVATION"
@@ -141,6 +170,16 @@ def build_account_activation_path(usuario):
     uid = urlsafe_base64_encode(force_bytes(usuario.pk))
     token = default_token_generator.make_token(usuario)
     return f"/ativar-conta/{uid}/{token}"
+
+
+def delete_user_sessions(usuario):
+    deleted = 0
+    for session in Session.objects.filter(expire_date__gte=timezone.now()):
+        session_data = session.get_decoded()
+        if str(session_data.get(SESSION_KEY)) == str(usuario.pk):
+            session.delete()
+            deleted += 1
+    return deleted
 
 
 def _ensure_pending(access_request):
@@ -287,6 +326,7 @@ def disable_user_access(usuario, *, acting_user):
 
     usuario.is_active = False
     usuario.save(update_fields=["is_active"])
+    delete_user_sessions(usuario)
     return usuario
 
 
@@ -328,3 +368,17 @@ def unlink_user_from_person(usuario):
     usuario.person = None
     usuario.save(update_fields=["person"])
     return usuario
+
+
+def ensure_can_send_activation_email(usuario):
+    if get_access_status(usuario) != AccessStatus.PENDING_ACTIVATION:
+        raise UserActivationEmailNotAllowedError
+    if not (usuario.email or "").strip():
+        raise UserEmailMissingError
+
+
+def ensure_can_send_password_reset_email(usuario):
+    if get_access_status(usuario) != AccessStatus.ACTIVE or not usuario.has_usable_password():
+        raise UserPasswordResetEmailNotAllowedError
+    if not (usuario.email or "").strip():
+        raise UserEmailMissingError

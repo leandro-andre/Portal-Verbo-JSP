@@ -1,5 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { disableUser, enableUser, getUser, getUserAdminProfile, getUsers, linkUserPerson, unlinkUserPerson } from '../api/users'
+import {
+  disableUser,
+  enableUser,
+  getUser,
+  getUserAdminProfile,
+  getUsers,
+  linkUserPerson,
+  resendUserActivation,
+  sendUserPasswordReset,
+  unlinkUserPerson,
+} from '../api/users'
 import { currentUserQueryKey } from './useAuth'
 import type { LinkUserPersonInput } from '../types/user'
 
@@ -41,8 +51,9 @@ export function useDisableUser(id: number) {
 
   return useMutation({
     mutationFn: () => disableUser(id),
-    onSuccess: async (user) => {
-      queryClient.setQueryData(userQueryKey(id), user)
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userQueryKey(id) })
+      await queryClient.invalidateQueries({ queryKey: userAdminProfileQueryKey(id) })
       await queryClient.invalidateQueries({ queryKey: usersQueryKey })
       await queryClient.invalidateQueries({ queryKey: currentUserQueryKey })
     },
@@ -54,10 +65,33 @@ export function useEnableUser(id: number) {
 
   return useMutation({
     mutationFn: () => enableUser(id),
-    onSuccess: async (user) => {
-      queryClient.setQueryData(userQueryKey(id), user)
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userQueryKey(id) })
+      await queryClient.invalidateQueries({ queryKey: userAdminProfileQueryKey(id) })
       await queryClient.invalidateQueries({ queryKey: usersQueryKey })
       await queryClient.invalidateQueries({ queryKey: currentUserQueryKey })
+    },
+  })
+}
+
+export function useResendUserActivation(id: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => resendUserActivation(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userAdminProfileQueryKey(id) })
+    },
+  })
+}
+
+export function useSendUserPasswordReset(id: number) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => sendUserPasswordReset(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: userAdminProfileQueryKey(id) })
     },
   })
 }

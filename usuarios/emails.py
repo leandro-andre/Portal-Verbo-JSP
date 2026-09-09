@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
+from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 ACCESS_APPROVAL_SUBJECT = "Seu acesso ao Portal Verbo da Vida foi aprovado"
+ACCOUNT_ACTIVATION_SUBJECT = "Ative seu acesso ao Portal Verbo da Vida"
 PASSWORD_RESET_SUBJECT = "Redefinicao de senha - Portal Verbo da Vida"
 
 
@@ -145,6 +147,41 @@ def _build_password_reset_email(*, name, reset_link):
     return html, text
 
 
+def _send_activation_email(*, usuario, recipient, name, subject, idempotency_key, log_extra):
+    link = _activation_link(usuario)
+    if not link:
+        logger.warning("E-mail de ativacao nao enviado: APP_BASE_URL ausente.", extra=log_extra)
+        return AccessApprovalEmailResult(sent=False, reason="missing_app_base_url", type="activation")
+
+    html, text = _build_activation_email(name=name, activation_link=link)
+    try:
+        result = send_transactional_email(
+            to=recipient,
+            subject=subject,
+            html=html,
+            text=text,
+            idempotency_key=idempotency_key,
+        )
+    except EmailConfigurationError:
+        logger.warning(
+            "E-mail de ativacao nao enviado: provider desabilitado.",
+            extra=log_extra,
+        )
+        return AccessApprovalEmailResult(sent=False, reason="provider_disabled", type="activation")
+    except EmailDeliveryError:
+        logger.warning(
+            "E-mail de ativacao nao enviado: falha de entrega.",
+            extra=log_extra,
+        )
+        return AccessApprovalEmailResult(sent=False, reason="delivery_failed", type="activation")
+
+    logger.info(
+        "E-mail de ativacao enviado.",
+        extra={**log_extra, "provider": result.provider, "message_id": result.message_id},
+    )
+    return AccessApprovalEmailResult(sent=True, message_id=result.message_id, type="activation")
+
+
 def send_access_approval_email(access_request, usuario):
     recipient = (usuario.email or access_request.email or "").strip()
     if not recipient:
@@ -157,11 +194,14 @@ def send_access_approval_email(access_request, usuario):
 
     if needs_activation:
         notification_type = "activation"
-        link = _activation_link(usuario)
-        if not link:
-            logger.warning("E-mail de ativacao nao enviado: APP_BASE_URL ausente.", extra={"access_request_id": access_request.id})
-            return AccessApprovalEmailResult(sent=False, reason="missing_app_base_url", type=notification_type)
-        html, text = _build_activation_email(name=name, activation_link=link)
+        return _send_activation_email(
+            usuario=usuario,
+            recipient=recipient,
+            name=name,
+            subject=ACCESS_APPROVAL_SUBJECT,
+            idempotency_key=f"access-request-approved:{access_request.id}:{notification_type}",
+            log_extra={"access_request_id": access_request.id, "email_type": notification_type},
+        )
     else:
         notification_type = "approval-active-account"
         link = _portal_link()
@@ -204,6 +244,23 @@ def send_access_approval_email(access_request, usuario):
         sent=True,
         message_id=result.message_id,
         type=notification_type,
+    )
+
+
+def send_account_activation_email(usuario):
+    recipient = (usuario.email or "").strip()
+    if not recipient:
+        logger.info("E-mail de ativacao nao enviado: destinatario ausente.", extra={"user_id": usuario.id})
+        return AccessApprovalEmailResult(sent=False, reason="missing_recipient", type="activation")
+
+    idempotency_window = timezone.now().strftime("%Y%m%d%H%M")
+    return _send_activation_email(
+        usuario=usuario,
+        recipient=recipient,
+        name=usuario.display_name,
+        subject=ACCOUNT_ACTIVATION_SUBJECT,
+        idempotency_key=f"account-activation-resend:{usuario.id}:{idempotency_window}",
+        log_extra={"user_id": usuario.id, "email_type": "activation"},
     )
 
 

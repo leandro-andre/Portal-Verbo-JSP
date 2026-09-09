@@ -8,8 +8,10 @@ from .api_views import (
     AdminUserDetailView,
     AdminUserDisableView,
     AdminUserEnableView,
+    AdminUserPasswordResetView,
     AdminUserPersonLinkView,
     AdminUserProfileView,
+    AdminUserResendActivationView,
     AdminUserListView,
     MyDashboardView,
     MyProfilePhotoView,
@@ -51,6 +53,16 @@ urlpatterns = [
     path("users/<int:pk>/", AdminUserDetailView.as_view(), name="admin-user-detail"),
     path("users/<int:pk>/disable/", AdminUserDisableView.as_view(), name="admin-user-disable"),
     path("users/<int:pk>/enable/", AdminUserEnableView.as_view(), name="admin-user-enable"),
+    path(
+        "users/<int:pk>/resend-activation/",
+        AdminUserResendActivationView.as_view(),
+        name="admin-user-resend-activation",
+    ),
+    path(
+        "users/<int:pk>/password-reset/",
+        AdminUserPasswordResetView.as_view(),
+        name="admin-user-password-reset",
+    ),
     path("users/<int:pk>/person/", AdminUserPersonLinkView.as_view(), name="admin-user-person"),
     path("access-requests/", PublicAccessRequestCreateView.as_view(), name="access-request-create"),
     path(

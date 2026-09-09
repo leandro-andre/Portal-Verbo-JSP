@@ -1,11 +1,41 @@
-import type { ReactNode } from 'react'
-import { ArrowLeft, ExternalLink, Mail, ShieldCheck, UserRound } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowLeft, ExternalLink, KeyRound, Lock, Mail, Send, ShieldCheck, Unlock, UserRound } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
-import { UserAccessHttpError } from '../api/users'
+import { UserAccessBusinessError, UserAccessHttpError } from '../api/users'
 import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
-import { useUserAdminProfile } from '../hooks/useUsers'
+import {
+  useDisableUser,
+  useEnableUser,
+  useResendUserActivation,
+  useSendUserPasswordReset,
+  useUserAdminProfile,
+} from '../hooks/useUsers'
+
+type AccessOperation = 'block' | 'unblock' | 'resend_activation' | 'password_reset'
+
+function errorMessageFor(error: unknown) {
+  if (error instanceof UserAccessBusinessError) {
+    if (error.details.code === 'USER_EMAIL_CONFIGURATION_ERROR' || error.details.code === 'USER_EMAIL_DELIVERY_ERROR') {
+      return 'Nao foi possivel enviar o e-mail.'
+    }
+    return error.details.message
+  }
+  if (error instanceof Error) {
+    return error.message
+  }
+  return 'Nao foi possivel concluir a acao.'
+}
+
+function successMessageFor(operation: AccessOperation) {
+  return {
+    block: 'Acesso bloqueado.',
+    unblock: 'Acesso desbloqueado.',
+    resend_activation: 'E-mail de ativacao enviado.',
+    password_reset: 'E-mail de recuperacao enviado.',
+  }[operation]
+}
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -32,14 +62,93 @@ function DetailItem({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
+function AccessActionDialog({
+  displayName,
+  isPending,
+  operation,
+  onClose,
+  onConfirm,
+}: {
+  displayName: string
+  isPending: boolean
+  operation: AccessOperation
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const isBlock = operation === 'block'
+  const isUnblock = operation === 'unblock'
+  const title = isBlock
+    ? `Bloquear acesso de ${displayName}?`
+    : isUnblock ? `Desbloquear acesso de ${displayName}?` : ''
+  const message = isBlock
+    ? 'A pessoa nao conseguira acessar o Portal ate que sua conta seja desbloqueada.'
+    : 'A conta voltara a seguir o estado real definido pelo backend.'
+  const confirmLabel = isBlock ? 'Bloquear acesso' : 'Desbloquear acesso'
+
+  if (!isBlock && !isUnblock) {
+    return null
+  }
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="user-access-dialog-title">
+        <h2 id="user-access-dialog-title">{title}</h2>
+        <div className="dialog-copy">
+          <p>{message}</p>
+        </div>
+        <div className="profile-actions">
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="button button--primary" type="button" disabled={isPending} onClick={onConfirm}>
+            {isPending ? 'Confirmando...' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function UserAccessPage() {
   const { id } = useParams()
   const userId = Number(id)
   const isValidId = Number.isInteger(userId) && userId > 0
   const { data: profile, error, isError, isLoading, refetch } = useUserAdminProfile(userId)
+  const blockUser = useDisableUser(userId)
+  const unblockUser = useEnableUser(userId)
+  const resendActivation = useResendUserActivation(userId)
+  const sendPasswordReset = useSendUserPasswordReset(userId)
+  const [dialogOperation, setDialogOperation] = useState<AccessOperation | null>(null)
+  const [operationMessage, setOperationMessage] = useState<string | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
   const isForbidden = error instanceof UserAccessHttpError && error.status === 403
   const isNotFound = !isValidId || (error instanceof UserAccessHttpError && error.status === 404)
   const accountEmail = profile?.account.email || 'E-mail nao informado'
+  const isOperationPending =
+    blockUser.isPending ||
+    unblockUser.isPending ||
+    resendActivation.isPending ||
+    sendPasswordReset.isPending
+
+  const runOperation = async (operation: AccessOperation) => {
+    setOperationMessage(null)
+    setOperationError(null)
+    try {
+      if (operation === 'block') {
+        await blockUser.mutateAsync()
+      } else if (operation === 'unblock') {
+        await unblockUser.mutateAsync()
+      } else if (operation === 'resend_activation') {
+        await resendActivation.mutateAsync()
+      } else {
+        await sendPasswordReset.mutateAsync()
+      }
+      setOperationMessage(successMessageFor(operation))
+      setDialogOperation(null)
+    } catch (caught) {
+      setOperationError(errorMessageFor(caught))
+    }
+  }
 
   return (
     <section className="person-profile-page user-admin-page">
@@ -168,12 +277,68 @@ function UserAccessPage() {
 
             <section className="profile-section">
               <h2>Seguranca e acesso</h2>
+              {operationMessage ? (
+                <div className="form-alert form-alert--success" role="status">
+                  {operationMessage}
+                </div>
+              ) : null}
+              {operationError ? (
+                <div className="form-alert form-alert--error" role="alert">
+                  {operationError}
+                </div>
+              ) : null}
               <dl className="profile-details">
                 <DetailItem label="Status" value={<AccessStatusBadge status={profile.security.status} />} />
                 <DetailItem label="Conta habilitada" value={yesNo(profile.security.is_active)} />
                 <DetailItem label="Senha configurada" value={yesNo(profile.security.has_usable_password)} />
               </dl>
               <p className="page-heading__description user-admin-section-note">{profile.security.message}</p>
+              <div className="profile-actions user-admin-security-actions">
+                {profile.actions.can_send_password_reset ? (
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={isOperationPending}
+                    onClick={() => void runOperation('password_reset')}
+                  >
+                    <KeyRound size={17} aria-hidden="true" />
+                    {sendPasswordReset.isPending ? 'Enviando...' : 'Enviar recuperacao de senha'}
+                  </button>
+                ) : null}
+                {profile.actions.can_resend_activation ? (
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={isOperationPending}
+                    onClick={() => void runOperation('resend_activation')}
+                  >
+                    <Send size={17} aria-hidden="true" />
+                    {resendActivation.isPending ? 'Enviando...' : 'Reenviar e-mail de ativacao'}
+                  </button>
+                ) : null}
+                {profile.actions.can_unblock ? (
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={isOperationPending}
+                    onClick={() => setDialogOperation('unblock')}
+                  >
+                    <Unlock size={17} aria-hidden="true" />
+                    Desbloquear acesso
+                  </button>
+                ) : null}
+                {profile.actions.can_block ? (
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    disabled={isOperationPending}
+                    onClick={() => setDialogOperation('block')}
+                  >
+                    <Lock size={17} aria-hidden="true" />
+                    Bloquear acesso
+                  </button>
+                ) : null}
+              </div>
             </section>
 
             {profile.access_request ? (
@@ -208,6 +373,16 @@ function UserAccessPage() {
               </Link>
             ) : null}
           </div>
+
+          {dialogOperation ? (
+            <AccessActionDialog
+              displayName={profile.display_name}
+              isPending={isOperationPending}
+              operation={dialogOperation}
+              onClose={() => setDialogOperation(null)}
+              onConfirm={() => void runOperation(dialogOperation)}
+            />
+          ) : null}
         </>
       ) : null}
     </section>

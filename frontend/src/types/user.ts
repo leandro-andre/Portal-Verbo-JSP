@@ -66,6 +66,24 @@ export type UserAdminProfile = {
   actions: {
     can_view_person_profile: boolean
     person_profile_url: string | null
+    can_block: boolean
+    block_url: string | null
+    can_unblock: boolean
+    unblock_url: string | null
+    can_resend_activation: boolean
+    resend_activation_url: string | null
+    can_send_password_reset: boolean
+    password_reset_url: string | null
+  }
+}
+
+export type UserAdminOperationResponse = {
+  status?: 'ok'
+  access_status?: AccessStatus
+  notification?: {
+    email_sent: boolean
+    type?: 'activation' | 'password_reset' | 'approval-active-account'
+    reason?: 'provider_disabled' | 'delivery_failed' | 'missing_recipient' | 'missing_app_base_url'
   }
 }
 
@@ -77,7 +95,13 @@ export type UserAccessBusinessErrorResponse = {
     | 'USER_ACCESS_NOT_BLOCKED'
     | 'PERSON_NOT_FOUND'
     | 'PERSON_ALREADY_HAS_USER'
+    | 'USER_ACTIVATION_EMAIL_NOT_ALLOWED'
+    | 'USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED'
+    | 'USER_EMAIL_MISSING'
+    | 'USER_EMAIL_CONFIGURATION_ERROR'
+    | 'USER_EMAIL_DELIVERY_ERROR'
   message: string
+  notification?: UserAdminOperationResponse['notification']
 }
 
 export type LinkUserPersonInput = {

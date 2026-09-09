@@ -1059,7 +1059,7 @@ class AuthApiTests(TestCase):
         headers = self._csrf_headers()
         self.client.raise_request_exception = False
 
-        with patch("usuarios.api_views._delete_user_sessions", side_effect=RuntimeError("falha")):
+        with patch("usuarios.api_views.delete_user_sessions", side_effect=RuntimeError("falha")):
             response = self.client.post(
                 reverse("auth-password-reset-confirm"),
                 payload,
@@ -2319,6 +2319,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         )
         self.portal_user = self.user_model.objects.create_user(
             username="maria.silva",
+            email="maria.silva@example.com",
             password="Senha-forte-123",
             person=self.person,
         )
@@ -2699,6 +2700,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         response = self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
         self.assertEqual(response.json()["access_status"], "BLOCKED")
         self.portal_user.refresh_from_db()
         self.assertFalse(self.portal_user.is_active)
@@ -2710,6 +2712,86 @@ class AdminUserAccessLifecycleApiTests(TestCase):
 
         self.person.refresh_from_db()
         self.assertEqual(self.person.status, Person.Status.ACTIVE)
+
+    def test_dominios_relacionados_nao_sao_alterados_ao_bloquear(self):
+        journey = ChurchJourney.objects.create(person=self.person)
+        teacher = Person.objects.create(full_name="Professor Discipulado", birth_date=date(1980, 1, 1))
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Concluido PVV-054B",
+            teacher=teacher,
+            start_date=date(2026, 7, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=8,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            completed_at=date(2026, 8, 18),
+        )
+        membership = Membership.objects.create(person=self.person, member_since=date(2026, 8, 18))
+        department = Departamento.objects.create(nome="Louvor", codigo="louvor")
+        role = DepartmentRole.objects.create(department=department, name="Vocal", code="vocal")
+        department_membership = DepartmentMembership.objects.create(
+            person=self.person,
+            department=department,
+            role=role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        worship_service = WorshipService.objects.create(
+            name="Culto",
+            date=date(2026, 9, 13),
+            time=time(19, 0),
+            kind=WorshipService.Kind.EXTRAORDINARY,
+        )
+        schedule = Schedule.objects.create(
+            department=department,
+            worship_service=worship_service,
+            status=Schedule.Status.PUBLISHED,
+        )
+        assignment = ScheduleAssignment.objects.create(
+            schedule=schedule,
+            department_membership=department_membership,
+        )
+        original_password = self.portal_user.password
+        self.client.force_login(self.superuser)
+
+        self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.portal_user.refresh_from_db()
+        self.assertEqual(self.portal_user.person_id, self.person.pk)
+        self.assertEqual(self.portal_user.password, original_password)
+        self.assertTrue(ChurchJourney.objects.filter(pk=journey.pk, person=self.person).exists())
+        self.assertTrue(Membership.objects.filter(pk=membership.pk, person=self.person, status=Membership.Status.ACTIVE).exists())
+        self.assertTrue(
+            DepartmentMembership.objects.filter(
+                pk=department_membership.pk,
+                person=self.person,
+                status=DepartmentMembership.Status.ACTIVE,
+            ).exists()
+        )
+        self.assertTrue(ScheduleAssignment.objects.filter(pk=assignment.pk).exists())
+
+    def test_bloqueio_administrativo_invalida_sessoes_do_usuario_alvo(self):
+        target_client = Client()
+        target_client.force_login(self.portal_user)
+        self.assertTrue(
+            Session.objects.filter(
+                session_key=target_client.session.session_key,
+                expire_date__gte=timezone.now(),
+            ).exists()
+        )
+        self.client.force_login(self.superuser)
+
+        self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.assertFalse(
+            Session.objects.filter(
+                session_key=target_client.session.session_key,
+                expire_date__gte=timezone.now(),
+            ).exists()
+        )
 
     def test_usuario_bloqueado_nao_faz_login(self):
         self.portal_user.is_active = False
@@ -2752,6 +2834,7 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         response = self.client.post(reverse("admin-user-enable", args=[self.portal_user.pk]))
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
         self.assertEqual(response.json()["access_status"], "ACTIVE")
         self.portal_user.refresh_from_db()
         self.assertTrue(self.portal_user.is_active)
@@ -2820,6 +2903,165 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.client.force_login(self.regular_user)
 
         response = self.client.post(reverse("admin-user-disable", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_profile_actions_active_para_viewer_com_permissao(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+        actions = response.json()["actions"]
+
+        self.assertTrue(actions["can_block"])
+        self.assertEqual(actions["block_url"], f"/api/users/{self.portal_user.pk}/disable/")
+        self.assertFalse(actions["can_unblock"])
+        self.assertFalse(actions["can_resend_activation"])
+        self.assertTrue(actions["can_send_password_reset"])
+        self.assertEqual(actions["password_reset_url"], f"/api/users/{self.portal_user.pk}/password-reset/")
+
+    def test_admin_profile_actions_pending_activation(self):
+        pending = self.user_model.objects.create_user(
+            username="actions.pending",
+            email="actions.pending@example.com",
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[pending.pk]))
+        actions = response.json()["actions"]
+
+        self.assertFalse(actions["can_send_password_reset"])
+        self.assertTrue(actions["can_resend_activation"])
+        self.assertEqual(actions["resend_activation_url"], f"/api/users/{pending.pk}/resend-activation/")
+
+    def test_admin_profile_actions_blocked(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+        actions = response.json()["actions"]
+
+        self.assertFalse(actions["can_block"])
+        self.assertTrue(actions["can_unblock"])
+        self.assertEqual(actions["unblock_url"], f"/api/users/{self.portal_user.pk}/enable/")
+        self.assertFalse(actions["can_resend_activation"])
+        self.assertFalse(actions["can_send_password_reset"])
+
+    def test_admin_profile_actions_viewer_readonly_nao_tem_acoes_sensiveis(self):
+        secretaria = self.user_model.objects.create_user(
+            username="readonly.users",
+            password="Senha-forte-123",
+        )
+        assign_role(secretaria, SECRETARY_GROUP)
+        self.client.force_login(secretaria)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+        actions = response.json()["actions"]
+
+        self.assertFalse(actions["can_block"])
+        self.assertFalse(actions["can_unblock"])
+        self.assertFalse(actions["can_resend_activation"])
+        self.assertFalse(actions["can_send_password_reset"])
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_reenviar_ativacao_pending_activation_usa_email_oficial_sem_expor_token(self):
+        pending = self.user_model.objects.create_user(
+            username="resend.activation",
+            email="resend.activation@example.com",
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.emails.send_transactional_email", return_value=EmailSendResult(provider="resend", message_id="email_activation")) as send_email:
+            response = self.client.post(reverse("admin-user-resend-activation", args=[pending.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["notification"], {"email_sent": True, "type": "activation"})
+        payload = json.dumps(response.json())
+        self.assertNotIn("token", payload.lower())
+        self.assertNotIn(pending.password, payload)
+        email_kwargs = send_email.call_args.kwargs
+        self.assertEqual(email_kwargs["to"], "resend.activation@example.com")
+        self.assertTrue(email_kwargs["idempotency_key"].startswith(f"account-activation-resend:{pending.pk}:"))
+
+    def test_reenviar_ativacao_active_nao_permite(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-resend-activation", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_ACTIVATION_EMAIL_NOT_ALLOWED")
+
+    def test_reenviar_ativacao_sem_email_trata_precondicao(self):
+        pending = self.user_model.objects.create_user(username="resend.no.email", is_active=False)
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-resend-activation", args=[pending.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_EMAIL_MISSING")
+
+    @override_settings(APP_BASE_URL="")
+    def test_reenviar_ativacao_sem_app_base_url_retorna_falha_segura(self):
+        pending = self.user_model.objects.create_user(
+            username="resend.no.base",
+            email="resend.no.base@example.com",
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-resend-activation", args=[pending.pk]))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["code"], "USER_EMAIL_DELIVERY_ERROR")
+        self.assertEqual(response.json()["notification"]["reason"], "missing_app_base_url")
+
+    @override_settings(APP_BASE_URL="https://portal.example.com")
+    def test_password_reset_admin_active_usa_fluxo_compartilhado_sem_alterar_senha(self):
+        original_password = self.portal_user.password
+        self.client.force_login(self.superuser)
+
+        with patch("usuarios.api_views.send_password_reset_email", return_value=EmailSendResult(provider="resend", message_id="email_reset")) as send_email:
+            response = self.client.post(reverse("admin-user-password-reset", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["notification"], {"email_sent": True, "type": "password_reset"})
+        self.portal_user.refresh_from_db()
+        self.assertEqual(self.portal_user.password, original_password)
+        payload = json.dumps(response.json())
+        self.assertNotIn("token", payload.lower())
+        self.assertNotIn(original_password, payload)
+        send_email.assert_called_once()
+
+    def test_password_reset_admin_pending_activation_nao_permite(self):
+        pending = self.user_model.objects.create_user(
+            username="reset.pending",
+            email="reset.pending@example.com",
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.post(reverse("admin-user-password-reset", args=[pending.pk]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "USER_PASSWORD_RESET_EMAIL_NOT_ALLOWED")
+
+    def test_password_reset_admin_sem_permissao_recebe_403(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.post(reverse("admin-user-password-reset", args=[self.portal_user.pk]))
 
         self.assertEqual(response.status_code, 403)
 
