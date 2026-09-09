@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { disableUser, enableUser, getUser, getUsers, linkUserPerson, unlinkUserPerson } from '../api/users'
+import { disableUser, enableUser, getUser, getUserAdminProfile, getUsers, linkUserPerson, unlinkUserPerson } from '../api/users'
 import { currentUserQueryKey } from './useAuth'
 import type { LinkUserPersonInput } from '../types/user'
 
@@ -7,6 +7,10 @@ export const usersQueryKey = ['users'] as const
 
 export function userQueryKey(id: number) {
   return ['users', id] as const
+}
+
+export function userAdminProfileQueryKey(id: number) {
+  return ['users', id, 'admin-profile'] as const
 }
 
 export function useUsers() {
@@ -20,6 +24,14 @@ export function useUser(id: number) {
   return useQuery({
     queryKey: userQueryKey(id),
     queryFn: () => getUser(id),
+    enabled: Number.isFinite(id) && id > 0,
+  })
+}
+
+export function useUserAdminProfile(id: number) {
+  return useQuery({
+    queryKey: userAdminProfileQueryKey(id),
+    queryFn: () => getUserAdminProfile(id),
     enabled: Number.isFinite(id) && id > 0,
   })
 }

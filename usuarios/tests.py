@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 from io import BytesIO, StringIO
+import json
 from os import environ
 import shutil
 import tempfile
@@ -2372,6 +2373,195 @@ class AdminUserAccessLifecycleApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["person"]["display_name"], "Maria Silva")
         self.assertIn("email", response.json()["person"])
+
+    def test_admin_profile_superuser_autorizado(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["account"]["username"], "maria.silva")
+
+    def test_admin_profile_secretaria_autorizada_por_capability(self):
+        secretaria = self.user_model.objects.create_user(
+            username="secretaria.users",
+            password="Senha-forte-123",
+        )
+        assign_role(secretaria, SECRETARY_GROUP)
+        self.client.force_login(secretaria)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_profile_usuario_comum_recebe_403(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_profile_usuario_inexistente_retorna_404(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[999999]))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_admin_profile_com_person_retorna_ficha_basica_e_url(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["display_name"], "Maria Silva")
+        self.assertEqual(data["person"]["id"], self.person.pk)
+        self.assertEqual(data["person"]["profile_url"], f"/pessoas/{self.person.pk}")
+        self.assertTrue(data["actions"]["can_view_person_profile"])
+        self.assertEqual(data["actions"]["person_profile_url"], f"/pessoas/{self.person.pk}")
+
+    def test_admin_profile_sem_person_retorna_estado_explicito(self):
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.profile",
+            email="legacy@example.com",
+            password="Senha-forte-123",
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[legacy_user.pk]))
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(data["person"])
+        self.assertEqual(data["display_name"], "legacy@example.com")
+        self.assertFalse(data["account"]["person_linked"])
+        self.assertFalse(data["actions"]["can_view_person_profile"])
+        self.assertIsNone(data["actions"]["person_profile_url"])
+
+    def test_admin_profile_access_status_active(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.json()["access_status"]["value"], "ACTIVE")
+        self.assertEqual(response.json()["activation"]["message"], "Conta ativada.")
+
+    def test_admin_profile_access_status_pending_activation(self):
+        pending = self.user_model.objects.create_user(
+            username="profile.pending.activation",
+            person=Person.objects.create(full_name="Ana Pessoa", birth_date=date(1991, 1, 1)),
+            is_active=False,
+        )
+        pending.set_unusable_password()
+        pending.save()
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[pending.pk]))
+
+        self.assertEqual(response.json()["access_status"]["value"], "PENDING_ACTIVATION")
+        self.assertFalse(response.json()["account"]["has_usable_password"])
+
+    def test_admin_profile_access_status_pending_approval(self):
+        pending = self.user_model.objects.create_user(
+            username="profile.pending.approval",
+            password="Senha-forte-123",
+            is_active=False,
+        )
+        AccessRequest.objects.create(
+            full_name="Ana Pessoa",
+            birth_date=date(1991, 1, 1),
+            email="ana.approval@example.com",
+            phone="81999999999",
+            usuario=pending,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[pending.pk]))
+
+        self.assertEqual(response.json()["access_status"]["value"], "PENDING_APPROVAL")
+
+    def test_admin_profile_access_status_blocked(self):
+        self.portal_user.is_active = False
+        self.portal_user.save(update_fields=["is_active"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.json()["access_status"]["value"], "BLOCKED")
+
+    def test_admin_profile_has_usable_password_true(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertTrue(response.json()["account"]["has_usable_password"])
+
+    def test_admin_profile_last_login_presente(self):
+        now = timezone.now()
+        self.portal_user.last_login = now
+        self.portal_user.save(update_fields=["last_login"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertIsNotNone(response.json()["account"]["last_login"])
+
+    def test_admin_profile_last_login_null(self):
+        self.portal_user.last_login = None
+        self.portal_user.save(update_fields=["last_login"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertIsNone(response.json()["account"]["last_login"])
+
+    def test_admin_profile_photo_url_presente_quando_person_tem_foto(self):
+        self.person.photo = SimpleUploadedFile("avatar.jpg", b"avatar", content_type="image/jpeg")
+        self.person.save(update_fields=["photo"])
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertIsNotNone(response.json()["person"]["photo_url"])
+
+    def test_admin_profile_sem_foto_retorna_null_para_fallback_frontend(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertIsNone(response.json()["person"]["photo_url"])
+
+    def test_admin_profile_nao_retorna_hash_ou_tokens(self):
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+        payload = json.dumps(response.json())
+
+        self.assertNotIn("password", response.json())
+        self.assertNotIn(self.portal_user.password, payload)
+        self.assertNotIn("token", payload.lower())
+
+    def test_admin_profile_access_request_so_aparece_por_relacao_confiavel(self):
+        unrelated = AccessRequest.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.silva@example.com",
+            phone="81999999999",
+        )
+        linked = AccessRequest.objects.create(
+            full_name="Maria Silva",
+            birth_date=date(1990, 5, 10),
+            email="maria.linked@example.com",
+            phone="81999999998",
+            usuario=self.portal_user,
+        )
+        self.client.force_login(self.superuser)
+
+        response = self.client.get(reverse("admin-user-admin-profile", args=[self.portal_user.pk]))
+
+        self.assertEqual(response.json()["access_request"]["id"], linked.pk)
+        self.assertNotEqual(response.json()["access_request"]["id"], unrelated.pk)
 
     def test_vincula_usuario_sem_person_a_person_existente(self):
         legacy_user = self.user_model.objects.create_user(

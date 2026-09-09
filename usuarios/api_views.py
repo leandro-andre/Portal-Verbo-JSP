@@ -26,6 +26,7 @@ from pessoas.serializers import get_photo_url
 from usuarios.dashboard import get_user_dashboard
 from usuarios.emails import send_access_approval_email, send_password_reset_email
 from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
+from usuarios.projections import build_user_admin_profile
 from usuarios.roles import (
     ACCESS_REQUEST_APPROVE,
     ACCESS_REQUEST_REJECT,
@@ -567,6 +568,12 @@ class AdminUserDetailView(APIView):
     def get(self, request, pk):
         usuario = self.get_object(pk)
         return Response(PortalUserSerializer(usuario).data)
+
+
+class AdminUserProfileView(AdminUserDetailView):
+    def get(self, request, pk):
+        usuario = self.get_object(pk)
+        return Response(build_user_admin_profile(usuario, request.user, request))
 
 
 class AdminUserDisableView(AdminUserDetailView):

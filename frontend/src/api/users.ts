@@ -1,4 +1,4 @@
-import type { LinkUserPersonInput, PortalUser, UserAccessBusinessErrorResponse } from '../types/user'
+import type { LinkUserPersonInput, PortalUser, UserAccessBusinessErrorResponse, UserAdminProfile } from '../types/user'
 import { csrfJsonHeaders } from './http'
 
 export class UserAccessBusinessError extends Error {
@@ -79,6 +79,13 @@ export async function getUser(id: number): Promise<PortalUser> {
     credentials: 'same-origin',
   })
   return await handleUserResponse(response) as PortalUser
+}
+
+export async function getUserAdminProfile(id: number): Promise<UserAdminProfile> {
+  const response = await fetch(`/api/users/${id}/admin-profile/`, {
+    credentials: 'same-origin',
+  })
+  return await handleUserResponse(response) as UserAdminProfile
 }
 
 export async function disableUser(id: number): Promise<PortalUser> {

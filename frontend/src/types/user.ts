@@ -19,6 +19,56 @@ export type PortalUser = {
   is_superuser: boolean
 }
 
+export type UserAdminProfile = {
+  id: number
+  display_name: string
+  access_status: {
+    value: AccessStatus
+    label: string
+  }
+  account: {
+    id: number
+    username: string
+    email: string
+    is_active: boolean
+    is_superuser: boolean
+    has_usable_password: boolean
+    date_joined: string
+    last_login: string | null
+    person_linked: boolean
+  }
+  person: (PortalUserPerson & {
+    photo_url: string | null
+    status_label: string
+    profile_url: string
+  }) | null
+  activation: {
+    status: AccessStatus
+    label: string
+    message: string
+  }
+  security: {
+    has_usable_password: boolean
+    is_active: boolean
+    status: AccessStatus
+    status_label: string
+    message: string
+  }
+  access_request: {
+    id: number
+    status: 'PENDING' | 'APPROVED' | 'REJECTED'
+    status_label: string
+    created_at: string
+    updated_at: string
+    reviewed_at: string | null
+    detail_url: string
+  } | null
+  actions: {
+    can_view_person_profile: boolean
+    person_profile_url: string | null
+  }
+}
+
 export type UserAccessBusinessErrorResponse = {
   code:
     | 'CANNOT_DISABLE_OWN_ACCOUNT'
