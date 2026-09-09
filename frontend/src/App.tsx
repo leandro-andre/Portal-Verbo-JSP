@@ -28,6 +28,7 @@ import PersonProfilePage from './pages/PersonProfilePage'
 import PeoplePage from './pages/PeoplePage'
 import ScheduleDetailPage from './pages/ScheduleDetailPage'
 import SchedulesPage from './pages/SchedulesPage'
+import SecretaryDashboardPage from './pages/SecretaryDashboardPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import UserAccessPage from './pages/UserAccessPage'
 import UsersPage from './pages/UsersPage'
@@ -108,6 +109,7 @@ function AdminRoutes() {
     <AppShell>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/secretaria" element={<AuthorizedRoute capability="ACCESS_REQUEST_VIEW"><SecretaryDashboardPage /></AuthorizedRoute>} />
         <Route path="/pessoas" element={<AuthorizedRoute capability="PEOPLE_VIEW"><PeoplePage /></AuthorizedRoute>} />
         <Route path="/pessoas/nova" element={<AuthorizedRoute capability="PEOPLE_CREATE"><PersonCreatePage /></AuthorizedRoute>} />
         <Route path="/pessoas/:id/acesso" element={<AuthorizedRoute capability="USER_VIEW"><PersonAccessRedirect /></AuthorizedRoute>} />

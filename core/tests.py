@@ -9,6 +9,7 @@ import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -18,14 +19,18 @@ from django.utils import timezone
 from resend.exceptions import ResendError
 from storages.backends.s3 import S3Storage
 
+from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
 from core.email import EmailSendResult, send_transactional_email
 from core.email.exceptions import EmailConfigurationError, EmailDeliveryError
 from config.env import env_bool, env_list
 from config.storage import build_media_storage_config
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
+from departamentos.models import DepartamentoMembro
 from escalas.models import Escala
 from pessoas.models import Person
 from scheduling.models import Schedule, ScheduleAssignment
+from usuarios.models import AccessRequest
+from usuarios.roles import PASTOR_GROUP, PORTAL_ADMIN_GROUP, SECRETARY_GROUP, setup_portal_roles
 from worship.models import WorshipService
 
 from .views import react_app
@@ -196,6 +201,200 @@ class ProductionReadinessTests(TestCase):
                 self.assertNotEqual(static_response.status_code, 200)
                 self.assertNotEqual(media_response.status_code, 200)
             self.reload_project_urlconf()
+
+
+class SecretaryDashboardTests(TestCase):
+    def setUp(self):
+        setup_portal_roles()
+        self.user_model = get_user_model()
+        self.admin = self.make_user("secretary.dashboard.admin", PORTAL_ADMIN_GROUP)
+        self.secretary = self.make_user("secretary.dashboard.secretary", SECRETARY_GROUP)
+        self.pastor = self.make_user("secretary.dashboard.pastor", PASTOR_GROUP)
+        self.common = self.user_model.objects.create_user(
+            username="secretary.dashboard.common",
+            password="senha-forte-123",
+        )
+        self.url = reverse("secretary-dashboard")
+
+    def make_user(self, username, group_name, **kwargs):
+        user = self.user_model.objects.create_user(username=username, password="senha-forte-123", **kwargs)
+        user.groups.add(Group.objects.get(name=group_name))
+        return user
+
+    def make_completed_discipleship(self, person, completed_at=None):
+        teacher = Person.objects.create(full_name=f"Professor {person.full_name}", birth_date=timezone.localdate())
+        discipleship_class = DiscipleshipClass.objects.create(
+            name=f"Discipulado {person.full_name}",
+            teacher=teacher,
+            start_date=timezone.localdate() - timedelta(days=90),
+            expected_end_date=timezone.localdate() - timedelta(days=30),
+            planned_sessions=8,
+            status=DiscipleshipClass.Status.COMPLETED,
+        )
+        return DiscipleshipEnrollment.objects.create(
+            person=person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.COMPLETED,
+            enrolled_at=timezone.localdate() - timedelta(days=80),
+            completed_at=completed_at or timezone.localdate() - timedelta(days=20),
+        )
+
+    def make_membership_ready_person(self, name):
+        person = Person.objects.create(full_name=name, birth_date=timezone.localdate())
+        ChurchJourney.objects.create(person=person, started_at=timezone.localdate() - timedelta(days=100))
+        self.make_completed_discipleship(person)
+        return person
+
+    def test_secretaria_admin_e_pastor_acessam_central(self):
+        for user in [self.secretary, self.admin, self.pastor]:
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                response = self.client.get(self.url)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["meta"]["action_required_semantics"], "items")
+
+    def test_usuario_comum_nao_acessa_central(self):
+        self.client.force_login(self.common)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_solicitacoes_pendentes_aparecem_ordenadas_e_status_finais_nao_aparecem(self):
+        self.client.force_login(self.secretary)
+        newest = AccessRequest.objects.create(
+            full_name="Solicitacao Nova",
+            birth_date=timezone.localdate(),
+            email="nova@example.com",
+            phone="81999999999",
+        )
+        oldest = AccessRequest.objects.create(
+            full_name="Solicitacao Antiga",
+            birth_date=timezone.localdate(),
+            email="antiga@example.com",
+            phone="81988888888",
+        )
+        AccessRequest.objects.filter(pk=oldest.pk).update(created_at=timezone.now() - timedelta(days=3))
+        AccessRequest.objects.filter(pk=newest.pk).update(created_at=timezone.now() - timedelta(days=1))
+        AccessRequest.objects.create(
+            full_name="Aprovada",
+            birth_date=timezone.localdate(),
+            email="aprovada@example.com",
+            phone="81977777777",
+            status=AccessRequest.Status.APPROVED,
+        )
+        AccessRequest.objects.create(
+            full_name="Rejeitada",
+            birth_date=timezone.localdate(),
+            email="rejeitada@example.com",
+            phone="81966666666",
+            status=AccessRequest.Status.REJECTED,
+        )
+
+        body = self.client.get(self.url).json()
+        access_requests = body["action_required"]["access_requests"]
+
+        self.assertEqual(access_requests["count"], 2)
+        self.assertEqual([item["full_name"] for item in access_requests["items"]], ["Solicitacao Antiga", "Solicitacao Nova"])
+        self.assertEqual(access_requests["items"][0]["review_url"], f"/solicitacoes-acesso/{oldest.pk}")
+
+    def test_membresia_elegivel_usa_selector_e_nao_inclui_nao_elegivel(self):
+        self.client.force_login(self.secretary)
+        eligible = self.make_membership_ready_person("Pessoa Elegivel")
+        Person.objects.create(full_name="Pessoa Sem Discipulado", birth_date=timezone.localdate())
+
+        body = self.client.get(self.url).json()
+        memberships = body["action_required"]["membership_approvals"]
+
+        self.assertEqual(memberships["count"], 1)
+        self.assertEqual(memberships["items"][0]["person"]["id"], eligible.id)
+        self.assertEqual(memberships["items"][0]["resolution_url"], f"/pessoas/{eligible.id}")
+
+    def test_pending_activation_active_e_incomplete_profiles_sem_duplicar_pessoa(self):
+        self.client.force_login(self.secretary)
+        pending_person = Person.objects.create(full_name="Conta Pendente", birth_date=timezone.localdate())
+        pending_user = self.user_model.objects.create_user(
+            username="conta.pendente",
+            email="pendente@example.com",
+            person=pending_person,
+            is_active=False,
+        )
+        pending_user.set_unusable_password()
+        pending_user.save(update_fields=["password"])
+        self.user_model.objects.create_user(username="conta.ativa", password="senha-forte-123", is_active=True)
+        Person.objects.create(full_name="Sem Email WhatsApp", birth_date=timezone.localdate())
+
+        body = self.client.get(self.url).json()
+
+        self.assertEqual(body["pending"]["activation"]["count"], 1)
+        self.assertEqual(body["pending"]["activation"]["items"][0]["user"]["username"], "conta.pendente")
+        self.assertEqual(body["pending"]["incomplete_profiles"]["count"], 2)
+        self.assertEqual(body["pending"]["incomplete_profiles"]["missing_email_count"], 2)
+        self.assertEqual(body["pending"]["incomplete_profiles"]["missing_whatsapp_count"], 2)
+
+    def test_departmentmembership_inelegivel_aparece_e_elegivel_nao_aparece(self):
+        self.client.force_login(self.secretary)
+        department = Departamento.objects.create(nome="Recepcao Secretaria")
+        role = DepartmentRole.objects.create(department=department, name="Voluntario", code="voluntario")
+        ineligible = Person.objects.create(full_name="Sem Membresia Departamento", birth_date=timezone.localdate())
+        eligible = self.make_membership_ready_person("Com Membresia Departamento")
+        legacy_person = Person.objects.create(full_name="Legado Departamento", birth_date=timezone.localdate())
+        legacy_user = self.user_model.objects.create_user(
+            username="legacy.department.central",
+            password="senha-forte-123",
+            person=legacy_person,
+        )
+        Membership.objects.create(person=eligible, member_since=timezone.localdate() - timedelta(days=10))
+        DepartmentMembership.objects.create(person=ineligible, department=department, role=role)
+        DepartmentMembership.objects.create(person=eligible, department=department, role=role)
+        DepartamentoMembro.objects.create(
+            membro=legacy_user,
+            departamento=department,
+            papel=DepartamentoMembro.Papel.VOLUNTARIO,
+        )
+
+        body = self.client.get(self.url).json()
+        department_items = body["pending"]["department_eligibility"]["items"]
+
+        self.assertEqual(body["pending"]["department_eligibility"]["count"], 1)
+        self.assertEqual(department_items[0]["person"]["id"], ineligible.id)
+        self.assertEqual(department_items[0]["reasons"][0]["code"], "MEMBERSHIP_NOT_ACTIVE")
+
+    def test_monitoring_sem_usuario_membros_inativos_overview_e_sem_dados_sensiveis(self):
+        self.client.force_login(self.secretary)
+        no_access = Person.objects.create(full_name="Sem Usuario Portal", birth_date=timezone.localdate())
+        inactive = self.make_membership_ready_person("Membro Inativo")
+        Membership.objects.create(
+            person=inactive,
+            status=Membership.Status.INACTIVE,
+            member_since=timezone.localdate() - timedelta(days=10),
+        )
+
+        body = self.client.get(self.url).json()
+        serialized = str(body).lower()
+
+        self.assertIn(no_access.id, [item["person"]["id"] for item in body["monitoring"]["without_portal_access"]["items"]])
+        self.assertEqual(body["monitoring"]["inactive_memberships"]["count"], 1)
+        self.assertEqual(body["overview"]["people_total"], 3)
+        self.assertEqual(body["overview"]["inactive_members"], 1)
+        self.assertNotIn("password", serialized)
+        self.assertNotIn("token", serialized)
+        self.assertNotIn("reason", serialized)
+
+    def test_previews_respeitam_limite(self):
+        self.client.force_login(self.secretary)
+        for index in range(7):
+            AccessRequest.objects.create(
+                full_name=f"Solicitacao {index}",
+                birth_date=timezone.localdate(),
+                email=f"solicitacao{index}@example.com",
+                phone=f"8199999999{index}",
+            )
+
+        body = self.client.get(self.url).json()
+
+        self.assertEqual(body["action_required"]["access_requests"]["count"], 7)
+        self.assertEqual(len(body["action_required"]["access_requests"]["items"]), body["meta"]["preview_limit"])
 
 
 @override_settings(

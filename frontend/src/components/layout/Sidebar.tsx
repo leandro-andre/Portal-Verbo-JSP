@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardList, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardCheck, ClipboardList, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 
@@ -21,6 +21,7 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
   const canViewDepartments = capabilities.includes('DEPARTMENT_VIEW')
   const canViewWorshipSchedule = capabilities.includes('WORSHIP_SCHEDULE_VIEW')
   const canViewSchedules = capabilities.includes('SCHEDULE_VIEW')
+  const canViewSecretaryDashboard = canViewPeople && canViewAccessRequests && canViewMembership
   const hasPerson = Boolean(currentUser?.user?.person_id)
   const hasAccessItems = canViewAccessRequests || canViewUsers
   const displayName = currentUser?.user?.display_name || 'Usuario do portal'
@@ -97,6 +98,20 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
           <UserRound size={18} aria-hidden="true" />
           {showExpandedContent ? <span>Meu Perfil</span> : null}
         </NavLink>
+
+        {canViewSecretaryDashboard ? (
+          <>
+            {showExpandedContent ? <p className="sidebar__section-label sidebar__section-label--spaced">Secretaria</p> : null}
+            <NavLink
+              className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+              to="/secretaria"
+              onClick={onNavigate}
+            >
+              <ClipboardCheck size={18} aria-hidden="true" />
+              {showExpandedContent ? <span>Central da Secretaria</span> : null}
+            </NavLink>
+          </>
+        ) : null}
 
         {canViewPeople ? (
           <>
