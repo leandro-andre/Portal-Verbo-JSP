@@ -564,6 +564,13 @@ def build_person_360(person, viewer=None, request=None):
         departments=departments,
     )
     active_departments_count = len(departments["active"])
+    can_start_journey = bool(
+        viewer
+        and getattr(viewer, "is_authenticated", False)
+        and viewer.is_active
+        and viewer.has_perm("church_journey.add_churchjourney")
+        and not church["has_church_journey"]
+    )
 
     return {
         "person": _person_payload(person, request),
@@ -590,5 +597,7 @@ def build_person_360(person, viewer=None, request=None):
         "actions": {
             "edit_person_url": f"/pessoas/{person.id}/editar",
             "manage_access_url": f"/usuarios/{access['id']}" if access["has_user"] else None,
+            "can_start_journey": can_start_journey,
+            "start_church_journey_url": f"/api/people/{person.id}/church-journey/" if can_start_journey else None,
         },
     }

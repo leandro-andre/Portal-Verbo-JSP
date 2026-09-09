@@ -274,6 +274,7 @@ export function useStartChurchJourney(personId: number) {
       queryClient.setQueryData(churchJourneyQueryKey(personId), journey)
       await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
       await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
+      await queryClient.invalidateQueries({ queryKey: person360QueryKey(personId) })
     },
   })
 }

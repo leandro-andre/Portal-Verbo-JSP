@@ -6,7 +6,7 @@ import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
-import { usePerson360 } from '../hooks/usePeople'
+import { usePerson360, useStartChurchJourney } from '../hooks/usePeople'
 import type {
   Person360,
   Person360DepartmentMembership,
@@ -240,7 +240,15 @@ function SummaryTab({
   )
 }
 
-function JourneyTab({ profile }: { profile: Person360 }) {
+function JourneyTab({
+  isStartingJourney,
+  onStartJourney,
+  profile,
+}: {
+  isStartingJourney: boolean
+  onStartJourney: () => void
+  profile: Person360
+}) {
   return (
     <div className="person360-grid">
       <Section title="Situacao atual">
@@ -249,6 +257,16 @@ function JourneyTab({ profile }: { profile: Person360 }) {
           <DetailItem label="Label" value={profile.church.label} />
           <DetailItem label="Inicio da jornada" value={formatDate(profile.church.started_at) || 'Jornada nao iniciada'} />
         </dl>
+        {profile.actions.can_start_journey ? (
+          <button
+            className="button button--primary person360-inline-action"
+            disabled={isStartingJourney}
+            type="button"
+            onClick={onStartJourney}
+          >
+            {isStartingJourney ? 'Iniciando...' : 'Iniciar jornada'}
+          </button>
+        ) : null}
       </Section>
 
       <Section title="Discipulado">
@@ -549,18 +567,29 @@ function PersonProfilePage() {
   const personId = Number(id)
   const isValidId = Number.isInteger(personId) && personId > 0
   const { data: profile, error, isError, isLoading, refetch } = usePerson360(personId)
+  const startJourneyMutation = useStartChurchJourney(personId)
   const canChangePeople = useCan('PEOPLE_CHANGE')
   const canViewUsers = useCan('USER_VIEW')
   const [activeTab, setActiveTab] = useState<Person360Tab>('summary')
   const navigationState = location.state as { successMessage?: string } | null
   const isNotFound = !isValidId || (error instanceof ApiHttpError && error.status === 404)
 
+  const handleStartJourney = () => {
+    startJourneyMutation.mutate({})
+  }
+
   const renderTab = () => {
     if (!profile) {
       return null
     }
     if (activeTab === 'journey') {
-      return <JourneyTab profile={profile} />
+      return (
+        <JourneyTab
+          isStartingJourney={startJourneyMutation.isPending}
+          onStartJourney={handleStartJourney}
+          profile={profile}
+        />
+      )
     }
     if (activeTab === 'departments') {
       return <DepartmentsTab profile={profile} />
@@ -617,6 +646,20 @@ function PersonProfilePage() {
             profile={profile}
             successMessage={navigationState?.successMessage ?? null}
           />
+
+          {startJourneyMutation.isSuccess ? (
+            <div className="form-alert form-alert--success" role="status">
+              Jornada iniciada com sucesso.
+            </div>
+          ) : null}
+
+          {startJourneyMutation.isError ? (
+            <div className="form-alert form-alert--error" role="alert">
+              {startJourneyMutation.error instanceof Error
+                ? startJourneyMutation.error.message
+                : 'Nao foi possivel iniciar a jornada.'}
+            </div>
+          ) : null}
 
           <div className="person360-tabs" role="tablist" aria-label="Secoes da ficha 360">
             {tabs.map((tab) => (

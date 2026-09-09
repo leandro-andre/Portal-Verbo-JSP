@@ -99,8 +99,28 @@ class Person360ApiTests(APITestCase):
         self.assertEqual(body["discipleship"]["status"], "NOT_STARTED")
         self.assertEqual(body["departments"], {"active": [], "inactive": []})
         self.assertIn("NO_PORTAL_USER", [item["code"] for item in body["pending_items"]])
+        self.assertTrue(body["actions"]["can_start_journey"])
+        self.assertEqual(body["actions"]["start_church_journey_url"], f"/api/people/{self.person.id}/church-journey/")
         self.assertNotIn("password", str(body).lower())
         self.assertNotIn("token", str(body).lower())
+
+    def test_ficha_com_jornada_nao_exibe_acao_de_iniciar_jornada(self):
+        self.authenticate(self.admin)
+        ChurchJourney.objects.create(person=self.person, started_at=date(2026, 8, 19))
+
+        body = self.get_360().json()
+
+        self.assertTrue(body["church"]["has_church_journey"])
+        self.assertFalse(body["actions"]["can_start_journey"])
+        self.assertIsNone(body["actions"]["start_church_journey_url"])
+
+    def test_ficha_para_usuario_sem_permissao_de_criar_jornada_nao_exibe_acao(self):
+        self.authenticate(self.pastor)
+
+        body = self.get_360().json()
+
+        self.assertFalse(body["actions"]["can_start_journey"])
+        self.assertIsNone(body["actions"]["start_church_journey_url"])
 
     def test_ficha_com_usuario_active_pending_activation_e_blocked(self):
         self.authenticate(self.admin)

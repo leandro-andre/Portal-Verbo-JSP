@@ -361,5 +361,7 @@ export type Person360 = {
   actions: {
     edit_person_url: string
     manage_access_url: string | null
+    can_start_journey: boolean
+    start_church_journey_url: string | null
   }
 }
