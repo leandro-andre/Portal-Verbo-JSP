@@ -8,9 +8,13 @@ type BrandLogoProps = {
   decorative?: boolean
 }
 
+const publicBaseUrl = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`
+
 const brandAssets: Record<BrandLogoVariant, string> = {
-  mark: '/branding/logo-mark-official.png',
-  horizontal: '/branding/logo-horizontal-official.png',
+  mark: `${publicBaseUrl}branding/logo-mark-official.png`,
+  horizontal: `${publicBaseUrl}branding/logo-horizontal-official.png`,
 }
 
 function BrandLogo({
