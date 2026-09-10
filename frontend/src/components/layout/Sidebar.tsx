@@ -1,6 +1,7 @@
 import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardCheck, ClipboardList, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
+import BrandLogo from '../branding/BrandLogo'
 
 type SidebarProps = {
   id?: string
@@ -48,7 +49,7 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
     >
       <div className="sidebar__brand">
         <div className="sidebar__brand-mark" aria-hidden="true">
-          VV
+          <BrandLogo variant="mark" tone="light" decorative />
         </div>
         {showExpandedContent ? (
           <div className="sidebar__brand-copy">

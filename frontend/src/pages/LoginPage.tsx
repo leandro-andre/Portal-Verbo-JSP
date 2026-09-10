@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { LogIn } from 'lucide-react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AuthValidationError } from '../api/auth'
+import BrandLogo from '../components/branding/BrandLogo'
 import { useCurrentUser, useLogin } from '../hooks/useAuth'
 
 function LoginPage() {
@@ -45,14 +46,9 @@ function LoginPage() {
   return (
     <main className="public-access-page">
       <section className="access-request-shell auth-shell" aria-labelledby="login-title">
-        <div className="access-request-brand">
-          <div className="access-request-brand__mark" aria-hidden="true">
-            VV
-          </div>
-          <div>
-            <strong>Verbo da Vida</strong>
-            <span>Jardim Sao Paulo</span>
-          </div>
+        <div className="access-request-brand access-request-brand--login">
+          <BrandLogo variant="horizontal" tone="dark" className="access-request-brand__logo" />
+          <span>Jardim Sao Paulo</span>
         </div>
 
         <div className="access-request-heading">

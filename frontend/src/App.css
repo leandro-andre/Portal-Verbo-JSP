@@ -57,18 +57,37 @@
   min-height: 44px;
 }
 
+.app-shell--collapsed .sidebar__brand {
+  justify-content: center;
+}
+
+.brand-logo {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.brand-logo--mark {
+  height: 34px;
+  width: 34px;
+}
+
+.brand-logo--horizontal {
+  height: auto;
+  width: min(240px, 100%);
+}
+
 .sidebar__brand-mark {
   align-items: center;
   background: #ffffff;
   border-radius: var(--radius-md);
-  color: var(--color-sidebar);
   display: flex;
-  flex: 0 0 38px;
-  font-size: 13px;
-  font-weight: 800;
-  height: 38px;
+  flex: 0 0 42px;
+  height: 42px;
   justify-content: center;
-  letter-spacing: 0.02em;
+  overflow: hidden;
+  padding: 4px;
+  width: 42px;
 }
 
 .sidebar__brand-copy,
@@ -2561,6 +2580,24 @@
   gap: 12px;
 }
 
+.access-request-brand--login {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.access-request-brand--login span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.access-request-brand__logo {
+  max-width: min(240px, 100%);
+}
+
 .access-request-brand__mark {
   align-items: center;
   background: var(--color-sidebar);
@@ -2701,6 +2738,10 @@
     transform: translateX(0);
   }
 
+  .app-shell--mobile-open .sidebar__brand {
+    justify-content: flex-start;
+  }
+
   .sidebar__nav {
     margin-top: 18px;
   }
@@ -2794,6 +2835,10 @@
 
   .home-identity .button {
     width: 100%;
+  }
+
+  .access-request-brand__logo {
+    max-width: min(210px, 100%);
   }
 
   .home-shortcuts,
