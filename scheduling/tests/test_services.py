@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from church_journey.models import ChurchJourney, DiscipleshipClass, DiscipleshipEnrollment, Membership
+from core.models import Notification
 from departamentos.models import Departamento, DepartmentMembership, DepartmentRole
 from pessoas.models import Person, PersonUnavailability
 from scheduling.models import DepartmentScheduleRequirement, Schedule, ScheduleAssignment
@@ -43,6 +44,7 @@ class SchedulingServiceTests(TestCase):
         self.user = User.objects.create_user(username="admin", password="senha")
         self.person = self.create_member_person("Maria")
         self.other_person = self.create_member_person("Joao")
+        self.portal_user = User.objects.create_user(username="maria.portal", password="senha", person=self.person)
         self.department = Departamento.objects.create(nome="Infantil")
         self.other_department = Departamento.objects.create(nome="Midia")
         self.role = DepartmentRole.objects.create(
@@ -212,11 +214,13 @@ class SchedulingServiceTests(TestCase):
         publish_schedule(schedule)
         schedule.refresh_from_db()
         self.assertEqual(schedule.status, Schedule.Status.PUBLISHED)
-        self.assert_error_code(SCHEDULE_NOT_EDITABLE, lambda: delete_schedule_assignment(assignment))
+        delete_schedule_assignment(assignment)
+        self.assertFalse(ScheduleAssignment.objects.filter(pk=assignment.pk).exists())
 
         reopen_schedule(schedule)
         schedule.refresh_from_db()
         self.assertEqual(schedule.status, Schedule.Status.DRAFT)
+        assignment = create_schedule_assignment(schedule=schedule, department_membership=self.department_membership)
         delete_schedule_assignment(assignment)
         self.assertFalse(ScheduleAssignment.objects.filter(pk=assignment.pk).exists())
 
@@ -318,3 +322,60 @@ class SchedulingServiceTests(TestCase):
         validation = get_schedule_composition_validation(schedule)
         self.assertFalse(validation.can_publish)
         self.assertNotIn("Motivo privado", str(validation.as_dict()))
+
+    def test_publish_schedule_notifica_usuarios_escalados_sem_duplicar_em_save_published(self):
+        schedule = create_schedule(department=self.department, worship_service=self.worship_service)
+        create_schedule_assignment(schedule=schedule, department_membership=self.department_membership)
+        no_user_membership = DepartmentMembership.objects.create(
+            person=self.other_person,
+            department=self.department,
+            role=self.role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        create_schedule_assignment(schedule=schedule, department_membership=no_user_membership)
+
+        self.assertEqual(Notification.objects.count(), 0)
+        publish_schedule(schedule)
+        schedule.refresh_from_db()
+        schedule.save(update_fields=["status", "updated_at"])
+
+        notifications = Notification.objects.filter(recipient=self.portal_user)
+        self.assertEqual(notifications.count(), 1)
+        self.assertEqual(notifications.get().type, "SCHEDULE_PUBLISHED")
+        self.assertEqual(Notification.objects.count(), 1)
+
+    def test_draft_assignment_changes_nao_notificam_e_published_changes_notificam(self):
+        schedule = create_schedule(department=self.department, worship_service=self.worship_service)
+        assignment = create_schedule_assignment(schedule=schedule, department_membership=self.department_membership)
+        delete_schedule_assignment(assignment)
+        self.assertEqual(Notification.objects.count(), 0)
+
+        assignment = create_schedule_assignment(schedule=schedule, department_membership=self.department_membership)
+        publish_schedule(schedule)
+        Notification.objects.all().delete()
+
+        second_person = self.create_member_person("Ana")
+        second_user = get_user_model().objects.create_user(username="ana.portal", password="senha", person=second_person)
+        second_membership = DepartmentMembership.objects.create(
+            person=second_person,
+            department=self.department,
+            role=self.role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+        added = create_schedule_assignment(schedule=schedule, department_membership=second_membership)
+        delete_schedule_assignment(assignment)
+
+        self.assertTrue(Notification.objects.filter(recipient=second_user, type="SCHEDULE_ASSIGNMENT_ADDED").exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.portal_user, type="SCHEDULE_ASSIGNMENT_REMOVED").exists())
+        self.assertTrue(ScheduleAssignment.objects.filter(pk=added.pk).exists())
+
+    def test_cancel_schedule_publicada_notifica_destinatarios_uma_vez(self):
+        schedule = create_schedule(department=self.department, worship_service=self.worship_service)
+        create_schedule_assignment(schedule=schedule, department_membership=self.department_membership)
+        publish_schedule(schedule)
+        Notification.objects.all().delete()
+
+        cancel_schedule(schedule)
+
+        self.assertEqual(Notification.objects.filter(recipient=self.portal_user, type="SCHEDULE_CANCELLED").count(), 1)
+        self.assert_error_code("INVALID_SCHEDULE_TRANSITION", lambda: cancel_schedule(schedule))

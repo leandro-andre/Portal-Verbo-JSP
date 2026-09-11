@@ -22,6 +22,7 @@ import MembershipPage from './pages/MembershipPage'
 import MyProfilePage from './pages/MyProfilePage'
 import MySchedulesPage from './pages/MySchedulesPage'
 import MyUnavailabilityPage from './pages/MyUnavailabilityPage'
+import NotificationsPage from './pages/NotificationsPage'
 import PersonCreatePage from './pages/PersonCreatePage'
 import PersonEditPage from './pages/PersonEditPage'
 import PersonProfilePage from './pages/PersonProfilePage'
@@ -122,6 +123,7 @@ function AdminRoutes() {
         <Route path="/discipulado" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_VIEW"><DiscipleshipClassesPage /></AuthorizedRoute>} />
         <Route path="/membresia" element={<AuthorizedRoute capability="MEMBERSHIP_VIEW"><MembershipPage /></AuthorizedRoute>} />
         <Route path="/meu-perfil" element={<MyProfilePage />} />
+        <Route path="/notificacoes" element={<NotificationsPage />} />
         <Route path="/minhas-escalas" element={<MySchedulesPage />} />
         <Route path="/minhas-indisponibilidades" element={<MyUnavailabilityPage />} />
         <Route path="/agenda-cultos" element={<AuthorizedRoute capability="WORSHIP_SCHEDULE_VIEW"><WorshipSchedulePage /></AuthorizedRoute>} />

@@ -319,3 +319,36 @@ class ContatoMensagem(models.Model):
     def __str__(self) -> str:
         assunto = self.assunto or "Sem assunto"
         return f"{self.nome} - {assunto}"
+
+
+class Notification(models.Model):
+    """Notificacao interna do Portal destinada a um Usuario."""
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        verbose_name="Destinatario",
+    )
+    type = models.CharField("Tipo", max_length=80)
+    title = models.CharField("Titulo", max_length=160)
+    message = models.CharField("Mensagem", max_length=500)
+    target_url = models.CharField("URL de destino", max_length=255, blank=True)
+    source_app = models.CharField("App de origem", max_length=80, blank=True)
+    source_type = models.CharField("Tipo de origem", max_length=80, blank=True)
+    source_id = models.CharField("ID de origem", max_length=80, blank=True)
+    metadata = models.JSONField("Metadados", default=dict, blank=True)
+    created_at = models.DateTimeField("Criada em", auto_now_add=True)
+    read_at = models.DateTimeField("Lida em", blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "Notificacao"
+        verbose_name_plural = "Notificacoes"
+        indexes = [
+            models.Index(fields=["recipient", "read_at"], name="notif_recipient_read_idx"),
+            models.Index(fields=["recipient", "-created_at"], name="notif_recipient_created_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.recipient} - {self.title}"

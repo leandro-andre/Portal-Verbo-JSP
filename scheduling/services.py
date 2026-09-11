@@ -1,6 +1,12 @@
 from django.db import IntegrityError
 from django.utils import timezone
 
+from core.notifications.services import (
+    notify_schedule_assignment_added,
+    notify_schedule_assignment_removed,
+    notify_schedule_cancelled,
+    notify_schedule_published,
+)
 from departamentos.selectors import is_department_membership_operationally_eligible
 from worship.models import WorshipService
 
@@ -134,6 +140,12 @@ def ensure_schedule_editable(schedule):
         raise SchedulingError(SCHEDULE_NOT_EDITABLE, "Somente escalas em rascunho podem ser editadas.")
 
 
+def ensure_schedule_assignments_mutable(schedule):
+    ensure_schedule_operational(schedule)
+    if schedule.status == Schedule.Status.CANCELLED:
+        raise SchedulingError(SCHEDULE_NOT_EDITABLE, "Escalas canceladas nao podem receber alteracoes.")
+
+
 def create_schedule(*, department, worship_service, created_by=None):
     if not department.ativo:
         raise SchedulingError(DEPARTMENT_NOT_ACTIVE, "O departamento precisa estar ativo.")
@@ -171,6 +183,7 @@ def publish_schedule(schedule):
         )
     schedule.status = Schedule.Status.PUBLISHED
     schedule.save(update_fields=["status", "updated_at"])
+    notify_schedule_published(schedule)
     return schedule
 
 
@@ -184,10 +197,13 @@ def reopen_schedule(schedule):
 
 
 def cancel_schedule(schedule):
+    was_published = schedule.status == Schedule.Status.PUBLISHED
     if schedule.status == Schedule.Status.CANCELLED:
         raise SchedulingError(INVALID_SCHEDULE_TRANSITION, "Esta escala ja esta cancelada.")
     schedule.status = Schedule.Status.CANCELLED
     schedule.save(update_fields=["status", "updated_at"])
+    if was_published:
+        notify_schedule_cancelled(schedule)
     return schedule
 
 
@@ -201,7 +217,7 @@ def reactivate_schedule(schedule):
 
 
 def create_schedule_assignment(*, schedule, department_membership, created_by=None):
-    ensure_schedule_editable(schedule)
+    ensure_schedule_assignments_mutable(schedule)
     if department_membership.department_id != schedule.department_id:
         raise SchedulingError(DEPARTMENT_MEMBERSHIP_WRONG_DEPARTMENT, "O vinculo nao pertence ao departamento desta escala.")
     if not is_department_membership_operationally_eligible(department_membership):
@@ -213,11 +229,14 @@ def create_schedule_assignment(*, schedule, department_membership, created_by=No
         raise SchedulingError(reason.code, reason.message, reasons=[item.as_dict() for item in eligibility.reasons])
 
     try:
-        return ScheduleAssignment.objects.create(
+        assignment = ScheduleAssignment.objects.create(
             schedule=schedule,
             department_membership=department_membership,
             created_by=created_by,
         )
+        if schedule.status == Schedule.Status.PUBLISHED:
+            notify_schedule_assignment_added(assignment)
+        return assignment
     except IntegrityError as exc:
         raise SchedulingError(
             PERSON_ALREADY_ASSIGNED_TO_WORSHIP_SERVICE,
@@ -226,5 +245,14 @@ def create_schedule_assignment(*, schedule, department_membership, created_by=No
 
 
 def delete_schedule_assignment(assignment):
-    ensure_schedule_editable(assignment.schedule)
+    ensure_schedule_assignments_mutable(assignment.schedule)
+    should_notify = assignment.schedule.status == Schedule.Status.PUBLISHED
+    if should_notify:
+        assignment = ScheduleAssignment.objects.select_related(
+            "department_membership__person__user_account",
+            "schedule__department",
+            "schedule__worship_service",
+        ).get(pk=assignment.pk)
     assignment.delete()
+    if should_notify:
+        notify_schedule_assignment_removed(assignment)

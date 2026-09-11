@@ -89,7 +89,7 @@ class ScheduleSerializer(serializers.ModelSerializer):
         can_manage = can_manage_schedule(user, obj.department)
         return {
             "can_manage": can_manage,
-            "can_edit_assignments": can_manage and obj.status == Schedule.Status.DRAFT,
+            "can_edit_assignments": can_manage and obj.status in {Schedule.Status.DRAFT, Schedule.Status.PUBLISHED},
         }
 
 

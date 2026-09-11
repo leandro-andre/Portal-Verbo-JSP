@@ -42,7 +42,7 @@ from usuarios.roles import (
 from worship.models import WorshipService
 
 from .views import react_app
-from .models import ContatoMensagem, SiteConfig
+from .models import ContatoMensagem, Notification, SiteConfig
 
 
 class ProductionReadinessTests(TestCase):
@@ -617,6 +617,101 @@ class GlobalSearchApiTests(TestCase):
         self.assertEqual([item["id"] for item in people_items[:3]], [exact.id, starts.id, contains.id])
         self.assertEqual(len(people_items), 5)
         self.assertEqual(self.group(self.search(viewer, "zzzz").json(), "people")["items"], [])
+
+
+class NotificationApiTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        self.user = self.user_model.objects.create_user(username="notificacao.a", password="senha-forte-123")
+        self.other = self.user_model.objects.create_user(username="notificacao.b", password="senha-forte-123")
+        self.admin = self.user_model.objects.create_superuser(
+            username="notificacao.admin",
+            email="admin@example.com",
+            password="senha-forte-123",
+        )
+        self.notification = Notification.objects.create(
+            recipient=self.user,
+            type="SCHEDULE_PUBLISHED",
+            title="Nova escala publicada",
+            message="Voce foi escalado em Juniores para 13/09/2026 as 18:00.",
+            target_url="/minhas-escalas",
+            source_app="scheduling",
+            source_type="Schedule",
+            source_id="10",
+        )
+        Notification.objects.create(
+            recipient=self.other,
+            type="SCHEDULE_CANCELLED",
+            title="Escala cancelada",
+            message="A escala de Midia para 13/09/2026 as 18:00 foi cancelada.",
+            target_url="/minhas-escalas",
+        )
+
+    def test_usuario_lista_somente_suas_notificacoes(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get("/api/notifications/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]["id"], self.notification.id)
+        self.assertFalse(body[0]["is_read"])
+        self.assertNotIn("recipient", body[0])
+
+    def test_admin_nao_ve_notificacoes_pessoais_de_outro_usuario(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get("/api/notifications/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_recent_retorna_unread_count_e_itens_recentes(self):
+        self.client.force_login(self.user)
+        Notification.objects.create(
+            recipient=self.user,
+            type="SCHEDULE_ASSIGNMENT_ADDED",
+            title="Voce foi incluido em uma escala",
+            message="Voce foi adicionado a escala de Juniores para 13/09/2026 as 18:00.",
+        )
+
+        response = self.client.get("/api/notifications/recent/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["unread_count"], 2)
+        self.assertEqual(len(body["items"]), 2)
+        self.assertEqual(body["items"][0]["title"], "Voce foi incluido em uma escala")
+
+    def test_read_e_idempotente_e_bloqueia_item_alheio_com_404(self):
+        self.client.force_login(self.user)
+
+        first = self.client.post(f"/api/notifications/{self.notification.id}/read/")
+        second = self.client.post(f"/api/notifications/{self.notification.id}/read/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["is_read"])
+
+        self.client.force_login(self.other)
+        blocked = self.client.post(f"/api/notifications/{self.notification.id}/read/")
+        self.assertEqual(blocked.status_code, 404)
+
+    def test_read_all_atualiza_somente_usuario_logado(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post("/api/notifications/read-all/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marked_count"], 1)
+        self.assertEqual(Notification.objects.filter(recipient=self.user, read_at__isnull=True).count(), 0)
+        self.assertEqual(Notification.objects.filter(recipient=self.other, read_at__isnull=True).count(), 1)
+
+    def test_endpoints_exigem_autenticacao(self):
+        self.assertEqual(self.client.get("/api/notifications/").status_code, 403)
+        self.assertEqual(self.client.get("/api/notifications/recent/").status_code, 403)
+        self.assertEqual(self.client.post("/api/notifications/read-all/").status_code, 403)
 
 
 @override_settings(

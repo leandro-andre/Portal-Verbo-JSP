@@ -1,7 +1,8 @@
-import { Bell, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
+import { LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useLogout, useCurrentUser } from '../../hooks/useAuth'
 import GlobalSearch from '../search/GlobalSearch'
+import NotificationBell from '../notifications/NotificationBell'
 
 type TopbarProps = {
   title: string
@@ -67,9 +68,7 @@ function Topbar({
       <GlobalSearch />
 
       <div className="topbar__actions">
-        <button className="icon-button" type="button" aria-label="Notificacoes">
-          <Bell size={18} aria-hidden="true" />
-        </button>
+        <NotificationBell />
         <Link className="topbar__user topbar__user-link" aria-label="Meu Perfil" to="/meu-perfil">
           <span className="topbar__user-avatar" aria-hidden="true">
             {currentUser?.user?.photo_url ? <img src={currentUser.user.photo_url} alt="" /> : initials}

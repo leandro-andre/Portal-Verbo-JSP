@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from governanca.admin_mixins import GovernedContentAdminMixin
 
-from .models import ContatoMensagem, Lider, SiteConfig, SobrePage
+from .models import ContatoMensagem, Lider, Notification, SiteConfig, SobrePage
 
 
 @admin.register(SiteConfig)
@@ -77,6 +77,15 @@ class ContatoMensagemAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("recipient", "type", "title", "created_at", "read_at")
+    list_filter = ("type", "created_at", "read_at")
+    search_fields = ("recipient__username", "title", "message", "source_app", "source_type", "source_id")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
 
 
 @admin.register(SobrePage)
