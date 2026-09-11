@@ -266,7 +266,7 @@
   color: #8a94a6;
 }
 
-.global-search__mobile-button {
+.global-search .global-search__mobile-button {
   display: none;
 }
 
@@ -2947,7 +2947,7 @@
     display: none;
   }
 
-  .global-search__mobile-button {
+  .global-search .global-search__mobile-button {
     display: inline-flex;
   }
 
