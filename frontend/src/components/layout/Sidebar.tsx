@@ -1,4 +1,4 @@
-import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardCheck, ClipboardList, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
+import { BookOpenCheck, Building2, CalendarCheck2, CalendarClock, CalendarDays, CalendarX2, ClipboardCheck, ClipboardList, HeartHandshake, House, ShieldCheck, UserCog, UserRound, UsersRound } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useCurrentUser } from '../../hooks/useAuth'
 import BrandLogo from '../branding/BrandLogo'
@@ -20,6 +20,7 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
   const canViewDiscipleship = capabilities.includes('DISCIPLESHIP_CLASS_VIEW')
   const canViewMembership = capabilities.includes('MEMBERSHIP_VIEW')
   const canViewDepartments = capabilities.includes('DEPARTMENT_VIEW')
+  const canViewDiaconia = capabilities.includes('DIACONIA_VIEW')
   const canViewWorshipSchedule = capabilities.includes('WORSHIP_SCHEDULE_VIEW')
   const canViewSchedules = capabilities.includes('SCHEDULE_VIEW')
   const canViewSecretaryDashboard = canViewPeople && canViewAccessRequests && canViewMembership
@@ -176,7 +177,7 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
           </NavLink>
         ) : null}
 
-        {(canViewDepartments || canViewWorshipSchedule || canViewSchedules) && showExpandedContent ? (
+        {(canViewDepartments || canViewDiaconia || canViewWorshipSchedule || canViewSchedules) && showExpandedContent ? (
           <p className="sidebar__section-label sidebar__section-label--spaced">Igreja</p>
         ) : null}
         {canViewWorshipSchedule ? (
@@ -197,6 +198,16 @@ function Sidebar({ id, isCollapsed, isMobileOpen, onNavigate }: SidebarProps) {
           >
             <Building2 size={18} aria-hidden="true" />
             {showExpandedContent ? <span>Departamentos</span> : null}
+          </NavLink>
+        ) : null}
+        {canViewDiaconia ? (
+          <NavLink
+            className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+            to="/diaconia"
+            onClick={onNavigate}
+          >
+            <HeartHandshake size={18} aria-hidden="true" />
+            {showExpandedContent ? <span>Diaconia</span> : null}
           </NavLink>
         ) : null}
         {canViewSchedules ? (

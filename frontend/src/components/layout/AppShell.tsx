@@ -25,11 +25,13 @@ function AppShell({ children }: AppShellProps) {
           ? 'Escalas'
         : location.pathname.startsWith('/departamentos')
           ? 'Departamentos'
-          : location.pathname.startsWith('/discipulado')
-            ? 'Discipulado'
-            : location.pathname.startsWith('/membresia')
-              ? 'Membresia'
-              : 'Pessoas'
+          : location.pathname.startsWith('/diaconia')
+            ? 'Diaconia'
+            : location.pathname.startsWith('/discipulado')
+              ? 'Discipulado'
+              : location.pathname.startsWith('/membresia')
+                ? 'Membresia'
+                : 'Pessoas'
 
   useEffect(() => {
     if (!isMobileSidebarOpen) {
