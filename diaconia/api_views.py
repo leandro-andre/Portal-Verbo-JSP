@@ -5,8 +5,15 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import StockCategory, StockItem, StockMovement
+from .models import CountingEnvironment, StockCategory, StockItem, StockMovement
 from .serializers import (
+    AttendanceCountCreateSerializer,
+    AttendanceCountFilterSerializer,
+    AttendanceCountListSerializer,
+    AttendanceCountSerializer,
+    AttendanceCountUpdateSerializer,
+    CountingEnvironmentSerializer,
+    CountingEnvironmentUpdateSerializer,
     StockCategorySerializer,
     StockCategoryUpdateSerializer,
     StockItemSerializer,
@@ -16,25 +23,34 @@ from .serializers import (
 )
 from .services import (
     DiaconiaError,
+    create_attendance_count,
     create_stock_category,
     create_stock_item,
     create_stock_movement,
+    create_counting_environment,
+    deactivate_counting_environment,
     deactivate_stock_category,
     deactivate_stock_item,
+    get_attendance_count_list_queryset,
+    get_attendance_count_queryset,
     get_stock_items_with_status,
     get_stock_summary,
     reactivate_stock_category,
     reactivate_stock_item,
+    reactivate_counting_environment,
     update_stock_category,
     update_stock_item,
+    update_counting_environment,
+    update_attendance_count,
 )
 
 
 DIACONIA_VIEW = "diaconia.view_diaconia_module"
 DIACONIA_STOCK_MANAGE = "diaconia.manage_diaconia_stock"
+DIACONIA_COUNTING_MANAGE = "diaconia.manage_diaconia_counting"
 
 
-class HasDiaconiaStockPermission(BasePermission):
+class HasDiaconiaPermission(BasePermission):
     method_permissions = {
         "GET": DIACONIA_VIEW,
         "POST": DIACONIA_STOCK_MANAGE,
@@ -42,7 +58,12 @@ class HasDiaconiaStockPermission(BasePermission):
     }
 
     def has_permission(self, request, view):
-        permission = getattr(view, "permission_required", None) or self.method_permissions.get(request.method)
+        view_method_permissions = getattr(view, "method_permission_required", {})
+        permission = (
+            view_method_permissions.get(request.method)
+            or getattr(view, "permission_required", None)
+            or self.method_permissions.get(request.method)
+        )
         return bool(
             request.user.is_authenticated
             and request.user.is_active
@@ -61,7 +82,7 @@ def business_error_response(exc):
 
 
 class StockUnitListView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_VIEW
 
     def get(self, request):
@@ -69,7 +90,7 @@ class StockUnitListView(APIView):
 
 
 class StockCategoryListCreateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
 
     def get(self, request):
         queryset = StockCategory.objects.order_by("name", "id")
@@ -88,7 +109,7 @@ class StockCategoryListCreateView(APIView):
 
 
 class StockCategoryDetailView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
 
     def get_object(self, pk):
         return get_object_or_404(StockCategory, pk=pk)
@@ -106,7 +127,7 @@ class StockCategoryDetailView(APIView):
 
 
 class StockCategoryDeactivateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_STOCK_MANAGE
 
     def post(self, request, pk):
@@ -118,7 +139,7 @@ class StockCategoryDeactivateView(APIView):
 
 
 class StockCategoryReactivateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_STOCK_MANAGE
 
     def post(self, request, pk):
@@ -130,7 +151,7 @@ class StockCategoryReactivateView(APIView):
 
 
 class StockItemListCreateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
 
     def get(self, request):
         queryset = get_stock_items_with_status().order_by("name", "id")
@@ -161,7 +182,7 @@ class StockItemListCreateView(APIView):
 
 
 class StockItemDetailView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
 
     def get_object(self, pk):
         return get_object_or_404(get_stock_items_with_status(), pk=pk)
@@ -182,7 +203,7 @@ class StockItemDetailView(APIView):
 
 
 class StockSummaryView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_VIEW
 
     def get(self, request):
@@ -198,7 +219,7 @@ class StockSummaryView(APIView):
 
 
 class StockItemDeactivateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_STOCK_MANAGE
 
     def post(self, request, pk):
@@ -210,7 +231,7 @@ class StockItemDeactivateView(APIView):
 
 
 class StockItemReactivateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_STOCK_MANAGE
 
     def post(self, request, pk):
@@ -222,7 +243,7 @@ class StockItemReactivateView(APIView):
 
 
 class StockMovementListCreateView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
 
     def get(self, request):
         queryset = (
@@ -258,7 +279,7 @@ class StockMovementListCreateView(APIView):
 
 
 class StockMovementDetailView(APIView):
-    permission_classes = [HasDiaconiaStockPermission]
+    permission_classes = [HasDiaconiaPermission]
     permission_required = DIACONIA_VIEW
 
     def get(self, request, pk):
@@ -267,3 +288,135 @@ class StockMovementDetailView(APIView):
             pk=pk,
         )
         return Response(StockMovementSerializer(movement).data)
+
+
+class CountingEnvironmentListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_COUNTING_MANAGE}
+
+    def get(self, request):
+        queryset = CountingEnvironment.objects.order_by("name", "id")
+        status_filter = (request.query_params.get("status") or "").upper()
+        if status_filter == "ACTIVE":
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == "INACTIVE":
+            queryset = queryset.filter(is_active=False)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        return Response(CountingEnvironmentSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        serializer = CountingEnvironmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        environment = create_counting_environment(**serializer.validated_data)
+        return Response(CountingEnvironmentSerializer(environment).data, status=status.HTTP_201_CREATED)
+
+
+class CountingEnvironmentDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_COUNTING_MANAGE}
+
+    def get_object(self, pk):
+        return get_object_or_404(CountingEnvironment, pk=pk)
+
+    def get(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        return Response(CountingEnvironmentSerializer(self.get_object(pk)).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        serializer = CountingEnvironmentUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        environment = update_counting_environment(serializer.instance, **serializer.validated_data)
+        return Response(CountingEnvironmentSerializer(environment).data)
+
+
+class CountingEnvironmentDeactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_COUNTING_MANAGE
+
+    def post(self, request, pk):
+        try:
+            environment = deactivate_counting_environment(get_object_or_404(CountingEnvironment, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(CountingEnvironmentSerializer(environment).data)
+
+
+class CountingEnvironmentReactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_COUNTING_MANAGE
+
+    def post(self, request, pk):
+        try:
+            environment = reactivate_counting_environment(get_object_or_404(CountingEnvironment, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(CountingEnvironmentSerializer(environment).data)
+
+
+class AttendanceCountListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_COUNTING_MANAGE}
+
+    def get(self, request):
+        filter_serializer = AttendanceCountFilterSerializer(data=request.query_params)
+        filter_serializer.is_valid(raise_exception=True)
+        queryset = get_attendance_count_list_queryset()
+        date_from = filter_serializer.validated_data.get("date_from")
+        date_to = filter_serializer.validated_data.get("date_to")
+        shift = filter_serializer.validated_data.get("shift")
+        created_by = filter_serializer.validated_data.get("created_by")
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        if shift:
+            queryset = queryset.filter(shift=shift)
+        if created_by:
+            queryset = queryset.filter(created_by_id=created_by)
+        return Response(AttendanceCountListSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        serializer = AttendanceCountCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            attendance_count = create_attendance_count(
+                date=serializer.validated_data["date"],
+                shift=serializer.validated_data["shift"],
+                notes=serializer.validated_data.get("notes", ""),
+                entries=serializer.validated_data["entries"],
+                created_by=request.user,
+            )
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(AttendanceCountSerializer(attendance_count).data, status=status.HTTP_201_CREATED)
+
+
+class AttendanceCountDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_COUNTING_MANAGE}
+
+    def get(self, request, pk):
+        attendance_count = get_object_or_404(get_attendance_count_queryset(), pk=pk)
+        return Response(AttendanceCountSerializer(attendance_count).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        attendance_count = get_object_or_404(get_attendance_count_queryset(), pk=pk)
+        serializer = AttendanceCountUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            attendance_count = update_attendance_count(
+                attendance_count,
+                date=serializer.validated_data["date"],
+                shift=serializer.validated_data["shift"],
+                notes=serializer.validated_data.get("notes", ""),
+                entries=serializer.validated_data["entries"],
+            )
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(AttendanceCountSerializer(attendance_count).data)

@@ -1,9 +1,12 @@
+from datetime import datetime
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from .models import StockCategory, StockItem, StockMovement
+from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
 from .services import StockStatus
 
 
@@ -12,11 +15,20 @@ class DiaconiaStockApiTests(TestCase):
         self.user_model = get_user_model()
         self.viewer = self.user_model.objects.create_user(username="diaconia.viewer", password="senha-forte-123")
         self.manager = self.user_model.objects.create_user(username="diaconia.manager", password="senha-forte-123")
+        self.counting_manager = self.user_model.objects.create_user(
+            username="diaconia.counting.manager",
+            password="senha-forte-123",
+        )
         self.no_access = self.user_model.objects.create_user(username="diaconia.no.access", password="senha-forte-123")
         view_permission = Permission.objects.get(content_type__app_label="diaconia", codename="view_diaconia_module")
         manage_permission = Permission.objects.get(content_type__app_label="diaconia", codename="manage_diaconia_stock")
+        counting_permission = Permission.objects.get(
+            content_type__app_label="diaconia",
+            codename="manage_diaconia_counting",
+        )
         self.viewer.user_permissions.add(view_permission)
-        self.manager.user_permissions.add(view_permission, manage_permission)
+        self.manager.user_permissions.add(view_permission, manage_permission, counting_permission)
+        self.counting_manager.user_permissions.add(view_permission, counting_permission)
 
     def login_manager(self):
         self.client.force_login(self.manager)
@@ -30,6 +42,29 @@ class DiaconiaStockApiTests(TestCase):
             minimum_stock=0,
             is_active=is_active,
         )
+
+    def create_attendance_payload(self, environments, **overrides):
+        payload = {
+            "date": "2026-09-14",
+            "shift": "MORNING",
+            "notes": "Culto especial",
+            "entries": [
+                {"environment_id": environment.id, "quantity": index}
+                for index, environment in enumerate(environments)
+            ],
+        }
+        payload.update(overrides)
+        return payload
+
+    def create_attendance_count_record(self, *, date="2026-09-14", shift=AttendanceCount.Shift.MORNING, user=None, entries=None, notes=""):
+        user = user or self.manager
+        if entries is None:
+            environment = CountingEnvironment.objects.create(name=f"Ambiente {CountingEnvironment.objects.count() + 1}")
+            entries = [(environment, 10)]
+        count = AttendanceCount.objects.create(date=date, shift=shift, notes=notes, created_by=user)
+        for environment, quantity in entries:
+            AttendanceCountEntry.objects.create(attendance_count=count, environment=environment, quantity=quantity)
+        return count
 
     def test_cria_categoria(self):
         self.login_manager()
@@ -513,3 +548,596 @@ class DiaconiaStockApiTests(TestCase):
 
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(summary_url).status_code, 200)
+
+    def test_cria_ambiente_de_contagem(self):
+        self.login_manager()
+
+        response = self.client.post(
+            reverse("diaconia-counting-environment-list"),
+            {"name": "Templo", "description": "Salao principal"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(CountingEnvironment.objects.filter(name="Templo", is_active=True).exists())
+
+    def test_ambiente_exige_nome(self):
+        self.login_manager()
+
+        response = self.client.post(
+            reverse("diaconia-counting-environment-list"),
+            {"name": "   ", "description": ""},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name", response.json())
+
+    def test_ambiente_bloqueia_duplicidade_case_insensitive(self):
+        self.login_manager()
+        CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-counting-environment-list"),
+            {"name": "templo", "description": ""},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name", response.json())
+
+    def test_edita_ambiente_de_contagem(self):
+        self.login_manager()
+        environment = CountingEnvironment.objects.create(name="Hall")
+
+        response = self.client.patch(
+            reverse("diaconia-counting-environment-detail", args=[environment.pk]),
+            {"name": "Hall Principal", "description": "Entrada"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        environment.refresh_from_db()
+        self.assertEqual(environment.name, "Hall Principal")
+        self.assertEqual(environment.description, "Entrada")
+
+    def test_inativa_e_reativa_ambiente(self):
+        self.login_manager()
+        environment = CountingEnvironment.objects.create(name="Juniores")
+
+        deactivate = self.client.post(reverse("diaconia-counting-environment-deactivate", args=[environment.pk]))
+        environment.refresh_from_db()
+        self.assertEqual(deactivate.status_code, 200)
+        self.assertFalse(environment.is_active)
+
+        reactivate = self.client.post(reverse("diaconia-counting-environment-reactivate", args=[environment.pk]))
+        environment.refresh_from_db()
+        self.assertEqual(reactivate.status_code, 200)
+        self.assertTrue(environment.is_active)
+
+    def test_filtra_ambientes_por_status(self):
+        self.login_manager()
+        CountingEnvironment.objects.create(name="Ativo")
+        CountingEnvironment.objects.create(name="Inativo", is_active=False)
+
+        active = self.client.get(f"{reverse('diaconia-counting-environment-list')}?status=ACTIVE")
+        inactive = self.client.get(f"{reverse('diaconia-counting-environment-list')}?status=INACTIVE")
+
+        self.assertEqual([item["name"] for item in active.json()], ["Ativo"])
+        self.assertEqual([item["name"] for item in inactive.json()], ["Inativo"])
+
+    def test_busca_ambiente_por_nome(self):
+        self.login_manager()
+        CountingEnvironment.objects.create(name="Templo")
+        CountingEnvironment.objects.create(name="Bercario")
+
+        response = self.client.get(f"{reverse('diaconia-counting-environment-list')}?search=tem")
+
+        self.assertEqual([item["name"] for item in response.json()], ["Templo"])
+
+    def test_leitura_de_ambiente_com_diaconia_view(self):
+        environment = CountingEnvironment.objects.create(name="Templo")
+        self.client.force_login(self.viewer)
+
+        list_response = self.client.get(reverse("diaconia-counting-environment-list"))
+        detail_response = self.client.get(reverse("diaconia-counting-environment-detail", args=[environment.pk]))
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+
+    def test_gestao_de_ambiente_exige_capability(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.post(
+            reverse("diaconia-counting-environment-list"),
+            {"name": "Sem permissao"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_usuario_sem_acesso_nao_le_ambientes(self):
+        self.client.force_login(self.no_access)
+
+        response = self.client.get(reverse("diaconia-counting-environment-list"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_cria_contagem_valida_com_todos_os_ambientes_ativos(self):
+        self.client.force_login(self.counting_manager)
+        templo = CountingEnvironment.objects.create(name="Templo")
+        bercario = CountingEnvironment.objects.create(name="Bercario")
+        CountingEnvironment.objects.create(name="Sala fechada", is_active=False)
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo, bercario],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 185},
+                    {"environment_id": bercario.id, "quantity": 0},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        count = AttendanceCount.objects.get()
+        self.assertEqual(count.date.isoformat(), "2026-09-14")
+        self.assertEqual(count.shift, AttendanceCount.Shift.MORNING)
+        self.assertEqual(count.notes, "Culto especial")
+        self.assertEqual(count.created_by, self.counting_manager)
+        self.assertEqual(count.entries.count(), 2)
+        self.assertEqual(body["total_people"], 185)
+        self.assertEqual(body["created_by"]["display_name"], self.counting_manager.username)
+
+    def test_contagem_permite_quantidade_zero_e_positiva(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo, infantil],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 0},
+                    {"environment_id": infantil.id, "quantity": 25},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["total_people"], 25)
+
+    def test_contagem_rejeita_quantidade_negativa(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": -1}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_quantidade_nao_inteira(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": "dez"}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_mesma_data_e_turno(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        payload = self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": 10}])
+        self.client.post(reverse("diaconia-attendance-count-list"), payload, content_type="application/json")
+
+        response = self.client.post(reverse("diaconia-attendance-count-list"), payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["message"], "Ja existe uma contagem registrada para esta data e turno.")
+        self.assertEqual(AttendanceCount.objects.count(), 1)
+
+    def test_contagem_rejeita_ambiente_inexistente(self):
+        self.login_manager()
+        CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            {
+                "date": "2026-09-14",
+                "shift": "MORNING",
+                "entries": [{"environment_id": 999, "quantity": 1}],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_ambiente_duplicado_no_payload(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 10},
+                    {"environment_id": templo.id, "quantity": 12},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH")
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_ausencia_de_ambiente_ativo_esperado(self):
+        self.login_manager()
+        CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload([infantil], entries=[{"environment_id": infantil.id, "quantity": 25}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["message"], "Os ambientes ativos mudaram. Atualize a tela e tente novamente.")
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_ambiente_inativo(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        inativo = CountingEnvironment.objects.create(name="Inativo", is_active=False)
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo, inativo],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 10},
+                    {"environment_id": inativo.id, "quantity": 3},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_contagem_rejeita_sem_ambiente_ativo(self):
+        self.login_manager()
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            {"date": "2026-09-14", "shift": "MORNING", "entries": []},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_erro_em_entrada_nao_deixa_cabecalho_orfao(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 10},
+                    {"environment_id": templo.id, "quantity": 11},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+        self.assertEqual(AttendanceCountEntry.objects.count(), 0)
+
+    def test_detalhe_da_contagem_retorna_total_e_entries(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+        create_response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload(
+                [templo, infantil],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 180},
+                    {"environment_id": infantil.id, "quantity": 20},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        response = self.client.get(reverse("diaconia-attendance-count-detail", args=[create_response.json()["id"]]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_people"], 200)
+        self.assertEqual(len(response.json()["entries"]), 2)
+
+    def test_contagem_exige_capability_de_gestao(self):
+        self.client.force_login(self.viewer)
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        response = self.client.post(
+            reverse("diaconia-attendance-count-list"),
+            self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": 10}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(AttendanceCount.objects.count(), 0)
+
+    def test_usuario_sem_acesso_nao_consulta_contagem(self):
+        count = AttendanceCount.objects.create(
+            date="2026-09-14",
+            shift=AttendanceCount.Shift.MORNING,
+            created_by=self.manager,
+        )
+        self.client.force_login(self.no_access)
+
+        response = self.client.get(reverse("diaconia-attendance-count-detail", args=[count.pk]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_lista_contagens_com_total_e_ordenacao_recente(self):
+        self.client.force_login(self.viewer)
+        templo = CountingEnvironment.objects.create(name="Templo")
+        old_count = self.create_attendance_count_record(
+            date="2026-09-10",
+            shift=AttendanceCount.Shift.EVENING,
+            entries=[(templo, 50)],
+        )
+        morning = self.create_attendance_count_record(
+            date="2026-09-14",
+            shift=AttendanceCount.Shift.MORNING,
+            entries=[(templo, 100)],
+        )
+        evening = self.create_attendance_count_record(
+            date="2026-09-14",
+            shift=AttendanceCount.Shift.EVENING,
+            entries=[(templo, 200)],
+        )
+
+        response = self.client.get(reverse("diaconia-attendance-count-list"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual([item["id"] for item in body], [evening.id, morning.id, old_count.id])
+        self.assertEqual(body[0]["total_people"], 200)
+        self.assertEqual(body[0]["created_by"]["display_name"], self.manager.username)
+
+    def test_filtra_contagens_por_turno_e_periodo(self):
+        self.client.force_login(self.viewer)
+        templo = CountingEnvironment.objects.create(name="Templo")
+        self.create_attendance_count_record(date="2026-09-01", shift=AttendanceCount.Shift.MORNING, entries=[(templo, 10)])
+        target = self.create_attendance_count_record(date="2026-09-14", shift=AttendanceCount.Shift.EVENING, entries=[(templo, 20)])
+        self.create_attendance_count_record(date="2026-10-01", shift=AttendanceCount.Shift.EVENING, entries=[(templo, 30)])
+
+        response = self.client.get(
+            f"{reverse('diaconia-attendance-count-list')}?date_from=2026-09-10&date_to=2026-09-30&shift=EVENING"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [target.id])
+
+    def test_filtra_contagens_por_responsavel(self):
+        self.client.force_login(self.viewer)
+        templo = CountingEnvironment.objects.create(name="Templo")
+        mine = self.create_attendance_count_record(user=self.manager, entries=[(templo, 10)])
+        self.create_attendance_count_record(date="2026-09-15", user=self.counting_manager, entries=[(templo, 20)])
+
+        response = self.client.get(f"{reverse('diaconia-attendance-count-list')}?created_by={self.manager.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [mine.id])
+
+    def test_listagem_de_contagem_respeita_permissao_de_visualizacao(self):
+        list_url = reverse("diaconia-attendance-count-list")
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(list_url).status_code, 403)
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(list_url).status_code, 200)
+
+    def test_detalhe_preserva_ambiente_inativo_e_observacao(self):
+        self.client.force_login(self.viewer)
+        environment = CountingEnvironment.objects.create(name="Juniores", is_active=False)
+        count = self.create_attendance_count_record(
+            entries=[(environment, 17)],
+            notes="Correcao apos conferencia",
+        )
+
+        response = self.client.get(reverse("diaconia-attendance-count-detail", args=[count.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["notes"], "Correcao apos conferencia")
+        self.assertEqual(body["total_people"], 17)
+        self.assertEqual(body["entries"][0]["environment"]["name"], "Juniores")
+        self.assertFalse(body["entries"][0]["environment"]["is_active"])
+
+    def test_edita_contagem_quantidades_observacao_data_e_turno(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+        count = self.create_attendance_count_record(entries=[(templo, 100), (infantil, 20)])
+        AttendanceCount.objects.filter(pk=count.pk).update(updated_at=datetime(2026, 1, 1, tzinfo=timezone.get_current_timezone()))
+        count.refresh_from_db()
+        old_updated_at = count.updated_at
+
+        response = self.client.patch(
+            reverse("diaconia-attendance-count-detail", args=[count.pk]),
+            {
+                "date": "2026-09-15",
+                "shift": "EVENING",
+                "notes": "Ajuste conferido",
+                "entries": [
+                    {"environment_id": templo.id, "quantity": 190},
+                    {"environment_id": infantil.id, "quantity": 8},
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        count.refresh_from_db()
+        self.assertEqual(count.date.isoformat(), "2026-09-15")
+        self.assertEqual(count.shift, AttendanceCount.Shift.EVENING)
+        self.assertEqual(count.notes, "Ajuste conferido")
+        self.assertEqual(count.created_by, self.manager)
+        self.assertGreater(count.updated_at, old_updated_at)
+        self.assertEqual(response.json()["total_people"], 198)
+
+    def test_edicao_rejeita_quantidade_negativa(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        count = self.create_attendance_count_record(entries=[(templo, 10)])
+
+        response = self.client.patch(
+            reverse("diaconia-attendance-count-detail", args=[count.pk]),
+            self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": -1}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(AttendanceCountEntry.objects.get(attendance_count=count).quantity, 10)
+
+    def test_edicao_rejeita_ambiente_extra_faltante_e_duplicado(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+        novo = CountingEnvironment.objects.create(name="Bercario")
+        count = self.create_attendance_count_record(entries=[(templo, 10), (infantil, 5)])
+        url = reverse("diaconia-attendance-count-detail", args=[count.pk])
+
+        extra = self.client.patch(
+            url,
+            self.create_attendance_payload(
+                [templo, infantil, novo],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 10},
+                    {"environment_id": infantil.id, "quantity": 5},
+                    {"environment_id": novo.id, "quantity": 1},
+                ],
+            ),
+            content_type="application/json",
+        )
+        missing = self.client.patch(
+            url,
+            self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": 10}]),
+            content_type="application/json",
+        )
+        duplicated = self.client.patch(
+            url,
+            self.create_attendance_payload(
+                [templo],
+                entries=[
+                    {"environment_id": templo.id, "quantity": 10},
+                    {"environment_id": templo.id, "quantity": 11},
+                ],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(extra.status_code, 409)
+        self.assertEqual(missing.status_code, 409)
+        self.assertEqual(duplicated.status_code, 409)
+        self.assertEqual(AttendanceCountEntry.objects.get(attendance_count=count, environment=templo).quantity, 10)
+
+    def test_edicao_rejeita_data_turno_duplicados(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        self.create_attendance_count_record(date="2026-09-15", shift=AttendanceCount.Shift.EVENING, entries=[(templo, 30)])
+        count = self.create_attendance_count_record(date="2026-09-14", shift=AttendanceCount.Shift.MORNING, entries=[(templo, 10)])
+
+        response = self.client.patch(
+            reverse("diaconia-attendance-count-detail", args=[count.pk]),
+            self.create_attendance_payload(
+                [templo],
+                date="2026-09-15",
+                shift="EVENING",
+                entries=[{"environment_id": templo.id, "quantity": 11}],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["message"], "Ja existe uma contagem registrada para esta data e turno.")
+
+    def test_edicao_permite_corrigir_ambiente_historico_inativo(self):
+        self.login_manager()
+        environment = CountingEnvironment.objects.create(name="Juniores", is_active=False)
+        count = self.create_attendance_count_record(entries=[(environment, 15)])
+
+        response = self.client.patch(
+            reverse("diaconia-attendance-count-detail", args=[count.pk]),
+            self.create_attendance_payload([environment], entries=[{"environment_id": environment.id, "quantity": 17}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_people"], 17)
+        self.assertEqual(AttendanceCountEntry.objects.get(attendance_count=count, environment=environment).quantity, 17)
+
+    def test_erro_na_edicao_nao_persiste_parcialmente(self):
+        self.login_manager()
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+        count = self.create_attendance_count_record(entries=[(templo, 10), (infantil, 5)], notes="Original")
+
+        response = self.client.patch(
+            reverse("diaconia-attendance-count-detail", args=[count.pk]),
+            self.create_attendance_payload(
+                [templo],
+                date="2026-09-20",
+                shift="EVENING",
+                notes="Nao deve salvar",
+                entries=[{"environment_id": templo.id, "quantity": 99}],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        count.refresh_from_db()
+        self.assertEqual(count.date.isoformat(), "2026-09-14")
+        self.assertEqual(count.shift, AttendanceCount.Shift.MORNING)
+        self.assertEqual(count.notes, "Original")
+        self.assertEqual(AttendanceCountEntry.objects.get(attendance_count=count, environment=templo).quantity, 10)
+
+    def test_permissoes_de_edicao_de_contagem(self):
+        templo = CountingEnvironment.objects.create(name="Templo")
+        count = self.create_attendance_count_record(entries=[(templo, 10)])
+        payload = self.create_attendance_payload([templo], entries=[{"environment_id": templo.id, "quantity": 11}])
+        url = reverse("diaconia-attendance-count-detail", args=[count.pk])
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.patch(url, payload, content_type="application/json").status_code, 403)
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.patch(url, payload, content_type="application/json").status_code, 403)
+
+        self.client.force_login(self.counting_manager)
+        self.assertEqual(self.client.patch(url, payload, content_type="application/json").status_code, 200)

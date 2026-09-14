@@ -11,6 +11,11 @@ import DepartmentDetailPage from './pages/DepartmentDetailPage'
 import DepartmentEditPage from './pages/DepartmentEditPage'
 import DepartmentsPage from './pages/DepartmentsPage'
 import DiaconiaPage from './pages/DiaconiaPage'
+import DiaconiaCountingCreatePage from './pages/DiaconiaCountingCreatePage'
+import DiaconiaCountingDetailPage from './pages/DiaconiaCountingDetailPage'
+import DiaconiaCountingEditPage from './pages/DiaconiaCountingEditPage'
+import DiaconiaCountingEnvironmentsPage from './pages/DiaconiaCountingEnvironmentsPage'
+import DiaconiaCountingPage from './pages/DiaconiaCountingPage'
 import DiaconiaStockCategoriesPage from './pages/DiaconiaStockCategoriesPage'
 import DiaconiaStockItemCreatePage from './pages/DiaconiaStockItemCreatePage'
 import DiaconiaStockItemEditPage from './pages/DiaconiaStockItemEditPage'
@@ -142,6 +147,11 @@ function AdminRoutes() {
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />
         <Route path="/departamentos/:id" element={<DepartmentDetailPage />} />
         <Route path="/diaconia" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/contagens" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaCountingPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/contagens/nova" element={<AuthorizedRoute capability="DIACONIA_COUNTING_MANAGE"><DiaconiaCountingCreatePage /></AuthorizedRoute>} />
+        <Route path="/diaconia/contagens/:id/editar" element={<AuthorizedRoute capability="DIACONIA_COUNTING_MANAGE"><DiaconiaCountingEditPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/contagens/:id" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaCountingDetailPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/contagens/ambientes" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaCountingEnvironmentsPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/novo" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemCreatePage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/entrada" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockMovementCreatePage movementType="ENTRADA" /></AuthorizedRoute>} />

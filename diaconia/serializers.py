@@ -1,7 +1,13 @@
 from rest_framework import serializers
 
-from .models import StockCategory, StockItem, StockMovement
-from .services import DiaconiaError, classify_stock_status, ensure_stock_category_active, stock_status_label
+from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
+from .services import (
+    DiaconiaError,
+    classify_stock_status,
+    ensure_stock_category_active,
+    get_attendance_count_total,
+    stock_status_label,
+)
 
 
 def reject_extra_fields(initial_data, allowed_fields):
@@ -161,6 +167,13 @@ class StockMovementUserSerializer(serializers.Serializer):
     display_name = serializers.CharField(read_only=True)
 
 
+def serialize_user(user):
+    return {
+        "id": user.id,
+        "display_name": getattr(user, "display_name", None) or user.get_full_name() or user.username,
+    }
+
+
 class StockMovementSerializer(serializers.ModelSerializer):
     item = StockMovementItemSerializer(read_only=True)
     movement_type_label = serializers.CharField(source="get_movement_type_display", read_only=True)
@@ -181,11 +194,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_created_by(self, obj):
-        user = obj.created_by
-        return {
-            "id": user.id,
-            "display_name": getattr(user, "display_name", None) or user.get_full_name() or user.username,
-        }
+        return serialize_user(obj.created_by)
 
 
 class StockMovementCreateSerializer(serializers.ModelSerializer):
@@ -206,3 +215,144 @@ class StockMovementCreateSerializer(serializers.ModelSerializer):
         if value <= 0:
             raise serializers.ValidationError("Informe uma quantidade maior que zero.")
         return value
+
+
+class CountingEnvironmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CountingEnvironment
+        fields = ["id", "name", "description", "is_active", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_active", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"name", "description"})
+        return attrs
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Informe o nome do ambiente.")
+        queryset = CountingEnvironment.objects.filter(name__iexact=value)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ja existe um ambiente com este nome.")
+        return value
+
+
+class CountingEnvironmentUpdateSerializer(CountingEnvironmentSerializer):
+    class Meta(CountingEnvironmentSerializer.Meta):
+        fields = ["name", "description"]
+        read_only_fields = []
+
+
+class AttendanceCountEnvironmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CountingEnvironment
+        fields = ["id", "name", "is_active"]
+        read_only_fields = fields
+
+
+class AttendanceCountEntrySerializer(serializers.ModelSerializer):
+    environment = AttendanceCountEnvironmentSerializer(read_only=True)
+
+    class Meta:
+        model = AttendanceCountEntry
+        fields = ["id", "environment", "quantity"]
+        read_only_fields = fields
+
+
+class AttendanceCountSerializer(serializers.ModelSerializer):
+    entries = AttendanceCountEntrySerializer(many=True, read_only=True)
+    shift_label = serializers.CharField(source="get_shift_display", read_only=True)
+    total_people = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AttendanceCount
+        fields = [
+            "id",
+            "date",
+            "shift",
+            "shift_label",
+            "notes",
+            "total_people",
+            "created_by",
+            "entries",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_total_people(self, obj):
+        return get_attendance_count_total(obj)
+
+    def get_created_by(self, obj):
+        return serialize_user(obj.created_by)
+
+
+class AttendanceCountListSerializer(serializers.ModelSerializer):
+    shift_label = serializers.CharField(source="get_shift_display", read_only=True)
+    total_people = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AttendanceCount
+        fields = [
+            "id",
+            "date",
+            "shift",
+            "shift_label",
+            "total_people",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_total_people(self, obj):
+        return get_attendance_count_total(obj)
+
+    def get_created_by(self, obj):
+        return serialize_user(obj.created_by)
+
+
+class AttendanceCountEntryCreateSerializer(serializers.Serializer):
+    environment_id = serializers.PrimaryKeyRelatedField(
+        queryset=CountingEnvironment.objects.all(),
+        source="environment",
+    )
+    quantity = serializers.IntegerField(min_value=0)
+
+    def to_internal_value(self, data):
+        reject_extra_fields(data, {"environment_id", "quantity"})
+        return super().to_internal_value(data)
+
+
+class AttendanceCountCreateSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    shift = serializers.ChoiceField(choices=AttendanceCount.Shift.choices)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    entries = AttendanceCountEntryCreateSerializer(many=True, allow_empty=False)
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"date", "shift", "notes", "entries"})
+        return attrs
+
+
+class AttendanceCountUpdateSerializer(AttendanceCountCreateSerializer):
+    pass
+
+
+class AttendanceCountFilterSerializer(serializers.Serializer):
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+    shift = serializers.ChoiceField(choices=AttendanceCount.Shift.choices, required=False)
+    created_by = serializers.IntegerField(required=False, min_value=1)
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"date_from", "date_to", "shift", "created_by"})
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            raise serializers.ValidationError({"date_to": "A data final deve ser maior ou igual a data inicial."})
+        return attrs

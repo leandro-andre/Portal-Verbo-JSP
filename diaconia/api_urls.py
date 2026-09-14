@@ -4,6 +4,36 @@ from . import api_views
 
 
 urlpatterns = [
+    path(
+        "counting/counts/",
+        api_views.AttendanceCountListCreateView.as_view(),
+        name="diaconia-attendance-count-list",
+    ),
+    path(
+        "counting/counts/<int:pk>/",
+        api_views.AttendanceCountDetailView.as_view(),
+        name="diaconia-attendance-count-detail",
+    ),
+    path(
+        "counting/environments/",
+        api_views.CountingEnvironmentListCreateView.as_view(),
+        name="diaconia-counting-environment-list",
+    ),
+    path(
+        "counting/environments/<int:pk>/",
+        api_views.CountingEnvironmentDetailView.as_view(),
+        name="diaconia-counting-environment-detail",
+    ),
+    path(
+        "counting/environments/<int:pk>/deactivate/",
+        api_views.CountingEnvironmentDeactivateView.as_view(),
+        name="diaconia-counting-environment-deactivate",
+    ),
+    path(
+        "counting/environments/<int:pk>/reactivate/",
+        api_views.CountingEnvironmentReactivateView.as_view(),
+        name="diaconia-counting-environment-reactivate",
+    ),
     path("stock/summary/", api_views.StockSummaryView.as_view(), name="diaconia-stock-summary"),
     path("stock/units/", api_views.StockUnitListView.as_view(), name="diaconia-stock-unit-list"),
     path("stock/categories/", api_views.StockCategoryListCreateView.as_view(), name="diaconia-stock-category-list"),

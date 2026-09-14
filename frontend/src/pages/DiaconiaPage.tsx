@@ -13,8 +13,8 @@ const areas = [
   {
     title: 'Contagens',
     description: 'Registro de publico por ambiente, data e turno.',
-    action: 'Realizar contagem',
-    to: null,
+    action: 'Acessar contagens',
+    to: '/diaconia/contagens',
     icon: ClipboardCheck,
   },
   {

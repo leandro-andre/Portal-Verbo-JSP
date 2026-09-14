@@ -1,8 +1,8 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Case, CharField, F, IntegerField, Sum, Value, When
 from django.db.models.functions import Coalesce
 
-from .models import StockCategory, StockItem, StockMovement
+from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
 
 
 INVALID_STOCK_CATEGORY_TRANSITION = "INVALID_STOCK_CATEGORY_TRANSITION"
@@ -11,6 +11,11 @@ STOCK_CATEGORY_INACTIVE = "STOCK_CATEGORY_INACTIVE"
 STOCK_ITEM_INACTIVE = "STOCK_ITEM_INACTIVE"
 INVALID_STOCK_MOVEMENT_QUANTITY = "INVALID_STOCK_MOVEMENT_QUANTITY"
 INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK"
+INVALID_COUNTING_ENVIRONMENT_TRANSITION = "INVALID_COUNTING_ENVIRONMENT_TRANSITION"
+ATTENDANCE_COUNT_DUPLICATE = "ATTENDANCE_COUNT_DUPLICATE"
+ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH = "ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH"
+ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS = "ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS"
+INVALID_ATTENDANCE_COUNT_QUANTITY = "INVALID_ATTENDANCE_COUNT_QUANTITY"
 
 
 class StockStatus:
@@ -245,3 +250,205 @@ def create_stock_movement(*, item, movement_type, quantity, notes="", created_by
             notes=notes,
             created_by=created_by,
         )
+
+
+def create_counting_environment(*, name, description=""):
+    return CountingEnvironment.objects.create(name=name, description=description, is_active=True)
+
+
+def update_counting_environment(environment, *, name=None, description=None):
+    if name is not None:
+        environment.name = name
+    if description is not None:
+        environment.description = description
+    environment.save()
+    return environment
+
+
+def deactivate_counting_environment(environment):
+    if not environment.is_active:
+        raise DiaconiaError(
+            INVALID_COUNTING_ENVIRONMENT_TRANSITION,
+            "Somente ambientes ativos podem ser inativados.",
+        )
+    environment.is_active = False
+    environment.save(update_fields=["is_active", "updated_at"])
+    return environment
+
+
+def reactivate_counting_environment(environment):
+    if environment.is_active:
+        raise DiaconiaError(
+            INVALID_COUNTING_ENVIRONMENT_TRANSITION,
+            "Somente ambientes inativos podem ser reativados.",
+        )
+    environment.is_active = True
+    environment.save(update_fields=["is_active", "updated_at"])
+    return environment
+
+
+def get_attendance_count_queryset():
+    return (
+        AttendanceCount.objects.select_related("created_by")
+        .prefetch_related("entries__environment")
+    )
+
+
+def attendance_count_total_expression():
+    return Coalesce(Sum("entries__quantity"), Value(0), output_field=IntegerField())
+
+
+def attendance_count_shift_order_expression():
+    return Case(
+        When(shift=AttendanceCount.Shift.EVENING, then=Value(3)),
+        When(shift=AttendanceCount.Shift.AFTERNOON, then=Value(2)),
+        When(shift=AttendanceCount.Shift.MORNING, then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+
+
+def get_attendance_count_list_queryset():
+    return (
+        AttendanceCount.objects.select_related("created_by")
+        .annotate(total_people=attendance_count_total_expression(), shift_order=attendance_count_shift_order_expression())
+        .order_by("-date", "-shift_order", "-created_at", "-id")
+    )
+
+
+def get_attendance_count_total(attendance_count):
+    annotated_total = getattr(attendance_count, "total_people", None)
+    if annotated_total is not None:
+        return annotated_total
+    entries = getattr(attendance_count, "_prefetched_objects_cache", {}).get("entries")
+    if entries is not None:
+        return sum(entry.quantity for entry in entries)
+    result = attendance_count.entries.aggregate(total=Coalesce(Sum("quantity"), Value(0), output_field=IntegerField()))
+    return result["total"] or 0
+
+
+def validate_attendance_count_environments(entries):
+    active_environment_ids = list(
+        CountingEnvironment.objects.filter(is_active=True)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    if not active_environment_ids:
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS,
+            "Nenhum ambiente ativo foi cadastrado.",
+        )
+
+    sent_environment_ids = [entry["environment"].id for entry in entries]
+    if len(sent_environment_ids) != len(set(sent_environment_ids)):
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH,
+            "Cada ambiente deve aparecer apenas uma vez na contagem.",
+        )
+
+    if set(sent_environment_ids) != set(active_environment_ids):
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH,
+            "Os ambientes ativos mudaram. Atualize a tela e tente novamente.",
+        )
+
+    for entry in entries:
+        environment = entry["environment"]
+        if not environment.is_active:
+            raise DiaconiaError(
+                ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH,
+                "A contagem deve usar apenas ambientes ativos.",
+            )
+        if entry["quantity"] < 0:
+            raise DiaconiaError(
+                INVALID_ATTENDANCE_COUNT_QUANTITY,
+                "A quantidade nao pode ser negativa.",
+            )
+
+
+def create_attendance_count(*, date, shift, notes="", entries, created_by):
+    if AttendanceCount.objects.filter(date=date, shift=shift).exists():
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_DUPLICATE,
+            "Ja existe uma contagem registrada para esta data e turno.",
+        )
+
+    with transaction.atomic():
+        validate_attendance_count_environments(entries)
+        try:
+            attendance_count = AttendanceCount.objects.create(
+                date=date,
+                shift=shift,
+                notes=notes,
+                created_by=created_by,
+            )
+            AttendanceCountEntry.objects.bulk_create(
+                [
+                    AttendanceCountEntry(
+                        attendance_count=attendance_count,
+                        environment=entry["environment"],
+                        quantity=entry["quantity"],
+                    )
+                    for entry in entries
+                ]
+            )
+        except IntegrityError as exc:
+            raise DiaconiaError(
+                ATTENDANCE_COUNT_DUPLICATE,
+                "Ja existe uma contagem registrada para esta data e turno.",
+            ) from exc
+
+    return get_attendance_count_queryset().get(pk=attendance_count.pk)
+
+
+def validate_attendance_count_historical_entries(attendance_count, entries):
+    current_environment_ids = list(attendance_count.entries.order_by("environment_id").values_list("environment_id", flat=True))
+    sent_environment_ids = [entry["environment"].id for entry in entries]
+
+    if len(sent_environment_ids) != len(set(sent_environment_ids)):
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH,
+            "Cada ambiente deve aparecer apenas uma vez na contagem.",
+        )
+
+    if set(sent_environment_ids) != set(current_environment_ids):
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH,
+            "A correcao deve manter exatamente os ambientes originais da contagem.",
+        )
+
+    for entry in entries:
+        if entry["quantity"] < 0:
+            raise DiaconiaError(
+                INVALID_ATTENDANCE_COUNT_QUANTITY,
+                "A quantidade nao pode ser negativa.",
+            )
+
+
+def update_attendance_count(attendance_count, *, date, shift, notes="", entries):
+    if AttendanceCount.objects.filter(date=date, shift=shift).exclude(pk=attendance_count.pk).exists():
+        raise DiaconiaError(
+            ATTENDANCE_COUNT_DUPLICATE,
+            "Ja existe uma contagem registrada para esta data e turno.",
+        )
+
+    with transaction.atomic():
+        locked_count = AttendanceCount.objects.select_for_update().get(pk=attendance_count.pk)
+        validate_attendance_count_historical_entries(locked_count, entries)
+        locked_count.date = date
+        locked_count.shift = shift
+        locked_count.notes = notes
+        try:
+            locked_count.save(update_fields=["date", "shift", "notes", "updated_at"])
+            entries_by_environment_id = {entry["environment"].id: entry["quantity"] for entry in entries}
+            count_entries = list(locked_count.entries.select_for_update())
+            for count_entry in count_entries:
+                count_entry.quantity = entries_by_environment_id[count_entry.environment_id]
+            AttendanceCountEntry.objects.bulk_update(count_entries, ["quantity"])
+        except IntegrityError as exc:
+            raise DiaconiaError(
+                ATTENDANCE_COUNT_DUPLICATE,
+                "Ja existe uma contagem registrada para esta data e turno.",
+            ) from exc
+
+    return get_attendance_count_queryset().get(pk=attendance_count.pk)

@@ -1370,6 +1370,163 @@
   font-size: 20px;
 }
 
+.diaconia-counting-hero,
+.diaconia-counting-form,
+.diaconia-counting-total,
+.diaconia-counting-entry {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+}
+
+.diaconia-counting-hero {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  padding: 18px;
+}
+
+.diaconia-counting-hero__icon {
+  align-items: center;
+  background: #ecfdf3;
+  border-radius: var(--radius-sm);
+  color: #166534;
+  display: inline-flex;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.diaconia-counting-hero h2 {
+  color: var(--color-text);
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.diaconia-counting-hero p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.diaconia-counting-form {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.diaconia-counting-total {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.diaconia-counting-total span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.diaconia-counting-total strong {
+  color: var(--color-text);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.diaconia-counting-entry-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.diaconia-counting-entry {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+}
+
+.diaconia-counting-entry span {
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.diaconia-counting-entry small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.diaconia-counting-entry input {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  min-height: 46px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.diaconia-counting-entry input:focus {
+  border-color: #9db2d6;
+  box-shadow: 0 0 0 3px var(--color-focus);
+  outline: none;
+}
+
+.diaconia-counting-result-count {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.diaconia-counting-card-list {
+  display: none;
+}
+
+.diaconia-counting-history-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.diaconia-counting-history-card h2 {
+  color: var(--color-text);
+  font-size: 17px;
+  margin: 0 0 6px;
+}
+
+.diaconia-counting-history-card p {
+  color: var(--color-text);
+  font-size: 24px;
+  font-weight: 850;
+  margin: 0 0 4px;
+}
+
+.diaconia-counting-history-card span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.diaconia-counting-info-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.diaconia-counting-info-grid .diaconia-stock-readonly {
+  margin-bottom: 0;
+}
+
 .page-heading {
   align-items: flex-start;
   display: flex;
@@ -1986,7 +2143,8 @@
 }
 
 .field-group input,
-.field-group select {
+.field-group select,
+.field-group textarea {
   background: #ffffff;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -1995,6 +2153,11 @@
   min-height: 42px;
   padding: 9px 12px;
   width: 100%;
+}
+
+.field-group textarea {
+  min-height: 92px;
+  resize: vertical;
 }
 
 .form-field {
@@ -2032,14 +2195,16 @@
 }
 
 .field-group input:focus,
-.field-group select:focus {
+.field-group select:focus,
+.field-group textarea:focus {
   border-color: #9db2d6;
   box-shadow: 0 0 0 3px var(--color-focus);
   outline: none;
 }
 
 .field-group input[aria-invalid='true'],
-.field-group select[aria-invalid='true'] {
+.field-group select[aria-invalid='true'],
+.field-group textarea[aria-invalid='true'] {
   border-color: #ef4444;
 }
 
@@ -3322,6 +3487,29 @@
   .table-actions .button,
   .diaconia-category-form .button {
     width: 100%;
+  }
+
+  .diaconia-counting-hero,
+  .diaconia-counting-total {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .diaconia-counting-entry-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diaconia-counting-table {
+    display: none;
+  }
+
+  .diaconia-counting-card-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .diaconia-counting-info-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .access-request-brand__logo {

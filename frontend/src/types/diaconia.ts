@@ -90,3 +90,67 @@ export type StockSummary = {
   without_minimum_control: number
   replenishment_items: StockItem[]
 }
+
+export type CountingEnvironment = {
+  id: number
+  name: string
+  description: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type CountingEnvironmentFilters = {
+  search?: string
+  status?: 'ACTIVE' | 'INACTIVE' | 'ALL'
+}
+
+export type CreateCountingEnvironmentInput = {
+  name: string
+  description: string
+}
+
+export type UpdateCountingEnvironmentInput = CreateCountingEnvironmentInput
+
+export type AttendanceShift = 'MORNING' | 'AFTERNOON' | 'EVENING'
+
+export type AttendanceCountEntry = {
+  id: number
+  environment: Pick<CountingEnvironment, 'id' | 'name' | 'is_active'>
+  quantity: number
+}
+
+export type AttendanceCount = {
+  id: number
+  date: string
+  shift: AttendanceShift
+  shift_label: string
+  notes: string
+  total_people: number
+  created_by: {
+    id: number
+    display_name: string
+  }
+  entries: AttendanceCountEntry[]
+  created_at: string
+  updated_at: string
+}
+
+export type CreateAttendanceCountInput = {
+  date: string
+  shift: AttendanceShift
+  notes: string
+  entries: Array<{
+    environment_id: number
+    quantity: number
+  }>
+}
+
+export type UpdateAttendanceCountInput = CreateAttendanceCountInput
+
+export type AttendanceCountFilters = {
+  dateFrom?: string
+  dateTo?: string
+  shift?: '' | AttendanceShift
+  createdBy?: string
+}
