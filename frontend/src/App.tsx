@@ -10,6 +10,7 @@ import DepartmentCreatePage from './pages/DepartmentCreatePage'
 import DepartmentDetailPage from './pages/DepartmentDetailPage'
 import DepartmentEditPage from './pages/DepartmentEditPage'
 import DepartmentsPage from './pages/DepartmentsPage'
+import DiaconiaPage from './pages/DiaconiaPage'
 import DiscipleshipClassCreatePage from './pages/DiscipleshipClassCreatePage'
 import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
 import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
@@ -134,6 +135,7 @@ function AdminRoutes() {
         <Route path="/departamentos/novo" element={<AuthorizedRoute capability="DEPARTMENT_CREATE"><DepartmentCreatePage /></AuthorizedRoute>} />
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />
         <Route path="/departamentos/:id" element={<DepartmentDetailPage />} />
+        <Route path="/diaconia" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/:classId/aulas/:lessonId/chamada" element={<DiscipleshipAttendancePage />} />

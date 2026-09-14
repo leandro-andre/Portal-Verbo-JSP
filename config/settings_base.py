@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "scheduling",
     "core",
     "departamentos",
+    "diaconia",
     "escalas",
     "infantil",
     "eventos",

@@ -3307,6 +3307,7 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="cancel_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="add_discipleshipattendance").exists())
         self.assertTrue(group.permissions.filter(codename="change_discipleshipattendance").exists())
+        self.assertTrue(group.permissions.filter(codename="view_diaconia_module").exists())
 
     def test_secretaria_recebe_permissions_esperadas(self):
         setup_portal_roles()
@@ -3327,6 +3328,7 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="cancel_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="add_discipleshipattendance").exists())
         self.assertTrue(group.permissions.filter(codename="change_discipleshipattendance").exists())
+        self.assertTrue(group.permissions.filter(codename="view_diaconia_module").exists())
         self.assertFalse(group.permissions.filter(codename="disable_usuario").exists())
 
     def test_pastor_recebe_permissions_esperadas(self):
@@ -3528,6 +3530,7 @@ class GlobalRolesAuthorizationMatrixTests(TestCase):
         self.assertIn("DISCIPLESHIP_ATTENDANCE_MANAGE", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_COMPLETION_VIEW", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_COMPLETION_MANAGE", current_user["capabilities"])
+        self.assertIn("DIACONIA_VIEW", current_user["capabilities"])
         self.assertIn("ACCESS_REQUEST_APPROVE", current_user["capabilities"])
         self.assertNotIn("USER_DISABLE", current_user["capabilities"])
 
