@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import StockCategory, StockItem, StockMovement
-from .services import DiaconiaError, ensure_stock_category_active
+from .services import DiaconiaError, classify_stock_status, ensure_stock_category_active, stock_status_label
 
 
 def reject_extra_fields(initial_data, allowed_fields):
@@ -56,6 +56,8 @@ class StockItemSerializer(serializers.ModelSerializer):
     )
     unit_label = serializers.CharField(source="get_unit_display", read_only=True)
     current_stock = serializers.SerializerMethodField()
+    stock_status = serializers.SerializerMethodField()
+    stock_status_label = serializers.SerializerMethodField()
 
     class Meta:
         model = StockItem
@@ -67,16 +69,42 @@ class StockItemSerializer(serializers.ModelSerializer):
             "unit",
             "unit_label",
             "current_stock",
+            "stock_status",
+            "stock_status_label",
             "minimum_stock",
             "notes",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "category", "unit_label", "current_stock", "is_active", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "category",
+            "unit_label",
+            "current_stock",
+            "stock_status",
+            "stock_status_label",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_current_stock(self, obj):
         return getattr(obj, "current_stock", 0) or 0
+
+    def get_stock_status(self, obj):
+        return getattr(
+            obj,
+            "stock_status",
+            classify_stock_status(
+                current_stock=self.get_current_stock(obj),
+                minimum_stock=obj.minimum_stock,
+                is_active=obj.is_active,
+            ),
+        )
+
+    def get_stock_status_label(self, obj):
+        return stock_status_label(self.get_stock_status(obj))
 
     def validate(self, attrs):
         reject_extra_fields(

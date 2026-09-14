@@ -9,6 +9,7 @@ import {
   getStockItem,
   getStockItems,
   getStockMovements,
+  getStockSummary,
   getStockUnits,
   reactivateStockCategory,
   reactivateStockItem,
@@ -21,6 +22,8 @@ import type {
   CreateStockMovementInput,
   StockCategory,
   StockItem,
+  StockItemFilters,
+  StockMovementFilters,
   UpdateStockCategoryInput,
   UpdateStockItemInput,
 } from '../types/diaconia'
@@ -29,13 +32,14 @@ export const stockItemsQueryKey = ['diaconia', 'stock', 'items'] as const
 export const stockCategoriesQueryKey = ['diaconia', 'stock', 'categories'] as const
 export const stockUnitsQueryKey = ['diaconia', 'stock', 'units'] as const
 export const stockMovementsQueryKey = ['diaconia', 'stock', 'movements'] as const
+export const stockSummaryQueryKey = ['diaconia', 'stock', 'summary'] as const
 
 export function stockItemQueryKey(id: number) {
   return ['diaconia', 'stock', 'items', id] as const
 }
 
-export function useStockItems() {
-  return useQuery({ queryKey: stockItemsQueryKey, queryFn: getStockItems })
+export function useStockItems(filters?: StockItemFilters) {
+  return useQuery({ queryKey: filters ? [...stockItemsQueryKey, filters] : stockItemsQueryKey, queryFn: () => getStockItems(filters) })
 }
 
 export function useStockItem(id: number) {
@@ -54,10 +58,14 @@ export function useStockUnits() {
   return useQuery({ queryKey: stockUnitsQueryKey, queryFn: getStockUnits })
 }
 
-export function useStockMovements(itemId?: number) {
+export function useStockSummary() {
+  return useQuery({ queryKey: stockSummaryQueryKey, queryFn: getStockSummary })
+}
+
+export function useStockMovements(filters?: StockMovementFilters) {
   return useQuery({
-    queryKey: itemId ? [...stockMovementsQueryKey, itemId] : stockMovementsQueryKey,
-    queryFn: () => getStockMovements(itemId),
+    queryKey: filters ? [...stockMovementsQueryKey, filters] : stockMovementsQueryKey,
+    queryFn: () => getStockMovements(filters),
   })
 }
 
@@ -78,6 +86,7 @@ export function useCreateStockMovement() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: stockItemsQueryKey })
       await queryClient.invalidateQueries({ queryKey: stockMovementsQueryKey })
+      await queryClient.invalidateQueries({ queryKey: stockSummaryQueryKey })
     },
   })
 }
@@ -89,6 +98,7 @@ export function useUpdateStockItem(id: number) {
     onSuccess: async (item) => {
       queryClient.setQueryData(stockItemQueryKey(id), item)
       await queryClient.invalidateQueries({ queryKey: stockItemsQueryKey })
+      await queryClient.invalidateQueries({ queryKey: stockSummaryQueryKey })
       await queryClient.invalidateQueries({ queryKey: stockItemQueryKey(id) })
     },
   })
@@ -99,6 +109,7 @@ export function useStockItemLifecycle(id: number) {
   const onSuccess = async (item: StockItem) => {
     queryClient.setQueryData(stockItemQueryKey(id), item)
     await queryClient.invalidateQueries({ queryKey: stockItemsQueryKey })
+    await queryClient.invalidateQueries({ queryKey: stockSummaryQueryKey })
     await queryClient.invalidateQueries({ queryKey: stockItemQueryKey(id) })
   }
 

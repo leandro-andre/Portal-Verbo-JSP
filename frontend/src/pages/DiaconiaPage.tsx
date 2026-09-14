@@ -1,5 +1,6 @@
 import { Archive, ClipboardCheck, Package } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useStockSummary } from '../hooks/useDiaconiaStock'
 
 const areas = [
   {
@@ -26,6 +27,8 @@ const areas = [
 ]
 
 function DiaconiaPage() {
+  const { data: stockSummary } = useStockSummary()
+
   return (
     <section className="diaconia-page">
       <div className="page-heading">
@@ -57,6 +60,16 @@ function DiaconiaPage() {
               <div className="diaconia-area-card__content">
                 <h2>{area.title}</h2>
                 <p>{area.description}</p>
+                {area.title === 'Estoque' && stockSummary ? (
+                  <div className="diaconia-area-card__summary">
+                    <span>{stockSummary.active_items} itens ativos</span>
+                    <span>
+                      {stockSummary.low_stock_items > 0
+                        ? `${stockSummary.low_stock_items} precisam de reposicao`
+                        : 'Estoque dentro dos niveis minimos'}
+                    </span>
+                  </div>
+                ) : null}
               </div>
               {area.to ? (
                 <Link className="button button--secondary" to={area.to}>

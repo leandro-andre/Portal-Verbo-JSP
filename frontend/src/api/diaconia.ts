@@ -5,7 +5,10 @@ import type {
   DiaconiaValidationErrors,
   StockCategory,
   StockItem,
+  StockItemFilters,
   StockMovement,
+  StockMovementFilters,
+  StockSummary,
   StockUnit,
   UpdateStockCategoryInput,
   UpdateStockItemInput,
@@ -89,6 +92,12 @@ export async function getStockCategories(): Promise<StockCategory[]> {
   return response.json() as Promise<StockCategory[]>
 }
 
+export async function getStockSummary(): Promise<StockSummary> {
+  const response = await fetch('/api/diaconia/stock/summary/', { credentials: 'same-origin' })
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar o resumo do estoque.')
+  return response.json() as Promise<StockSummary>
+}
+
 export async function createStockCategory(payload: CreateStockCategoryInput): Promise<StockCategory> {
   const headers = await csrfJsonHeaders()
   const response = await fetch('/api/diaconia/stock/categories/', {
@@ -137,8 +146,18 @@ export function reactivateStockCategory(id: number) {
   return runCategoryLifecycle(id, 'reactivate')
 }
 
-export async function getStockItems(): Promise<StockItem[]> {
-  const response = await fetch('/api/diaconia/stock/items/', { credentials: 'same-origin' })
+function stockItemQuery(filters?: StockItemFilters) {
+  const params = new URLSearchParams()
+  if (filters?.search?.trim()) params.set('search', filters.search.trim())
+  if (filters?.category) params.set('category', filters.category)
+  if (filters?.stockStatus) params.set('stock_status', filters.stockStatus)
+  if (filters?.status && filters.status !== 'ALL') params.set('status', filters.status)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+export async function getStockItems(filters?: StockItemFilters): Promise<StockItem[]> {
+  const response = await fetch(`/api/diaconia/stock/items/${stockItemQuery(filters)}`, { credentials: 'same-origin' })
   if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar itens.')
   return response.json() as Promise<StockItem[]>
 }
@@ -199,9 +218,17 @@ export function reactivateStockItem(id: number) {
   return runItemLifecycle(id, 'reactivate')
 }
 
-export async function getStockMovements(itemId?: number): Promise<StockMovement[]> {
-  const query = itemId ? `?item=${itemId}` : ''
-  const response = await fetch(`/api/diaconia/stock/movements/${query}`, { credentials: 'same-origin' })
+function stockMovementQuery(filters?: StockMovementFilters) {
+  const params = new URLSearchParams()
+  if (filters?.search?.trim()) params.set('search', filters.search.trim())
+  if (filters?.item) params.set('item', filters.item)
+  if (filters?.type) params.set('type', filters.type)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+export async function getStockMovements(filters?: StockMovementFilters): Promise<StockMovement[]> {
+  const response = await fetch(`/api/diaconia/stock/movements/${stockMovementQuery(filters)}`, { credentials: 'same-origin' })
   if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar movimentacoes.')
   return response.json() as Promise<StockMovement[]>
 }

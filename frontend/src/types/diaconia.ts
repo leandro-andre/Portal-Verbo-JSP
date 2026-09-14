@@ -19,6 +19,8 @@ export type StockItem = {
   unit: string
   unit_label: string
   current_stock: number
+  stock_status: StockStatus
+  stock_status_label: string
   minimum_stock: number
   notes: string
   is_active: boolean
@@ -46,6 +48,7 @@ export type UpdateStockItemInput = CreateStockItemInput
 export type DiaconiaValidationErrors = Partial<Record<string, string[]>>
 
 export type StockMovementType = 'ENTRADA' | 'SAIDA'
+export type StockStatus = 'NORMAL' | 'LOW_STOCK' | 'WITHOUT_MINIMUM' | 'INACTIVE'
 
 export type StockMovement = {
   id: number
@@ -66,4 +69,24 @@ export type CreateStockMovementInput = {
   movement_type: StockMovementType
   quantity: number
   notes: string
+}
+
+export type StockItemFilters = {
+  search?: string
+  category?: string
+  stockStatus?: '' | StockStatus
+  status?: 'ACTIVE' | 'INACTIVE' | 'ALL'
+}
+
+export type StockMovementFilters = {
+  search?: string
+  item?: string
+  type?: '' | StockMovementType
+}
+
+export type StockSummary = {
+  active_items: number
+  low_stock_items: number
+  without_minimum_control: number
+  replenishment_items: StockItem[]
 }

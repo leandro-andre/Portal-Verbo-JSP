@@ -4,6 +4,7 @@ from . import api_views
 
 
 urlpatterns = [
+    path("stock/summary/", api_views.StockSummaryView.as_view(), name="diaconia-stock-summary"),
     path("stock/units/", api_views.StockUnitListView.as_view(), name="diaconia-stock-unit-list"),
     path("stock/categories/", api_views.StockCategoryListCreateView.as_view(), name="diaconia-stock-category-list"),
     path("stock/categories/<int:pk>/", api_views.StockCategoryDetailView.as_view(), name="diaconia-stock-category-detail"),

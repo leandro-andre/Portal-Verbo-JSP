@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Case, F, IntegerField, Sum, Value, When
+from django.db.models import Case, CharField, F, IntegerField, Sum, Value, When
 from django.db.models.functions import Coalesce
 
 from .models import StockCategory, StockItem, StockMovement
@@ -11,6 +11,20 @@ STOCK_CATEGORY_INACTIVE = "STOCK_CATEGORY_INACTIVE"
 STOCK_ITEM_INACTIVE = "STOCK_ITEM_INACTIVE"
 INVALID_STOCK_MOVEMENT_QUANTITY = "INVALID_STOCK_MOVEMENT_QUANTITY"
 INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK"
+
+
+class StockStatus:
+    NORMAL = "NORMAL"
+    LOW_STOCK = "LOW_STOCK"
+    WITHOUT_MINIMUM = "WITHOUT_MINIMUM"
+    INACTIVE = "INACTIVE"
+
+    LABELS = {
+        NORMAL: "Normal",
+        LOW_STOCK: "Estoque baixo",
+        WITHOUT_MINIMUM: "Sem controle",
+        INACTIVE: "Inativo",
+    }
 
 
 class DiaconiaError(Exception):
@@ -130,6 +144,53 @@ def stock_balance_expression():
 
 def get_stock_items_with_balance():
     return StockItem.objects.select_related("category").annotate(current_stock=stock_balance_expression())
+
+
+def stock_status_annotation():
+    return Case(
+        When(is_active=False, then=Value(StockStatus.INACTIVE)),
+        When(minimum_stock=0, then=Value(StockStatus.WITHOUT_MINIMUM)),
+        When(minimum_stock__gt=0, minimum_stock__gte=stock_balance_expression(), then=Value(StockStatus.LOW_STOCK)),
+        default=Value(StockStatus.NORMAL),
+        output_field=CharField(),
+    )
+
+
+def get_stock_items_with_status():
+    return get_stock_items_with_balance().annotate(stock_status=stock_status_annotation())
+
+
+def classify_stock_status(*, current_stock, minimum_stock, is_active=True):
+    if not is_active:
+        return StockStatus.INACTIVE
+    if minimum_stock == 0:
+        return StockStatus.WITHOUT_MINIMUM
+    if current_stock <= minimum_stock:
+        return StockStatus.LOW_STOCK
+    return StockStatus.NORMAL
+
+
+def stock_status_label(status):
+    return StockStatus.LABELS.get(status, status)
+
+
+def get_stock_summary(*, replenishment_limit=6):
+    queryset = get_stock_items_with_status().filter(is_active=True)
+    active_items = queryset.count()
+    low_stock_items = queryset.filter(stock_status=StockStatus.LOW_STOCK).count()
+    without_minimum_control = queryset.filter(stock_status=StockStatus.WITHOUT_MINIMUM).count()
+    replenishment_items = queryset.filter(stock_status=StockStatus.LOW_STOCK).order_by(
+        "current_stock",
+        "minimum_stock",
+        "name",
+        "id",
+    )[:replenishment_limit]
+    return {
+        "active_items": active_items,
+        "low_stock_items": low_stock_items,
+        "without_minimum_control": without_minimum_control,
+        "replenishment_items": list(replenishment_items),
+    }
 
 
 def get_current_stock(item):

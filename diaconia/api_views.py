@@ -21,7 +21,8 @@ from .services import (
     create_stock_movement,
     deactivate_stock_category,
     deactivate_stock_item,
-    get_stock_items_with_balance,
+    get_stock_items_with_status,
+    get_stock_summary,
     reactivate_stock_category,
     reactivate_stock_item,
     update_stock_category,
@@ -132,12 +133,21 @@ class StockItemListCreateView(APIView):
     permission_classes = [HasDiaconiaStockPermission]
 
     def get(self, request):
-        queryset = get_stock_items_with_balance().order_by("name", "id")
+        queryset = get_stock_items_with_status().order_by("name", "id")
         status_filter = (request.query_params.get("status") or "").upper()
         if status_filter == "ACTIVE":
             queryset = queryset.filter(is_active=True)
         elif status_filter == "INACTIVE":
             queryset = queryset.filter(is_active=False)
+        stock_status = (request.query_params.get("stock_status") or "").upper()
+        if stock_status:
+            queryset = queryset.filter(stock_status=stock_status)
+        category_id = request.query_params.get("category")
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
         return Response(StockItemSerializer(queryset, many=True).data)
 
     def post(self, request):
@@ -154,7 +164,7 @@ class StockItemDetailView(APIView):
     permission_classes = [HasDiaconiaStockPermission]
 
     def get_object(self, pk):
-        return get_object_or_404(get_stock_items_with_balance(), pk=pk)
+        return get_object_or_404(get_stock_items_with_status(), pk=pk)
 
     def get(self, request, pk):
         ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
@@ -169,6 +179,22 @@ class StockItemDetailView(APIView):
         except DiaconiaError as exc:
             return business_error_response(exc)
         return Response(StockItemSerializer(item).data)
+
+
+class StockSummaryView(APIView):
+    permission_classes = [HasDiaconiaStockPermission]
+    permission_required = DIACONIA_VIEW
+
+    def get(self, request):
+        summary = get_stock_summary()
+        return Response(
+            {
+                "active_items": summary["active_items"],
+                "low_stock_items": summary["low_stock_items"],
+                "without_minimum_control": summary["without_minimum_control"],
+                "replenishment_items": StockItemSerializer(summary["replenishment_items"], many=True).data,
+            }
+        )
 
 
 class StockItemDeactivateView(APIView):
@@ -209,6 +235,9 @@ class StockMovementListCreateView(APIView):
         movement_type = (request.query_params.get("type") or "").upper()
         if movement_type in StockMovement.Type.values:
             queryset = queryset.filter(movement_type=movement_type)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(item__name__icontains=search)
         return Response(StockMovementSerializer(queryset, many=True).data)
 
     def post(self, request):

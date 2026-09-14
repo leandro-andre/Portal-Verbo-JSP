@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import StockCategory, StockItem, StockMovement
+from .services import StockStatus
 
 
 class DiaconiaStockApiTests(TestCase):
@@ -388,3 +389,127 @@ class DiaconiaStockApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         movement_ids = [movement["id"] for movement in response.json()]
         self.assertEqual(movement_ids, [new_movement.id, old_movement.id])
+
+    def test_status_normal_quando_saldo_maior_que_minimo(self):
+        self.login_manager()
+        item = self.create_item()
+        item.minimum_stock = 5
+        item.save(update_fields=["minimum_stock"])
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=6,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(reverse("diaconia-stock-item-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]["stock_status"], StockStatus.NORMAL)
+
+    def test_status_baixo_quando_saldo_menor_que_minimo(self):
+        self.login_manager()
+        item = self.create_item()
+        item.minimum_stock = 5
+        item.save(update_fields=["minimum_stock"])
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=3,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(reverse("diaconia-stock-item-list"))
+
+        self.assertEqual(response.json()[0]["stock_status"], StockStatus.LOW_STOCK)
+
+    def test_status_baixo_quando_saldo_igual_ao_minimo(self):
+        self.login_manager()
+        item = self.create_item()
+        item.minimum_stock = 5
+        item.save(update_fields=["minimum_stock"])
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=5,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(reverse("diaconia-stock-item-list"))
+
+        self.assertEqual(response.json()[0]["stock_status"], StockStatus.LOW_STOCK)
+
+    def test_status_sem_controle_quando_minimo_zero(self):
+        self.login_manager()
+        self.create_item()
+
+        response = self.client.get(reverse("diaconia-stock-item-list"))
+
+        self.assertEqual(response.json()[0]["stock_status"], StockStatus.WITHOUT_MINIMUM)
+
+    def test_item_inativo_nao_entra_no_indicador_de_reposicao(self):
+        self.login_manager()
+        inactive = self.create_item(is_active=False)
+        inactive.minimum_stock = 5
+        inactive.save(update_fields=["minimum_stock"])
+
+        response = self.client.get(reverse("diaconia-stock-summary"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["active_items"], 0)
+        self.assertEqual(response.json()["low_stock_items"], 0)
+        self.assertEqual(response.json()["replenishment_items"], [])
+
+    def test_resumo_retorna_contagens_corretas(self):
+        self.login_manager()
+        low = self.create_item()
+        low.minimum_stock = 5
+        low.save(update_fields=["minimum_stock"])
+        normal = self.create_item()
+        normal.minimum_stock = 5
+        normal.save(update_fields=["minimum_stock"])
+        without_control = self.create_item()
+        StockMovement.objects.create(
+            item=normal,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=8,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(reverse("diaconia-stock-summary"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["active_items"], 3)
+        self.assertEqual(body["low_stock_items"], 1)
+        self.assertEqual(body["without_minimum_control"], 1)
+        self.assertEqual(body["replenishment_items"][0]["id"], low.id)
+
+    def test_filtro_por_estoque_baixo(self):
+        self.login_manager()
+        low = self.create_item()
+        low.minimum_stock = 5
+        low.save(update_fields=["minimum_stock"])
+        normal = self.create_item()
+        normal.minimum_stock = 5
+        normal.save(update_fields=["minimum_stock"])
+        StockMovement.objects.create(
+            item=normal,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=8,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(f"{reverse('diaconia-stock-item-list')}?stock_status={StockStatus.LOW_STOCK}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.json()], [low.id])
+
+    def test_resumo_respeita_permissao_de_visualizacao(self):
+        summary_url = reverse("diaconia-stock-summary")
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(summary_url).status_code, 403)
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(summary_url).status_code, 200)

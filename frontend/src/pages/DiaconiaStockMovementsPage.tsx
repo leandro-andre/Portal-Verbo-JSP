@@ -1,6 +1,8 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCcw } from 'lucide-react'
-import { useStockMovements } from '../hooks/useDiaconiaStock'
+import { useStockItems, useStockMovements } from '../hooks/useDiaconiaStock'
+import type { StockMovementType } from '../types/diaconia'
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -14,7 +16,12 @@ function movementQuantitySign(type: string) {
 }
 
 function DiaconiaStockMovementsPage() {
-  const { data: movements = [], isError, isLoading, refetch } = useStockMovements()
+  const [search, setSearch] = useState('')
+  const [item, setItem] = useState('')
+  const [type, setType] = useState<'' | StockMovementType>('')
+  const filters = useMemo(() => ({ search, item, type }), [item, search, type])
+  const { data: movements = [], isError, isLoading, refetch } = useStockMovements(filters)
+  const { data: items = [] } = useStockItems({ status: 'ALL' })
 
   return (
     <section className="people-page">
@@ -33,6 +40,28 @@ function DiaconiaStockMovementsPage() {
         </div>
       </div>
 
+      <div className="people-toolbar diaconia-stock-filters">
+        <label className="people-search" htmlFor="movement-search">
+          <span>Buscar</span>
+          <input id="movement-search" type="search" placeholder="Nome do item" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
+        <label className="status-filter" htmlFor="movement-item-filter">
+          <span>Item</span>
+          <select id="movement-item-filter" value={item} onChange={(event) => setItem(event.target.value)}>
+            <option value="">Todos</option>
+            {items.map((stockItem) => <option key={stockItem.id} value={stockItem.id}>{stockItem.name}</option>)}
+          </select>
+        </label>
+        <label className="status-filter" htmlFor="movement-type-filter">
+          <span>Tipo</span>
+          <select id="movement-type-filter" value={type} onChange={(event) => setType(event.target.value as '' | StockMovementType)}>
+            <option value="">Todos</option>
+            <option value="ENTRADA">Entrada</option>
+            <option value="SAIDA">Saida</option>
+          </select>
+        </label>
+      </div>
+
       {isLoading ? (
         <div className="state-panel"><h2>Carregando movimentacoes...</h2></div>
       ) : isError ? (
@@ -45,8 +74,8 @@ function DiaconiaStockMovementsPage() {
         </div>
       ) : movements.length === 0 ? (
         <div className="state-panel">
-          <h2>Nenhuma movimentacao registrada.</h2>
-          <p>Entradas e saidas aparecerao aqui depois do primeiro registro.</p>
+          <h2>{search || item || type ? 'Nenhuma movimentacao encontrada com os filtros aplicados.' : 'Nenhuma movimentacao registrada.'}</h2>
+          <p>{search || item || type ? 'Ajuste os filtros para ampliar a busca.' : 'Entradas e saidas aparecerao aqui depois do primeiro registro.'}</p>
         </div>
       ) : (
         <div className="table-shell">
@@ -67,7 +96,11 @@ function DiaconiaStockMovementsPage() {
                   <td>{formatDateTime(movement.created_at)}</td>
                   <td>{movement.item.name}</td>
                   <td>{movement.movement_type_label}</td>
-                  <td>{movementQuantitySign(movement.movement_type)}{movement.quantity} {movement.item.unit}</td>
+                  <td>
+                    <span className={`diaconia-movement-quantity diaconia-movement-quantity--${movement.movement_type.toLowerCase()}`}>
+                      {movementQuantitySign(movement.movement_type)}{movement.quantity} {movement.item.unit}
+                    </span>
+                  </td>
                   <td>{movement.created_by.display_name}</td>
                   <td>{movement.notes || <span className="table-muted">Sem observacao</span>}</td>
                 </tr>

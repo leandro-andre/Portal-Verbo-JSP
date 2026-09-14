@@ -112,6 +112,11 @@ function DiaconiaStockItemEditPage() {
             </div>
           </div>
 
+          <div className="diaconia-stock-readonly">
+            <span>Saldo atual</span>
+            <strong>{item.current_stock} {item.unit}</strong>
+          </div>
+
           <StockItemForm
             categories={availableCategories}
             generalError={generalError}
