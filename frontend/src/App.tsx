@@ -11,6 +11,10 @@ import DepartmentDetailPage from './pages/DepartmentDetailPage'
 import DepartmentEditPage from './pages/DepartmentEditPage'
 import DepartmentsPage from './pages/DepartmentsPage'
 import DiaconiaPage from './pages/DiaconiaPage'
+import DiaconiaStockCategoriesPage from './pages/DiaconiaStockCategoriesPage'
+import DiaconiaStockItemCreatePage from './pages/DiaconiaStockItemCreatePage'
+import DiaconiaStockItemEditPage from './pages/DiaconiaStockItemEditPage'
+import DiaconiaStockPage from './pages/DiaconiaStockPage'
 import DiscipleshipClassCreatePage from './pages/DiscipleshipClassCreatePage'
 import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
 import DiscipleshipClassEditPage from './pages/DiscipleshipClassEditPage'
@@ -136,6 +140,10 @@ function AdminRoutes() {
         <Route path="/departamentos/:id/editar" element={<DepartmentEditPage />} />
         <Route path="/departamentos/:id" element={<DepartmentDetailPage />} />
         <Route path="/diaconia" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/novo" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemCreatePage /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/categorias" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockCategoriesPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/:id/editar" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />
         <Route path="/discipulado/:id/editar" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CHANGE"><DiscipleshipClassEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/:classId/aulas/:lessonId/chamada" element={<DiscipleshipAttendancePage />} />

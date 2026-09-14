@@ -1,22 +1,26 @@
 import { Archive, ClipboardCheck, Package } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 const areas = [
   {
     title: 'Estoque',
     description: 'Controle de materiais utilizados pela igreja, entradas, retiradas e niveis de estoque.',
     action: 'Acessar estoque',
+    to: '/diaconia/estoque',
     icon: Package,
   },
   {
     title: 'Contagens',
     description: 'Registro de publico por ambiente, data e turno.',
     action: 'Realizar contagem',
+    to: null,
     icon: ClipboardCheck,
   },
   {
     title: 'Inventario',
     description: 'Controle dos bens e quantidades administrados pela Diaconia.',
     action: 'Acessar inventario',
+    to: null,
     icon: Archive,
   },
 ]
@@ -54,10 +58,16 @@ function DiaconiaPage() {
                 <h2>{area.title}</h2>
                 <p>{area.description}</p>
               </div>
-              <button className="button button--secondary" type="button" disabled>
-                {area.action}
-                <span className="status-badge diaconia-area-card__badge">Em breve</span>
-              </button>
+              {area.to ? (
+                <Link className="button button--secondary" to={area.to}>
+                  {area.action}
+                </Link>
+              ) : (
+                <button className="button button--secondary" type="button" disabled>
+                  {area.action}
+                  <span className="status-badge diaconia-area-card__badge">Em breve</span>
+                </button>
+              )}
             </article>
           )
         })}
