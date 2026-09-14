@@ -14,6 +14,8 @@ import DiaconiaPage from './pages/DiaconiaPage'
 import DiaconiaStockCategoriesPage from './pages/DiaconiaStockCategoriesPage'
 import DiaconiaStockItemCreatePage from './pages/DiaconiaStockItemCreatePage'
 import DiaconiaStockItemEditPage from './pages/DiaconiaStockItemEditPage'
+import DiaconiaStockMovementCreatePage from './pages/DiaconiaStockMovementCreatePage'
+import DiaconiaStockMovementsPage from './pages/DiaconiaStockMovementsPage'
 import DiaconiaStockPage from './pages/DiaconiaStockPage'
 import DiscipleshipClassCreatePage from './pages/DiscipleshipClassCreatePage'
 import DiscipleshipClassDetailPage from './pages/DiscipleshipClassDetailPage'
@@ -142,6 +144,9 @@ function AdminRoutes() {
         <Route path="/diaconia" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/novo" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemCreatePage /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/entrada" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockMovementCreatePage movementType="ENTRADA" /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/saida" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockMovementCreatePage movementType="SAIDA" /></AuthorizedRoute>} />
+        <Route path="/diaconia/estoque/movimentacoes" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockMovementsPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/categorias" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockCategoriesPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/:id/editar" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemEditPage /></AuthorizedRoute>} />
         <Route path="/discipulado/nova" element={<AuthorizedRoute capability="DISCIPLESHIP_CLASS_CREATE"><DiscipleshipClassCreatePage /></AuthorizedRoute>} />

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.db.models.functions import Lower
 
@@ -89,3 +90,38 @@ class StockItem(models.Model):
     def save(self, *args, **kwargs):
         self.name = (self.name or "").strip()
         return super().save(*args, **kwargs)
+
+
+class StockMovement(models.Model):
+    class Type(models.TextChoices):
+        ENTRADA = "ENTRADA", "Entrada"
+        SAIDA = "SAIDA", "Saida"
+
+    item = models.ForeignKey(
+        StockItem,
+        verbose_name="Item",
+        on_delete=models.PROTECT,
+        related_name="movements",
+    )
+    movement_type = models.CharField("Tipo", max_length=20, choices=Type.choices)
+    quantity = models.PositiveIntegerField("Quantidade")
+    notes = models.TextField("Observacao", blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Criado por",
+        on_delete=models.PROTECT,
+        related_name="diaconia_stock_movements",
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "Movimentacao de estoque"
+        verbose_name_plural = "Movimentacoes de estoque"
+        indexes = [
+            models.Index(fields=["item", "-created_at"], name="diaconia_mov_item_created_idx"),
+            models.Index(fields=["-created_at"], name="diaconia_mov_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.item} - {self.get_movement_type_display()} {self.quantity}"

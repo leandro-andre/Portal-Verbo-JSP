@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createStockCategory,
   createStockItem,
+  createStockMovement,
   deactivateStockCategory,
   deactivateStockItem,
   getStockCategories,
   getStockItem,
   getStockItems,
+  getStockMovements,
   getStockUnits,
   reactivateStockCategory,
   reactivateStockItem,
@@ -16,6 +18,7 @@ import {
 import type {
   CreateStockCategoryInput,
   CreateStockItemInput,
+  CreateStockMovementInput,
   StockCategory,
   StockItem,
   UpdateStockCategoryInput,
@@ -25,6 +28,7 @@ import type {
 export const stockItemsQueryKey = ['diaconia', 'stock', 'items'] as const
 export const stockCategoriesQueryKey = ['diaconia', 'stock', 'categories'] as const
 export const stockUnitsQueryKey = ['diaconia', 'stock', 'units'] as const
+export const stockMovementsQueryKey = ['diaconia', 'stock', 'movements'] as const
 
 export function stockItemQueryKey(id: number) {
   return ['diaconia', 'stock', 'items', id] as const
@@ -50,12 +54,30 @@ export function useStockUnits() {
   return useQuery({ queryKey: stockUnitsQueryKey, queryFn: getStockUnits })
 }
 
+export function useStockMovements(itemId?: number) {
+  return useQuery({
+    queryKey: itemId ? [...stockMovementsQueryKey, itemId] : stockMovementsQueryKey,
+    queryFn: () => getStockMovements(itemId),
+  })
+}
+
 export function useCreateStockItem() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: CreateStockItemInput) => createStockItem(payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: stockItemsQueryKey })
+    },
+  })
+}
+
+export function useCreateStockMovement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateStockMovementInput) => createStockMovement(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: stockItemsQueryKey })
+      await queryClient.invalidateQueries({ queryKey: stockMovementsQueryKey })
     },
   })
 }

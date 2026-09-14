@@ -29,4 +29,10 @@ urlpatterns = [
         api_views.StockItemReactivateView.as_view(),
         name="diaconia-stock-item-reactivate",
     ),
+    path("stock/movements/", api_views.StockMovementListCreateView.as_view(), name="diaconia-stock-movement-list"),
+    path(
+        "stock/movements/<int:pk>/",
+        api_views.StockMovementDetailView.as_view(),
+        name="diaconia-stock-movement-detail",
+    ),
 ]

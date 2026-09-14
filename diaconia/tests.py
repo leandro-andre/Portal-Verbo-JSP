@@ -3,7 +3,7 @@ from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import StockCategory, StockItem
+from .models import StockCategory, StockItem, StockMovement
 
 
 class DiaconiaStockApiTests(TestCase):
@@ -19,6 +19,16 @@ class DiaconiaStockApiTests(TestCase):
 
     def login_manager(self):
         self.client.force_login(self.manager)
+
+    def create_item(self, *, is_active=True):
+        category = StockCategory.objects.create(name=f"Categoria {StockCategory.objects.count() + 1}")
+        return StockItem.objects.create(
+            name=f"Item {StockItem.objects.count() + 1}",
+            category=category,
+            unit=StockItem.Unit.UN,
+            minimum_stock=0,
+            is_active=is_active,
+        )
 
     def test_cria_categoria(self):
         self.login_manager()
@@ -171,3 +181,210 @@ class DiaconiaStockApiTests(TestCase):
             self.client.post(category_url, {"name": "Com permissao"}, content_type="application/json").status_code,
             201,
         )
+
+    def test_cria_entrada_e_saldo_aumenta(self):
+        self.login_manager()
+        item = self.create_item()
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": 12,
+                "notes": "Compra mensal",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["created_by"]["id"], self.manager.id)
+        item_list = self.client.get(reverse("diaconia-stock-item-list")).json()
+        self.assertEqual(item_list[0]["current_stock"], 12)
+
+    def test_cria_saida_e_saldo_diminui(self):
+        self.login_manager()
+        item = self.create_item()
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=12,
+            created_by=self.manager,
+        )
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.SAIDA,
+                "quantity": 3,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        item_list = self.client.get(reverse("diaconia-stock-item-list")).json()
+        self.assertEqual(item_list[0]["current_stock"], 9)
+
+    def test_impede_saida_maior_que_saldo(self):
+        self.login_manager()
+        item = self.create_item()
+        StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=3,
+            created_by=self.manager,
+        )
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.SAIDA,
+                "quantity": 5,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(StockMovement.objects.filter(item=item).count(), 1)
+        self.assertIn("saldo disponivel", response.json()["message"])
+
+    def test_impede_saida_com_saldo_zero(self):
+        self.login_manager()
+        item = self.create_item()
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.SAIDA,
+                "quantity": 1,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["message"], "Nao ha saldo disponivel para este item.")
+
+    def test_impede_movimentacao_de_item_inativo(self):
+        self.login_manager()
+        item = self.create_item(is_active=False)
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": 1,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("inativo", response.json()["message"])
+
+    def test_rejeita_quantidade_zero_e_negativa(self):
+        self.login_manager()
+        item = self.create_item()
+
+        zero = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": 0,
+            },
+            content_type="application/json",
+        )
+        negative = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": -1,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(zero.status_code, 400)
+        self.assertEqual(negative.status_code, 400)
+        self.assertIn("quantity", zero.json())
+        self.assertIn("quantity", negative.json())
+
+    def test_movimentacao_registra_usuario_autenticado(self):
+        self.login_manager()
+        item = self.create_item()
+
+        self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": 2,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(StockMovement.objects.get(item=item).created_by, self.manager)
+
+    def test_movimentacao_nao_pode_ser_editada_ou_excluida_por_api(self):
+        self.login_manager()
+        item = self.create_item()
+        movement = StockMovement.objects.create(
+            item=item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=2,
+            created_by=self.manager,
+        )
+        url = reverse("diaconia-stock-movement-detail", args=[movement.pk])
+
+        self.assertEqual(self.client.patch(url, {"quantity": 9}, content_type="application/json").status_code, 405)
+        self.assertEqual(self.client.delete(url).status_code, 405)
+        movement.refresh_from_db()
+        self.assertEqual(movement.quantity, 2)
+
+    def test_usuario_sem_capability_nao_pode_movimentar(self):
+        item = self.create_item()
+        self.client.force_login(self.viewer)
+
+        response = self.client.post(
+            reverse("diaconia-stock-movement-list"),
+            {
+                "item_id": item.pk,
+                "movement_type": StockMovement.Type.ENTRADA,
+                "quantity": 1,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_historico_lista_mais_recente_primeiro_e_filtra_item(self):
+        self.login_manager()
+        first_item = self.create_item()
+        second_item = self.create_item()
+        old_movement = StockMovement.objects.create(
+            item=first_item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=1,
+            created_by=self.manager,
+        )
+        new_movement = StockMovement.objects.create(
+            item=first_item,
+            movement_type=StockMovement.Type.SAIDA,
+            quantity=1,
+            created_by=self.manager,
+        )
+        StockMovement.objects.create(
+            item=second_item,
+            movement_type=StockMovement.Type.ENTRADA,
+            quantity=1,
+            created_by=self.manager,
+        )
+
+        response = self.client.get(f"{reverse('diaconia-stock-movement-list')}?item={first_item.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        movement_ids = [movement["id"] for movement in response.json()]
+        self.assertEqual(movement_ids, [new_movement.id, old_movement.id])

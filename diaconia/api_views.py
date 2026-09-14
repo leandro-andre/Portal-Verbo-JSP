@@ -5,19 +5,23 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import StockCategory, StockItem
+from .models import StockCategory, StockItem, StockMovement
 from .serializers import (
     StockCategorySerializer,
     StockCategoryUpdateSerializer,
     StockItemSerializer,
     StockItemUpdateSerializer,
+    StockMovementCreateSerializer,
+    StockMovementSerializer,
 )
 from .services import (
     DiaconiaError,
     create_stock_category,
     create_stock_item,
+    create_stock_movement,
     deactivate_stock_category,
     deactivate_stock_item,
+    get_stock_items_with_balance,
     reactivate_stock_category,
     reactivate_stock_item,
     update_stock_category,
@@ -128,7 +132,7 @@ class StockItemListCreateView(APIView):
     permission_classes = [HasDiaconiaStockPermission]
 
     def get(self, request):
-        queryset = StockItem.objects.select_related("category").order_by("name", "id")
+        queryset = get_stock_items_with_balance().order_by("name", "id")
         status_filter = (request.query_params.get("status") or "").upper()
         if status_filter == "ACTIVE":
             queryset = queryset.filter(is_active=True)
@@ -150,7 +154,7 @@ class StockItemDetailView(APIView):
     permission_classes = [HasDiaconiaStockPermission]
 
     def get_object(self, pk):
-        return get_object_or_404(StockItem.objects.select_related("category"), pk=pk)
+        return get_object_or_404(get_stock_items_with_balance(), pk=pk)
 
     def get(self, request, pk):
         ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
@@ -189,3 +193,48 @@ class StockItemReactivateView(APIView):
         except DiaconiaError as exc:
             return business_error_response(exc)
         return Response(StockItemSerializer(item).data)
+
+
+class StockMovementListCreateView(APIView):
+    permission_classes = [HasDiaconiaStockPermission]
+
+    def get(self, request):
+        queryset = (
+            StockMovement.objects.select_related("item", "created_by")
+            .order_by("-created_at", "-id")
+        )
+        item_id = request.query_params.get("item")
+        if item_id:
+            queryset = queryset.filter(item_id=item_id)
+        movement_type = (request.query_params.get("type") or "").upper()
+        if movement_type in StockMovement.Type.values:
+            queryset = queryset.filter(movement_type=movement_type)
+        return Response(StockMovementSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_STOCK_MANAGE))
+        serializer = StockMovementCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            movement = create_stock_movement(
+                item=serializer.validated_data["item"],
+                movement_type=serializer.validated_data["movement_type"],
+                quantity=serializer.validated_data["quantity"],
+                notes=serializer.validated_data.get("notes", ""),
+                created_by=request.user,
+            )
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(StockMovementSerializer(movement).data, status=status.HTTP_201_CREATED)
+
+
+class StockMovementDetailView(APIView):
+    permission_classes = [HasDiaconiaStockPermission]
+    permission_required = DIACONIA_VIEW
+
+    def get(self, request, pk):
+        movement = get_object_or_404(
+            StockMovement.objects.select_related("item", "created_by"),
+            pk=pk,
+        )
+        return Response(StockMovementSerializer(movement).data)

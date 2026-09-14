@@ -1,9 +1,11 @@
 import type {
   CreateStockCategoryInput,
   CreateStockItemInput,
+  CreateStockMovementInput,
   DiaconiaValidationErrors,
   StockCategory,
   StockItem,
+  StockMovement,
   StockUnit,
   UpdateStockCategoryInput,
   UpdateStockItemInput,
@@ -195,4 +197,25 @@ export function deactivateStockItem(id: number) {
 
 export function reactivateStockItem(id: number) {
   return runItemLifecycle(id, 'reactivate')
+}
+
+export async function getStockMovements(itemId?: number): Promise<StockMovement[]> {
+  const query = itemId ? `?item=${itemId}` : ''
+  const response = await fetch(`/api/diaconia/stock/movements/${query}`, { credentials: 'same-origin' })
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar movimentacoes.')
+  return response.json() as Promise<StockMovement[]>
+}
+
+export async function createStockMovement(payload: CreateStockMovementInput): Promise<StockMovement> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch('/api/diaconia/stock/movements/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (response.status === 400) throw new DiaconiaApiValidationError(parseValidationErrors(data))
+  if (!response.ok) throwBusinessError(data)
+  return data as StockMovement
 }

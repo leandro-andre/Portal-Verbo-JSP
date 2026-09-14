@@ -20,3 +20,18 @@ export const stockItemDefaultValues: StockItemFormValues = {
   notes: '',
   is_active: true,
 }
+
+export const stockMovementSchema = z.object({
+  item_id: z.coerce.number().int().positive('Selecione um item.'),
+  quantity: z.coerce.number().int('Informe um numero inteiro.').min(1, 'Informe uma quantidade maior que zero.'),
+  notes: z.string().trim(),
+})
+
+export type StockMovementFormValues = z.input<typeof stockMovementSchema>
+export type StockMovementFormData = z.output<typeof stockMovementSchema>
+
+export const stockMovementDefaultValues: StockMovementFormValues = {
+  item_id: 0,
+  quantity: 1,
+  notes: '',
+}

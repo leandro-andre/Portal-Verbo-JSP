@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import StockCategory, StockItem
+from .models import StockCategory, StockItem, StockMovement
 from .services import DiaconiaError, ensure_stock_category_active
 
 
@@ -55,6 +55,7 @@ class StockItemSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     unit_label = serializers.CharField(source="get_unit_display", read_only=True)
+    current_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = StockItem
@@ -65,13 +66,17 @@ class StockItemSerializer(serializers.ModelSerializer):
             "category_id",
             "unit",
             "unit_label",
+            "current_stock",
             "minimum_stock",
             "notes",
             "is_active",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "category", "unit_label", "is_active", "created_at", "updated_at"]
+        read_only_fields = ["id", "category", "unit_label", "current_stock", "is_active", "created_at", "updated_at"]
+
+    def get_current_stock(self, obj):
+        return getattr(obj, "current_stock", 0) or 0
 
     def validate(self, attrs):
         reject_extra_fields(
@@ -112,3 +117,64 @@ class StockItemUpdateSerializer(StockItemSerializer):
 class StockUnitSerializer(serializers.Serializer):
     value = serializers.CharField()
     label = serializers.CharField()
+
+
+class StockMovementItemSerializer(serializers.ModelSerializer):
+    unit_label = serializers.CharField(source="get_unit_display", read_only=True)
+
+    class Meta:
+        model = StockItem
+        fields = ["id", "name", "unit", "unit_label", "is_active"]
+        read_only_fields = fields
+
+
+class StockMovementUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    item = StockMovementItemSerializer(read_only=True)
+    movement_type_label = serializers.CharField(source="get_movement_type_display", read_only=True)
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StockMovement
+        fields = [
+            "id",
+            "item",
+            "movement_type",
+            "movement_type_label",
+            "quantity",
+            "notes",
+            "created_by",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_created_by(self, obj):
+        user = obj.created_by
+        return {
+            "id": user.id,
+            "display_name": getattr(user, "display_name", None) or user.get_full_name() or user.username,
+        }
+
+
+class StockMovementCreateSerializer(serializers.ModelSerializer):
+    item_id = serializers.PrimaryKeyRelatedField(
+        queryset=StockItem.objects.all(),
+        source="item",
+    )
+
+    class Meta:
+        model = StockMovement
+        fields = ["item_id", "movement_type", "quantity", "notes"]
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"item_id", "movement_type", "quantity", "notes"})
+        return attrs
+
+    def validate_quantity(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Informe uma quantidade maior que zero.")
+        return value

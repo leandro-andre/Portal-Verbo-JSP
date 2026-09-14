@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { FolderTree, Plus, RefreshCcw } from 'lucide-react'
+import { FolderTree, History, Minus, Plus, RefreshCcw } from 'lucide-react'
 import { DiaconiaHttpError } from '../api/diaconia'
 import { useCan } from '../hooks/useAuth'
 import { useStockItems } from '../hooks/useDiaconiaStock'
@@ -36,11 +36,25 @@ function DiaconiaStockPage() {
             <FolderTree size={17} aria-hidden="true" />
             Categorias
           </Link>
+          <Link className="button button--secondary" to="/diaconia/estoque/movimentacoes">
+            <History size={17} aria-hidden="true" />
+            Movimentacoes
+          </Link>
           {canManage ? (
-            <Link className="button button--primary" to="/diaconia/estoque/novo">
-              <Plus size={17} aria-hidden="true" />
-              Novo item
-            </Link>
+            <>
+              <Link className="button button--secondary" to="/diaconia/estoque/saida">
+                <Minus size={17} aria-hidden="true" />
+                Nova saida
+              </Link>
+              <Link className="button button--secondary" to="/diaconia/estoque/entrada">
+                <Plus size={17} aria-hidden="true" />
+                Nova entrada
+              </Link>
+              <Link className="button button--primary" to="/diaconia/estoque/novo">
+                <Plus size={17} aria-hidden="true" />
+                Novo item
+              </Link>
+            </>
           ) : null}
         </div>
       </div>
@@ -82,6 +96,7 @@ function DiaconiaStockPage() {
                 <th>Item</th>
                 <th>Categoria</th>
                 <th>Unidade</th>
+                <th>Saldo</th>
                 <th>Estoque minimo</th>
                 <th>Status</th>
                 <th aria-label="Acao" />
@@ -96,6 +111,7 @@ function DiaconiaStockPage() {
                   </td>
                   <td>{item.category.name}</td>
                   <td>{item.unit}</td>
+                  <td>{item.current_stock}</td>
                   <td>{minimumStockLabel(item.minimum_stock)}</td>
                   <td><StockStatusBadge active={item.is_active} /></td>
                   <td>
