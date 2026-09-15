@@ -16,6 +16,11 @@ import DiaconiaCountingDetailPage from './pages/DiaconiaCountingDetailPage'
 import DiaconiaCountingEditPage from './pages/DiaconiaCountingEditPage'
 import DiaconiaCountingEnvironmentsPage from './pages/DiaconiaCountingEnvironmentsPage'
 import DiaconiaCountingPage from './pages/DiaconiaCountingPage'
+import DiaconiaInventoryItemCreatePage from './pages/DiaconiaInventoryItemCreatePage'
+import DiaconiaInventoryItemEditPage from './pages/DiaconiaInventoryItemEditPage'
+import DiaconiaInventoryItemsPage from './pages/DiaconiaInventoryItemsPage'
+import DiaconiaInventoryPage from './pages/DiaconiaInventoryPage'
+import DiaconiaInventoryRegistryPage from './pages/DiaconiaInventoryRegistryPage'
 import DiaconiaStockCategoriesPage from './pages/DiaconiaStockCategoriesPage'
 import DiaconiaStockItemCreatePage from './pages/DiaconiaStockItemCreatePage'
 import DiaconiaStockItemEditPage from './pages/DiaconiaStockItemEditPage'
@@ -152,6 +157,12 @@ function AdminRoutes() {
         <Route path="/diaconia/contagens/:id/editar" element={<AuthorizedRoute capability="DIACONIA_COUNTING_MANAGE"><DiaconiaCountingEditPage /></AuthorizedRoute>} />
         <Route path="/diaconia/contagens/:id" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaCountingDetailPage /></AuthorizedRoute>} />
         <Route path="/diaconia/contagens/ambientes" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaCountingEnvironmentsPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/itens" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryItemsPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/itens/novo" element={<AuthorizedRoute capability="DIACONIA_INVENTORY_MANAGE"><DiaconiaInventoryItemCreatePage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/itens/:id/editar" element={<AuthorizedRoute capability="DIACONIA_INVENTORY_MANAGE"><DiaconiaInventoryItemEditPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/categorias" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryRegistryPage kind="categories" /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/locais" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryRegistryPage kind="locations" /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaStockPage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/novo" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockItemCreatePage /></AuthorizedRoute>} />
         <Route path="/diaconia/estoque/entrada" element={<AuthorizedRoute capability="DIACONIA_STOCK_MANAGE"><DiaconiaStockMovementCreatePage movementType="ENTRADA" /></AuthorizedRoute>} />

@@ -21,7 +21,7 @@ const areas = [
     title: 'Inventario',
     description: 'Controle dos bens e quantidades administrados pela Diaconia.',
     action: 'Acessar inventario',
-    to: null,
+    to: '/diaconia/inventario',
     icon: Archive,
   },
 ]
@@ -71,16 +71,9 @@ function DiaconiaPage() {
                   </div>
                 ) : null}
               </div>
-              {area.to ? (
-                <Link className="button button--secondary" to={area.to}>
-                  {area.action}
-                </Link>
-              ) : (
-                <button className="button button--secondary" type="button" disabled>
-                  {area.action}
-                  <span className="status-badge diaconia-area-card__badge">Em breve</span>
-                </button>
-              )}
+              <Link className="button button--secondary" to={area.to}>
+                {area.action}
+              </Link>
             </article>
           )
         })}

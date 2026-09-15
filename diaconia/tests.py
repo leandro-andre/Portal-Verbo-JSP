@@ -6,7 +6,17 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
+from .models import (
+    AttendanceCount,
+    AttendanceCountEntry,
+    CountingEnvironment,
+    InventoryCategory,
+    InventoryItem,
+    InventoryLocation,
+    StockCategory,
+    StockItem,
+    StockMovement,
+)
 from .services import StockStatus
 
 
@@ -19,6 +29,10 @@ class DiaconiaStockApiTests(TestCase):
             username="diaconia.counting.manager",
             password="senha-forte-123",
         )
+        self.inventory_manager = self.user_model.objects.create_user(
+            username="diaconia.inventory.manager",
+            password="senha-forte-123",
+        )
         self.no_access = self.user_model.objects.create_user(username="diaconia.no.access", password="senha-forte-123")
         view_permission = Permission.objects.get(content_type__app_label="diaconia", codename="view_diaconia_module")
         manage_permission = Permission.objects.get(content_type__app_label="diaconia", codename="manage_diaconia_stock")
@@ -26,9 +40,14 @@ class DiaconiaStockApiTests(TestCase):
             content_type__app_label="diaconia",
             codename="manage_diaconia_counting",
         )
+        inventory_permission = Permission.objects.get(
+            content_type__app_label="diaconia",
+            codename="manage_diaconia_inventory",
+        )
         self.viewer.user_permissions.add(view_permission)
-        self.manager.user_permissions.add(view_permission, manage_permission, counting_permission)
+        self.manager.user_permissions.add(view_permission, manage_permission, counting_permission, inventory_permission)
         self.counting_manager.user_permissions.add(view_permission, counting_permission)
+        self.inventory_manager.user_permissions.add(view_permission, inventory_permission)
 
     def login_manager(self):
         self.client.force_login(self.manager)
@@ -1141,3 +1160,321 @@ class DiaconiaStockApiTests(TestCase):
 
         self.client.force_login(self.counting_manager)
         self.assertEqual(self.client.patch(url, payload, content_type="application/json").status_code, 200)
+
+    def test_cria_categoria_de_inventario_com_trim(self):
+        self.client.force_login(self.inventory_manager)
+
+        response = self.client.post(
+            reverse("diaconia-inventory-category-list"),
+            {"name": "  Mobiliario  ", "description": "Cadeiras e mesas"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(InventoryCategory.objects.filter(name="Mobiliario", is_active=True).exists())
+
+    def test_categoria_de_inventario_exige_nome_e_bloqueia_duplicidade(self):
+        self.client.force_login(self.inventory_manager)
+        InventoryCategory.objects.create(name="Audio")
+
+        blank = self.client.post(
+            reverse("diaconia-inventory-category-list"),
+            {"name": "   ", "description": ""},
+            content_type="application/json",
+        )
+        duplicate = self.client.post(
+            reverse("diaconia-inventory-category-list"),
+            {"name": "audio", "description": ""},
+            content_type="application/json",
+        )
+
+        self.assertEqual(blank.status_code, 400)
+        self.assertIn("name", blank.json())
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("name", duplicate.json())
+
+    def test_edita_inativa_e_reativa_categoria_de_inventario(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Video")
+
+        update = self.client.patch(
+            reverse("diaconia-inventory-category-detail", args=[category.pk]),
+            {"name": "Video e projecao", "description": "Projetores e telas"},
+            content_type="application/json",
+        )
+        deactivate = self.client.post(reverse("diaconia-inventory-category-deactivate", args=[category.pk]))
+        reactivate = self.client.post(reverse("diaconia-inventory-category-reactivate", args=[category.pk]))
+
+        category.refresh_from_db()
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(deactivate.status_code, 200)
+        self.assertEqual(reactivate.status_code, 200)
+        self.assertEqual(category.name, "Video e projecao")
+        self.assertTrue(category.is_active)
+
+    def test_filtra_e_busca_categoria_de_inventario(self):
+        self.client.force_login(self.viewer)
+        InventoryCategory.objects.create(name="Mobiliario")
+        InventoryCategory.objects.create(name="Audio", is_active=False)
+
+        active = self.client.get(f"{reverse('diaconia-inventory-category-list')}?status=ACTIVE")
+        inactive = self.client.get(f"{reverse('diaconia-inventory-category-list')}?status=INACTIVE")
+        search = self.client.get(f"{reverse('diaconia-inventory-category-list')}?search=mob")
+
+        self.assertEqual([item["name"] for item in active.json()], ["Mobiliario"])
+        self.assertEqual([item["name"] for item in inactive.json()], ["Audio"])
+        self.assertEqual([item["name"] for item in search.json()], ["Mobiliario"])
+
+    def test_permissoes_de_categoria_de_inventario(self):
+        category = InventoryCategory.objects.create(name="Mobiliario")
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-category-list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-category-detail", args=[category.pk])).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("diaconia-inventory-category-list"),
+                {"name": "Sem permissao"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-category-list")).status_code, 403)
+
+    def test_cria_local_de_inventario_com_trim(self):
+        self.client.force_login(self.inventory_manager)
+
+        response = self.client.post(
+            reverse("diaconia-inventory-location-list"),
+            {"name": "  Deposito da Diaconia  ", "description": "Armazenamento"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(InventoryLocation.objects.filter(name="Deposito da Diaconia", is_active=True).exists())
+
+    def test_local_de_inventario_exige_nome_e_bloqueia_duplicidade(self):
+        self.client.force_login(self.inventory_manager)
+        InventoryLocation.objects.create(name="Templo")
+
+        blank = self.client.post(
+            reverse("diaconia-inventory-location-list"),
+            {"name": "   ", "description": ""},
+            content_type="application/json",
+        )
+        duplicate = self.client.post(
+            reverse("diaconia-inventory-location-list"),
+            {"name": "templo", "description": ""},
+            content_type="application/json",
+        )
+
+        self.assertEqual(blank.status_code, 400)
+        self.assertIn("name", blank.json())
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("name", duplicate.json())
+
+    def test_edita_inativa_e_reativa_local_de_inventario(self):
+        self.client.force_login(self.inventory_manager)
+        location = InventoryLocation.objects.create(name="Sala Infantil")
+
+        update = self.client.patch(
+            reverse("diaconia-inventory-location-detail", args=[location.pk]),
+            {"name": "Infantil", "description": "Sala das criancas"},
+            content_type="application/json",
+        )
+        deactivate = self.client.post(reverse("diaconia-inventory-location-deactivate", args=[location.pk]))
+        reactivate = self.client.post(reverse("diaconia-inventory-location-reactivate", args=[location.pk]))
+
+        location.refresh_from_db()
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(deactivate.status_code, 200)
+        self.assertEqual(reactivate.status_code, 200)
+        self.assertEqual(location.name, "Infantil")
+        self.assertTrue(location.is_active)
+
+    def test_filtra_e_busca_local_de_inventario(self):
+        self.client.force_login(self.viewer)
+        InventoryLocation.objects.create(name="Templo")
+        InventoryLocation.objects.create(name="Deposito", is_active=False)
+
+        active = self.client.get(f"{reverse('diaconia-inventory-location-list')}?status=ACTIVE")
+        inactive = self.client.get(f"{reverse('diaconia-inventory-location-list')}?status=INACTIVE")
+        search = self.client.get(f"{reverse('diaconia-inventory-location-list')}?search=temp")
+
+        self.assertEqual([item["name"] for item in active.json()], ["Templo"])
+        self.assertEqual([item["name"] for item in inactive.json()], ["Deposito"])
+        self.assertEqual([item["name"] for item in search.json()], ["Templo"])
+
+    def test_permissoes_de_local_de_inventario(self):
+        location = InventoryLocation.objects.create(name="Templo")
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-location-list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-location-detail", args=[location.pk])).status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                reverse("diaconia-inventory-location-list"),
+                {"name": "Sem permissao"},
+                content_type="application/json",
+            ).status_code,
+            403,
+        )
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-location-list")).status_code, 403)
+
+    def test_cria_item_de_inventario_valido_com_trim(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Mobiliario")
+
+        response = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "  Cadeira plastica  ", "description": "Branca", "category_id": category.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(InventoryItem.objects.filter(name="Cadeira plastica", category=category, is_active=True).exists())
+        self.assertEqual(response.json()["category"]["name"], "Mobiliario")
+
+    def test_item_de_inventario_valida_nome_categoria_e_duplicidade(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Mobiliario")
+        InventoryItem.objects.create(name="Cadeira plastica", category=category)
+
+        blank_name = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "   ", "description": "", "category_id": category.id},
+            content_type="application/json",
+        )
+        missing_category = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "Mesa", "description": ""},
+            content_type="application/json",
+        )
+        duplicated = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "cadeira plastica", "description": "", "category_id": category.id},
+            content_type="application/json",
+        )
+        nonexistent = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "Projetor", "description": "", "category_id": 999},
+            content_type="application/json",
+        )
+
+        self.assertEqual(blank_name.status_code, 400)
+        self.assertIn("name", blank_name.json())
+        self.assertEqual(missing_category.status_code, 400)
+        self.assertIn("category_id", missing_category.json())
+        self.assertEqual(duplicated.status_code, 400)
+        self.assertIn("name", duplicated.json())
+        self.assertEqual(nonexistent.status_code, 400)
+        self.assertIn("category_id", nonexistent.json())
+
+    def test_item_rejeita_categoria_inativa_na_criacao(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Audio", is_active=False)
+
+        response = self.client.post(
+            reverse("diaconia-inventory-item-list"),
+            {"name": "Caixa de som", "description": "", "category_id": category.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["category_id"][0], "A categoria selecionada esta inativa.")
+        self.assertFalse(InventoryItem.objects.exists())
+
+    def test_edita_item_de_inventario_e_troca_para_categoria_ativa(self):
+        self.client.force_login(self.inventory_manager)
+        old_category = InventoryCategory.objects.create(name="Mobiliario")
+        new_category = InventoryCategory.objects.create(name="Equipamentos")
+        item = InventoryItem.objects.create(name="Mesa", category=old_category)
+
+        response = self.client.patch(
+            reverse("diaconia-inventory-item-detail", args=[item.pk]),
+            {"name": "Mesa dobravel", "description": "1,80m", "category_id": new_category.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.name, "Mesa dobravel")
+        self.assertEqual(item.description, "1,80m")
+        self.assertEqual(item.category, new_category)
+
+    def test_edicao_mantem_categoria_atual_inativa_mas_nao_troca_para_outra_inativa(self):
+        self.client.force_login(self.inventory_manager)
+        current_category = InventoryCategory.objects.create(name="Mobiliario", is_active=False)
+        other_inactive = InventoryCategory.objects.create(name="Audio", is_active=False)
+        item = InventoryItem.objects.create(name="Cadeira", category=current_category)
+
+        keep_current = self.client.patch(
+            reverse("diaconia-inventory-item-detail", args=[item.pk]),
+            {"name": "Cadeira plastica", "description": "", "category_id": current_category.id},
+            content_type="application/json",
+        )
+        change_to_inactive = self.client.patch(
+            reverse("diaconia-inventory-item-detail", args=[item.pk]),
+            {"name": "Cadeira plastica", "description": "", "category_id": other_inactive.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(keep_current.status_code, 200)
+        self.assertEqual(change_to_inactive.status_code, 400)
+        self.assertEqual(change_to_inactive.json()["category_id"][0], "A categoria selecionada esta inativa.")
+
+    def test_inativa_reativa_e_consulta_item_inativo_de_inventario(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Mobiliario")
+        item = InventoryItem.objects.create(name="Cadeira", category=category)
+
+        deactivate = self.client.post(reverse("diaconia-inventory-item-deactivate", args=[item.pk]))
+        detail = self.client.get(reverse("diaconia-inventory-item-detail", args=[item.pk]))
+        reactivate = self.client.post(reverse("diaconia-inventory-item-reactivate", args=[item.pk]))
+
+        item.refresh_from_db()
+        self.assertEqual(deactivate.status_code, 200)
+        self.assertEqual(detail.status_code, 200)
+        self.assertFalse(detail.json()["is_active"])
+        self.assertEqual(reactivate.status_code, 200)
+        self.assertTrue(item.is_active)
+
+    def test_filtra_itens_de_inventario(self):
+        self.client.force_login(self.viewer)
+        mobiliario = InventoryCategory.objects.create(name="Mobiliario")
+        audio = InventoryCategory.objects.create(name="Audio")
+        InventoryItem.objects.create(name="Cadeira plastica", category=mobiliario)
+        InventoryItem.objects.create(name="Caixa de som", category=audio, is_active=False)
+
+        search = self.client.get(f"{reverse('diaconia-inventory-item-list')}?search=cadeira")
+        by_category = self.client.get(f"{reverse('diaconia-inventory-item-list')}?category={audio.id}")
+        active = self.client.get(f"{reverse('diaconia-inventory-item-list')}?status=ACTIVE")
+        inactive = self.client.get(f"{reverse('diaconia-inventory-item-list')}?status=INACTIVE")
+        combined = self.client.get(f"{reverse('diaconia-inventory-item-list')}?search=caixa&category={audio.id}&status=INACTIVE")
+
+        self.assertEqual([item["name"] for item in search.json()], ["Cadeira plastica"])
+        self.assertEqual([item["name"] for item in by_category.json()], ["Caixa de som"])
+        self.assertEqual([item["name"] for item in active.json()], ["Cadeira plastica"])
+        self.assertEqual([item["name"] for item in inactive.json()], ["Caixa de som"])
+        self.assertEqual([item["name"] for item in combined.json()], ["Caixa de som"])
+
+    def test_permissoes_de_item_de_inventario(self):
+        category = InventoryCategory.objects.create(name="Mobiliario")
+        item = InventoryItem.objects.create(name="Cadeira", category=category)
+        payload = {"name": "Mesa", "description": "", "category_id": category.id}
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-item-list")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-item-detail", args=[item.pk])).status_code, 200)
+        self.assertEqual(self.client.post(reverse("diaconia-inventory-item-list"), payload, content_type="application/json").status_code, 403)
+        self.assertEqual(self.client.patch(reverse("diaconia-inventory-item-detail", args=[item.pk]), payload, content_type="application/json").status_code, 403)
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-item-list")).status_code, 403)
+
+        self.client.force_login(self.inventory_manager)
+        self.assertEqual(self.client.post(reverse("diaconia-inventory-item-list"), payload, content_type="application/json").status_code, 201)

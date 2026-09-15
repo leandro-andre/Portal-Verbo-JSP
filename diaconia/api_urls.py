@@ -5,6 +5,66 @@ from . import api_views
 
 urlpatterns = [
     path(
+        "inventory/items/",
+        api_views.InventoryItemListCreateView.as_view(),
+        name="diaconia-inventory-item-list",
+    ),
+    path(
+        "inventory/items/<int:pk>/",
+        api_views.InventoryItemDetailView.as_view(),
+        name="diaconia-inventory-item-detail",
+    ),
+    path(
+        "inventory/items/<int:pk>/deactivate/",
+        api_views.InventoryItemDeactivateView.as_view(),
+        name="diaconia-inventory-item-deactivate",
+    ),
+    path(
+        "inventory/items/<int:pk>/reactivate/",
+        api_views.InventoryItemReactivateView.as_view(),
+        name="diaconia-inventory-item-reactivate",
+    ),
+    path(
+        "inventory/categories/",
+        api_views.InventoryCategoryListCreateView.as_view(),
+        name="diaconia-inventory-category-list",
+    ),
+    path(
+        "inventory/categories/<int:pk>/",
+        api_views.InventoryCategoryDetailView.as_view(),
+        name="diaconia-inventory-category-detail",
+    ),
+    path(
+        "inventory/categories/<int:pk>/deactivate/",
+        api_views.InventoryCategoryDeactivateView.as_view(),
+        name="diaconia-inventory-category-deactivate",
+    ),
+    path(
+        "inventory/categories/<int:pk>/reactivate/",
+        api_views.InventoryCategoryReactivateView.as_view(),
+        name="diaconia-inventory-category-reactivate",
+    ),
+    path(
+        "inventory/locations/",
+        api_views.InventoryLocationListCreateView.as_view(),
+        name="diaconia-inventory-location-list",
+    ),
+    path(
+        "inventory/locations/<int:pk>/",
+        api_views.InventoryLocationDetailView.as_view(),
+        name="diaconia-inventory-location-detail",
+    ),
+    path(
+        "inventory/locations/<int:pk>/deactivate/",
+        api_views.InventoryLocationDeactivateView.as_view(),
+        name="diaconia-inventory-location-deactivate",
+    ),
+    path(
+        "inventory/locations/<int:pk>/reactivate/",
+        api_views.InventoryLocationReactivateView.as_view(),
+        name="diaconia-inventory-location-reactivate",
+    ),
+    path(
         "counting/counts/",
         api_views.AttendanceCountListCreateView.as_view(),
         name="diaconia-attendance-count-list",

@@ -2,7 +2,17 @@ from django.db import IntegrityError, transaction
 from django.db.models import Case, CharField, F, IntegerField, Sum, Value, When
 from django.db.models.functions import Coalesce
 
-from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
+from .models import (
+    AttendanceCount,
+    AttendanceCountEntry,
+    CountingEnvironment,
+    InventoryCategory,
+    InventoryItem,
+    InventoryLocation,
+    StockCategory,
+    StockItem,
+    StockMovement,
+)
 
 
 INVALID_STOCK_CATEGORY_TRANSITION = "INVALID_STOCK_CATEGORY_TRANSITION"
@@ -12,6 +22,10 @@ STOCK_ITEM_INACTIVE = "STOCK_ITEM_INACTIVE"
 INVALID_STOCK_MOVEMENT_QUANTITY = "INVALID_STOCK_MOVEMENT_QUANTITY"
 INSUFFICIENT_STOCK = "INSUFFICIENT_STOCK"
 INVALID_COUNTING_ENVIRONMENT_TRANSITION = "INVALID_COUNTING_ENVIRONMENT_TRANSITION"
+INVALID_INVENTORY_CATEGORY_TRANSITION = "INVALID_INVENTORY_CATEGORY_TRANSITION"
+INVENTORY_CATEGORY_INACTIVE = "INVENTORY_CATEGORY_INACTIVE"
+INVALID_INVENTORY_ITEM_TRANSITION = "INVALID_INVENTORY_ITEM_TRANSITION"
+INVALID_INVENTORY_LOCATION_TRANSITION = "INVALID_INVENTORY_LOCATION_TRANSITION"
 ATTENDANCE_COUNT_DUPLICATE = "ATTENDANCE_COUNT_DUPLICATE"
 ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH = "ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH"
 ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS = "ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS"
@@ -452,3 +466,129 @@ def update_attendance_count(attendance_count, *, date, shift, notes="", entries)
             ) from exc
 
     return get_attendance_count_queryset().get(pk=attendance_count.pk)
+
+
+def create_inventory_category(*, name, description=""):
+    return InventoryCategory.objects.create(name=name, description=description, is_active=True)
+
+
+def update_inventory_category(category, *, name=None, description=None):
+    if name is not None:
+        category.name = name
+    if description is not None:
+        category.description = description
+    category.save()
+    return category
+
+
+def deactivate_inventory_category(category):
+    if not category.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_CATEGORY_TRANSITION,
+            "Somente categorias ativas podem ser inativadas.",
+        )
+    category.is_active = False
+    category.save(update_fields=["is_active", "updated_at"])
+    return category
+
+
+def reactivate_inventory_category(category):
+    if category.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_CATEGORY_TRANSITION,
+            "Somente categorias inativas podem ser reativadas.",
+        )
+    category.is_active = True
+    category.save(update_fields=["is_active", "updated_at"])
+    return category
+
+
+def create_inventory_location(*, name, description=""):
+    return InventoryLocation.objects.create(name=name, description=description, is_active=True)
+
+
+def update_inventory_location(location, *, name=None, description=None):
+    if name is not None:
+        location.name = name
+    if description is not None:
+        location.description = description
+    location.save()
+    return location
+
+
+def deactivate_inventory_location(location):
+    if not location.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_LOCATION_TRANSITION,
+            "Somente locais ativos podem ser inativados.",
+        )
+    location.is_active = False
+    location.save(update_fields=["is_active", "updated_at"])
+    return location
+
+
+def reactivate_inventory_location(location):
+    if location.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_LOCATION_TRANSITION,
+            "Somente locais inativos podem ser reativados.",
+        )
+    location.is_active = True
+    location.save(update_fields=["is_active", "updated_at"])
+    return location
+
+
+def get_inventory_items_queryset():
+    return InventoryItem.objects.select_related("category")
+
+
+def ensure_inventory_category_active(category):
+    if not category.is_active:
+        raise DiaconiaError(
+            INVENTORY_CATEGORY_INACTIVE,
+            "A categoria selecionada esta inativa.",
+        )
+
+
+def create_inventory_item(*, name, category, description=""):
+    ensure_inventory_category_active(category)
+    return InventoryItem.objects.create(
+        name=name,
+        category=category,
+        description=description,
+        is_active=True,
+    )
+
+
+def update_inventory_item(item, *, name=None, category=None, description=None):
+    if category is not None and category.pk != item.category_id:
+        ensure_inventory_category_active(category)
+        item.category = category
+    if name is not None:
+        item.name = name
+    if description is not None:
+        item.description = description
+    item.save()
+    return item
+
+
+def deactivate_inventory_item(item):
+    if not item.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_ITEM_TRANSITION,
+            "Somente itens ativos podem ser inativados.",
+        )
+    item.is_active = False
+    item.save(update_fields=["is_active", "updated_at"])
+    return item
+
+
+def reactivate_inventory_item(item):
+    if item.is_active:
+        raise DiaconiaError(
+            INVALID_INVENTORY_ITEM_TRANSITION,
+            "Somente itens inativos podem ser reativados.",
+        )
+    item.is_active = True
+    item.save(update_fields=["is_active", "updated_at"])
+    return item

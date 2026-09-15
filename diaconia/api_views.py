@@ -5,7 +5,7 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import CountingEnvironment, StockCategory, StockItem, StockMovement
+from .models import CountingEnvironment, InventoryCategory, InventoryItem, InventoryLocation, StockCategory, StockItem, StockMovement
 from .serializers import (
     AttendanceCountCreateSerializer,
     AttendanceCountFilterSerializer,
@@ -14,6 +14,12 @@ from .serializers import (
     AttendanceCountUpdateSerializer,
     CountingEnvironmentSerializer,
     CountingEnvironmentUpdateSerializer,
+    InventoryCategorySerializer,
+    InventoryCategoryUpdateSerializer,
+    InventoryItemSerializer,
+    InventoryItemUpdateSerializer,
+    InventoryLocationSerializer,
+    InventoryLocationUpdateSerializer,
     StockCategorySerializer,
     StockCategoryUpdateSerializer,
     StockItemSerializer,
@@ -28,19 +34,32 @@ from .services import (
     create_stock_item,
     create_stock_movement,
     create_counting_environment,
+    create_inventory_category,
+    create_inventory_item,
+    create_inventory_location,
     deactivate_counting_environment,
+    deactivate_inventory_category,
+    deactivate_inventory_item,
+    deactivate_inventory_location,
     deactivate_stock_category,
     deactivate_stock_item,
     get_attendance_count_list_queryset,
     get_attendance_count_queryset,
+    get_inventory_items_queryset,
     get_stock_items_with_status,
     get_stock_summary,
     reactivate_stock_category,
     reactivate_stock_item,
     reactivate_counting_environment,
+    reactivate_inventory_category,
+    reactivate_inventory_item,
+    reactivate_inventory_location,
     update_stock_category,
     update_stock_item,
     update_counting_environment,
+    update_inventory_category,
+    update_inventory_item,
+    update_inventory_location,
     update_attendance_count,
 )
 
@@ -48,6 +67,7 @@ from .services import (
 DIACONIA_VIEW = "diaconia.view_diaconia_module"
 DIACONIA_STOCK_MANAGE = "diaconia.manage_diaconia_stock"
 DIACONIA_COUNTING_MANAGE = "diaconia.manage_diaconia_counting"
+DIACONIA_INVENTORY_MANAGE = "diaconia.manage_diaconia_inventory"
 
 
 class HasDiaconiaPermission(BasePermission):
@@ -420,3 +440,213 @@ class AttendanceCountDetailView(APIView):
         except DiaconiaError as exc:
             return business_error_response(exc)
         return Response(AttendanceCountSerializer(attendance_count).data)
+
+
+class InventoryCategoryListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_INVENTORY_MANAGE}
+
+    def get(self, request):
+        queryset = InventoryCategory.objects.order_by("name", "id")
+        status_filter = (request.query_params.get("status") or "").upper()
+        if status_filter == "ACTIVE":
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == "INACTIVE":
+            queryset = queryset.filter(is_active=False)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        return Response(InventoryCategorySerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryCategorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        category = create_inventory_category(**serializer.validated_data)
+        return Response(InventoryCategorySerializer(category).data, status=status.HTTP_201_CREATED)
+
+
+class InventoryCategoryDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_INVENTORY_MANAGE}
+
+    def get_object(self, pk):
+        return get_object_or_404(InventoryCategory, pk=pk)
+
+    def get(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        return Response(InventoryCategorySerializer(self.get_object(pk)).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryCategoryUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        category = update_inventory_category(serializer.instance, **serializer.validated_data)
+        return Response(InventoryCategorySerializer(category).data)
+
+
+class InventoryCategoryDeactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            category = deactivate_inventory_category(get_object_or_404(InventoryCategory, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryCategorySerializer(category).data)
+
+
+class InventoryCategoryReactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            category = reactivate_inventory_category(get_object_or_404(InventoryCategory, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryCategorySerializer(category).data)
+
+
+class InventoryLocationListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_INVENTORY_MANAGE}
+
+    def get(self, request):
+        queryset = InventoryLocation.objects.order_by("name", "id")
+        status_filter = (request.query_params.get("status") or "").upper()
+        if status_filter == "ACTIVE":
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == "INACTIVE":
+            queryset = queryset.filter(is_active=False)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        return Response(InventoryLocationSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryLocationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        location = create_inventory_location(**serializer.validated_data)
+        return Response(InventoryLocationSerializer(location).data, status=status.HTTP_201_CREATED)
+
+
+class InventoryLocationDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_INVENTORY_MANAGE}
+
+    def get_object(self, pk):
+        return get_object_or_404(InventoryLocation, pk=pk)
+
+    def get(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        return Response(InventoryLocationSerializer(self.get_object(pk)).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryLocationUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        location = update_inventory_location(serializer.instance, **serializer.validated_data)
+        return Response(InventoryLocationSerializer(location).data)
+
+
+class InventoryLocationDeactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            location = deactivate_inventory_location(get_object_or_404(InventoryLocation, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryLocationSerializer(location).data)
+
+
+class InventoryLocationReactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            location = reactivate_inventory_location(get_object_or_404(InventoryLocation, pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryLocationSerializer(location).data)
+
+
+class InventoryItemListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_INVENTORY_MANAGE}
+
+    def get(self, request):
+        queryset = get_inventory_items_queryset().order_by("name", "id")
+        status_filter = (request.query_params.get("status") or "").upper()
+        if status_filter == "ACTIVE":
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == "INACTIVE":
+            queryset = queryset.filter(is_active=False)
+        category_id = request.query_params.get("category")
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        return Response(InventoryItemSerializer(queryset, many=True).data)
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = create_inventory_item(**serializer.validated_data)
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+class InventoryItemDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_INVENTORY_MANAGE}
+
+    def get_object(self, pk):
+        return get_object_or_404(get_inventory_items_queryset(), pk=pk)
+
+    def get(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        return Response(InventoryItemSerializer(self.get_object(pk)).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryItemUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        try:
+            item = update_inventory_item(serializer.instance, **serializer.validated_data)
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryItemSerializer(item).data)
+
+
+class InventoryItemDeactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            item = deactivate_inventory_item(get_object_or_404(get_inventory_items_queryset(), pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryItemSerializer(item).data)
+
+
+class InventoryItemReactivateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_INVENTORY_MANAGE
+
+    def post(self, request, pk):
+        try:
+            item = reactivate_inventory_item(get_object_or_404(get_inventory_items_queryset(), pk=pk))
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryItemSerializer(item).data)

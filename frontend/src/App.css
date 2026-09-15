@@ -3499,7 +3499,8 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .diaconia-counting-table {
+  .diaconia-counting-table,
+  .diaconia-inventory-items-table {
     display: none;
   }
 

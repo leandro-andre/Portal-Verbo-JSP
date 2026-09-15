@@ -1,9 +1,20 @@
 from rest_framework import serializers
 
-from .models import AttendanceCount, AttendanceCountEntry, CountingEnvironment, StockCategory, StockItem, StockMovement
+from .models import (
+    AttendanceCount,
+    AttendanceCountEntry,
+    CountingEnvironment,
+    InventoryCategory,
+    InventoryItem,
+    InventoryLocation,
+    StockCategory,
+    StockItem,
+    StockMovement,
+)
 from .services import (
     DiaconiaError,
     classify_stock_status,
+    ensure_inventory_category_active,
     ensure_stock_category_active,
     get_attendance_count_total,
     stock_status_label,
@@ -242,6 +253,121 @@ class CountingEnvironmentSerializer(serializers.ModelSerializer):
 class CountingEnvironmentUpdateSerializer(CountingEnvironmentSerializer):
     class Meta(CountingEnvironmentSerializer.Meta):
         fields = ["name", "description"]
+        read_only_fields = []
+
+
+class InventoryCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryCategory
+        fields = ["id", "name", "description", "is_active", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_active", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"name", "description"})
+        return attrs
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Informe o nome da categoria.")
+        queryset = InventoryCategory.objects.filter(name__iexact=value)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ja existe uma categoria com este nome.")
+        return value
+
+
+class InventoryCategoryUpdateSerializer(InventoryCategorySerializer):
+    class Meta(InventoryCategorySerializer.Meta):
+        fields = ["name", "description"]
+        read_only_fields = []
+
+
+class InventoryLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryLocation
+        fields = ["id", "name", "description", "is_active", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_active", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"name", "description"})
+        return attrs
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Informe o nome do local.")
+        queryset = InventoryLocation.objects.filter(name__iexact=value)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ja existe um local com este nome.")
+        return value
+
+
+class InventoryLocationUpdateSerializer(InventoryLocationSerializer):
+    class Meta(InventoryLocationSerializer.Meta):
+        fields = ["name", "description"]
+        read_only_fields = []
+
+
+class InventoryCategoryOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryCategory
+        fields = ["id", "name", "is_active"]
+        read_only_fields = fields
+
+
+class InventoryItemSerializer(serializers.ModelSerializer):
+    category = InventoryCategoryOptionSerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=InventoryCategory.objects.all(),
+        source="category",
+        write_only=True,
+    )
+
+    class Meta:
+        model = InventoryItem
+        fields = [
+            "id",
+            "name",
+            "description",
+            "category",
+            "category_id",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "category", "is_active", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"name", "description", "category_id"})
+        category = attrs.get("category")
+        if category is not None:
+            instance_category_id = getattr(self.instance, "category_id", None)
+            if category.pk != instance_category_id:
+                try:
+                    ensure_inventory_category_active(category)
+                except DiaconiaError as exc:
+                    raise serializers.ValidationError({"category_id": exc.message}) from exc
+        return attrs
+
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Informe o nome do item.")
+        queryset = InventoryItem.objects.filter(name__iexact=value)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ja existe um item com este nome.")
+        return value
+
+
+class InventoryItemUpdateSerializer(InventoryItemSerializer):
+    class Meta(InventoryItemSerializer.Meta):
+        fields = ["name", "description", "category_id"]
         read_only_fields = []
 
 
