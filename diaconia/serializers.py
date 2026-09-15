@@ -398,6 +398,46 @@ class InventoryCountCreateSerializer(serializers.Serializer):
         return attrs
 
 
+class InventoryCountUpdateSerializer(InventoryCountCreateSerializer):
+    pass
+
+
+class InventoryCountFilterSerializer(serializers.Serializer):
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+    created_by = serializers.IntegerField(required=False, min_value=1)
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"date_from", "date_to", "created_by"})
+        date_from = attrs.get("date_from")
+        date_to = attrs.get("date_to")
+        if date_from and date_to and date_from > date_to:
+            raise serializers.ValidationError({"date_to": "A data final deve ser maior ou igual a data inicial."})
+        return attrs
+
+
+class InventoryCountListSerializer(serializers.ModelSerializer):
+    created_by = serializers.SerializerMethodField()
+    items_count = serializers.IntegerField(read_only=True)
+    locations_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = InventoryCount
+        fields = [
+            "id",
+            "date",
+            "created_by",
+            "items_count",
+            "locations_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_created_by(self, obj):
+        return serialize_user(obj.created_by)
+
+
 class InventoryCountSerializer(serializers.ModelSerializer):
     created_by = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
@@ -453,6 +493,35 @@ class InventoryCountSerializer(serializers.ModelSerializer):
             )
 
         return list(grouped_items.values())
+
+
+class InventoryCountSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventoryCount
+        fields = ["id", "date", "created_at", "updated_at"]
+        read_only_fields = fields
+
+
+class InventoryCountComparisonSerializer(serializers.Serializer):
+    current = serializers.SerializerMethodField()
+    previous = serializers.SerializerMethodField()
+    summary = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
+
+    def get_current(self, obj):
+        return InventoryCountSummarySerializer(obj["current"]).data
+
+    def get_previous(self, obj):
+        previous = obj["previous"]
+        if previous is None:
+            return None
+        return InventoryCountSummarySerializer(previous).data
+
+    def get_summary(self, obj):
+        return obj["summary"]
+
+    def get_items(self, obj):
+        return obj["items"]
 
 
 class AttendanceCountEnvironmentSerializer(serializers.ModelSerializer):

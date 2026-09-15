@@ -15,6 +15,11 @@ urlpatterns = [
         name="diaconia-inventory-count-detail",
     ),
     path(
+        "inventory/counts/<int:pk>/comparison/",
+        api_views.InventoryCountComparisonView.as_view(),
+        name="diaconia-inventory-count-comparison",
+    ),
+    path(
         "inventory/items/",
         api_views.InventoryItemListCreateView.as_view(),
         name="diaconia-inventory-item-list",

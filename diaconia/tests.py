@@ -109,6 +109,17 @@ class DiaconiaStockApiTests(TestCase):
                 quantity += 1
         return {"date": date, "notes": notes, "entries": entries}
 
+    def create_inventory_count_record(self, *, date="2026-09-15", user=None, entries=None, notes=""):
+        user = user or self.inventory_manager
+        if entries is None:
+            item = self.create_inventory_item_record(name=f"Item Contagem {InventoryItem.objects.count() + 1}")
+            location = InventoryLocation.objects.create(name=f"Local {InventoryLocation.objects.count() + 1}")
+            entries = [(item, location, 1)]
+        count = InventoryCount.objects.create(date=date, notes=notes, created_by=user)
+        for item, location, quantity in entries:
+            InventoryCountEntry.objects.create(inventory_count=count, item=item, location=location, quantity=quantity)
+        return count
+
     def test_cria_categoria(self):
         self.login_manager()
 
@@ -1735,3 +1746,255 @@ class DiaconiaStockApiTests(TestCase):
         self.assertEqual(detail_as_viewer.status_code, 200)
         self.assertEqual(detail_without_access.status_code, 403)
         self.assertEqual(create_without_access.status_code, 403)
+
+    def test_lista_contagens_de_inventario_com_ordenacao_filtros_e_permissao(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        self.create_inventory_count_record(date="2026-09-01", entries=[(item, templo, 10)], user=self.viewer)
+        latest = self.create_inventory_count_record(date="2026-09-15", entries=[(item, templo, 12), (item, deposito, 3)])
+        self.create_inventory_count_record(date="2026-08-01", entries=[(item, templo, 9)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-list"))
+        filtered_from = self.client.get(f"{reverse('diaconia-inventory-count-list')}?date_from=2026-09-10")
+        filtered_to = self.client.get(f"{reverse('diaconia-inventory-count-list')}?date_to=2026-09-01")
+        filtered_user = self.client.get(f"{reverse('diaconia-inventory-count-list')}?created_by={self.viewer.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["date"] for item in response.json()], ["2026-09-15", "2026-09-01", "2026-08-01"])
+        self.assertEqual(response.json()[0]["id"], latest.id)
+        self.assertEqual(response.json()[0]["items_count"], 1)
+        self.assertEqual(response.json()[0]["locations_count"], 2)
+        self.assertEqual([item["date"] for item in filtered_from.json()], ["2026-09-15"])
+        self.assertEqual([item["date"] for item in filtered_to.json()], ["2026-09-01", "2026-08-01"])
+        self.assertEqual([item["date"] for item in filtered_user.json()], ["2026-09-01"])
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(reverse("diaconia-inventory-count-list")).status_code, 403)
+
+    def test_corrige_contagem_de_inventario_preservando_responsavel_criacao_e_composicao(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        count = self.create_inventory_count_record(
+            date="2026-09-15",
+            user=self.viewer,
+            notes="Original",
+            entries=[(item, templo, 10), (item, deposito, 0)],
+        )
+        original_created_at = count.created_at
+        payload = {
+            "date": "2026-09-16",
+            "notes": "Corrigida",
+            "entries": [
+                {"item_id": item.id, "location_id": templo.id, "quantity": 12},
+                {"item_id": item.id, "location_id": deposito.id, "quantity": 1},
+            ],
+        }
+
+        self.client.force_login(self.inventory_manager)
+        response = self.client.patch(reverse("diaconia-inventory-count-detail", args=[count.id]), payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        count.refresh_from_db()
+        self.assertEqual(str(count.date), "2026-09-16")
+        self.assertEqual(count.notes, "Corrigida")
+        self.assertEqual(count.created_by, self.viewer)
+        self.assertEqual(count.created_at, original_created_at)
+        self.assertEqual(InventoryCountEntry.objects.get(inventory_count=count, location=templo).quantity, 12)
+        self.assertEqual(InventoryCountEntry.objects.get(inventory_count=count, location=deposito).quantity, 1)
+
+    def test_corrige_contagem_rejeita_data_duplicada_matriz_invalida_e_quantidade_negativa(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        extra_item = self.create_inventory_item_record(name="Mesa")
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        extra_location = InventoryLocation.objects.create(name="Juniores")
+        count = self.create_inventory_count_record(date="2026-09-15", entries=[(item, templo, 10), (item, deposito, 2)])
+        self.create_inventory_count_record(date="2026-09-16", entries=[(item, templo, 9)])
+        valid_entries = [
+            {"item_id": item.id, "location_id": templo.id, "quantity": 10},
+            {"item_id": item.id, "location_id": deposito.id, "quantity": 2},
+        ]
+
+        self.client.force_login(self.inventory_manager)
+        duplicate_date = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-16", "notes": "", "entries": valid_entries},
+            content_type="application/json",
+        )
+        missing = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": valid_entries[:1]},
+            content_type="application/json",
+        )
+        duplicated = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": [*valid_entries, valid_entries[0]]},
+            content_type="application/json",
+        )
+        extra_item_response = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": [*valid_entries, {"item_id": extra_item.id, "location_id": templo.id, "quantity": 1}]},
+            content_type="application/json",
+        )
+        extra_location_response = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": [*valid_entries, {"item_id": item.id, "location_id": extra_location.id, "quantity": 1}]},
+            content_type="application/json",
+        )
+        negative = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": [{**valid_entries[0], "quantity": -1}, valid_entries[1]]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(duplicate_date.status_code, 409)
+        self.assertEqual(duplicate_date.json()["code"], "INVENTORY_COUNT_DUPLICATE")
+        for response in (missing, duplicated, extra_item_response, extra_location_response):
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json()["code"], "INVENTORY_COUNT_MATRIX_MISMATCH")
+        self.assertEqual(negative.status_code, 400)
+        count.refresh_from_db()
+        self.assertEqual(str(count.date), "2026-09-15")
+        self.assertEqual(InventoryCountEntry.objects.get(inventory_count=count, location=templo).quantity, 10)
+
+    def test_corrige_contagem_aceita_item_e_local_inativados_posteriormente(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        count = self.create_inventory_count_record(date="2026-09-15", entries=[(item, location, 10)])
+        item.is_active = False
+        item.save(update_fields=["is_active", "updated_at"])
+        location.is_active = False
+        location.save(update_fields=["is_active", "updated_at"])
+
+        self.client.force_login(self.inventory_manager)
+        response = self.client.patch(
+            reverse("diaconia-inventory-count-detail", args=[count.id]),
+            {"date": "2026-09-15", "notes": "", "entries": [{"item_id": item.id, "location_id": location.id, "quantity": 11}]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(InventoryCountEntry.objects.get(inventory_count=count).quantity, 11)
+
+    def test_permissoes_de_correcao_de_contagem_de_inventario(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        count = self.create_inventory_count_record(date="2026-09-15", entries=[(item, location, 10)])
+        payload = {"date": "2026-09-15", "notes": "", "entries": [{"item_id": item.id, "location_id": location.id, "quantity": 10}]}
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.patch(reverse("diaconia-inventory-count-detail", args=[count.id]), payload, content_type="application/json").status_code, 403)
+
+        self.client.force_login(self.inventory_manager)
+        self.assertEqual(self.client.patch(reverse("diaconia-inventory-count-detail", args=[count.id]), payload, content_type="application/json").status_code, 200)
+
+    def test_comparativo_de_inventario_basico_statuses_e_percentual_zero(self):
+        categoria = InventoryCategory.objects.create(name="Mobiliario")
+        cadeira = self.create_inventory_item_record(name="Cadeira", category=categoria)
+        mesa = self.create_inventory_item_record(name="Mesa", category=categoria)
+        ventilador = self.create_inventory_item_record(name="Ventilador", category=categoria)
+        microfone = self.create_inventory_item_record(name="Microfone", category=categoria)
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        self.create_inventory_count_record(
+            date="2026-09-01",
+            entries=[(cadeira, templo, 180), (cadeira, deposito, 65), (mesa, templo, 26), (ventilador, templo, 15), (microfone, templo, 0)],
+        )
+        current = self.create_inventory_count_record(
+            date="2026-09-15",
+            entries=[(cadeira, templo, 177), (cadeira, deposito, 64), (mesa, templo, 27), (ventilador, templo, 15), (microfone, templo, 5)],
+        )
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-comparison", args=[current.id]))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["previous"]["date"], "2026-09-01")
+        by_name = {item["item_name"]: item for item in data["items"]}
+        self.assertEqual(by_name["Cadeira"]["previous_total"], 245)
+        self.assertEqual(by_name["Cadeira"]["current_total"], 241)
+        self.assertEqual(by_name["Cadeira"]["variation"], -4)
+        self.assertEqual(by_name["Cadeira"]["variation_percent"], -1.63)
+        self.assertEqual(by_name["Cadeira"]["status"], "DECREASE")
+        self.assertEqual(by_name["Mesa"]["status"], "INCREASE")
+        self.assertEqual(by_name["Ventilador"]["status"], "UNCHANGED")
+        self.assertEqual(by_name["Microfone"]["variation"], 5)
+        self.assertIsNone(by_name["Microfone"]["variation_percent"])
+
+    def test_comparativo_primeira_contagem_nao_compara_contra_zero(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        count = self.create_inventory_count_record(date="2026-09-01", entries=[(item, location, 10)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-comparison", args=[count.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["previous"])
+        self.assertEqual(response.json()["items"], [])
+        self.assertEqual(response.json()["summary"]["increase"], 0)
+
+    def test_comparativo_trata_item_novo_e_nao_contabilizado_sem_falsa_variacao(self):
+        cadeira = self.create_inventory_item_record(name="Cadeira")
+        mesa = self.create_inventory_item_record(name="Mesa")
+        projetor = self.create_inventory_item_record(name="Projetor")
+        templo = InventoryLocation.objects.create(name="Templo")
+        self.create_inventory_count_record(date="2026-09-01", entries=[(cadeira, templo, 10), (mesa, templo, 5)])
+        current = self.create_inventory_count_record(date="2026-09-15", entries=[(cadeira, templo, 12), (projetor, templo, 1)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-comparison", args=[current.id]))
+
+        by_name = {item["item_name"]: item for item in response.json()["items"]}
+        self.assertEqual(by_name["Projetor"]["status"], "NEW")
+        self.assertIsNone(by_name["Projetor"]["variation"])
+        self.assertEqual(by_name["Mesa"]["status"], "NOT_COUNTED")
+        self.assertIsNone(by_name["Mesa"]["variation"])
+
+    def test_comparativo_trata_local_novo_ausente_e_redistribuicao(self):
+        cadeira = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        juniores = InventoryLocation.objects.create(name="Juniores")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        self.create_inventory_count_record(date="2026-09-01", entries=[(cadeira, templo, 180), (cadeira, juniores, 20), (cadeira, deposito, 5)])
+        current = self.create_inventory_count_record(date="2026-09-15", entries=[(cadeira, templo, 170), (cadeira, juniores, 30)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-comparison", args=[current.id]))
+
+        item = response.json()["items"][0]
+        self.assertEqual(item["previous_total"], 205)
+        self.assertEqual(item["current_total"], 200)
+        locations = {location["location_name"]: location for location in item["locations"]}
+        self.assertEqual(locations["Templo"]["variation"], -10)
+        self.assertEqual(locations["Juniores"]["variation"], 10)
+        self.assertEqual(locations["Deposito"]["status"], "NOT_COUNTED")
+
+        sala = InventoryLocation.objects.create(name="Sala Jovens")
+        later = self.create_inventory_count_record(date="2026-09-30", entries=[(cadeira, templo, 170), (cadeira, juniores, 30), (cadeira, sala, 4)])
+        response_later = self.client.get(reverse("diaconia-inventory-count-comparison", args=[later.id]))
+        later_locations = {location["location_name"]: location for location in response_later.json()["items"][0]["locations"]}
+        self.assertEqual(later_locations["Sala Jovens"]["status"], "NEW")
+
+    def test_comparativo_redistribuicao_sem_alteracao_total(self):
+        cadeira = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        juniores = InventoryLocation.objects.create(name="Juniores")
+        self.create_inventory_count_record(date="2026-09-01", entries=[(cadeira, templo, 180), (cadeira, juniores, 20)])
+        current = self.create_inventory_count_record(date="2026-09-15", entries=[(cadeira, templo, 170), (cadeira, juniores, 30)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-inventory-count-comparison", args=[current.id]))
+
+        item = response.json()["items"][0]
+        self.assertEqual(item["previous_total"], 200)
+        self.assertEqual(item["current_total"], 200)
+        self.assertEqual(item["variation"], 0)
+        self.assertEqual(item["status"], "UNCHANGED")
+        locations = {location["location_name"]: location for location in item["locations"]}
+        self.assertEqual(locations["Templo"]["variation"], -10)
+        self.assertEqual(locations["Juniores"]["variation"], 10)

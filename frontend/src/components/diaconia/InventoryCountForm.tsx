@@ -1,9 +1,22 @@
 import { useMemo, useState } from 'react'
-import type { InventoryItem, InventoryLocation } from '../../types/diaconiaInventory'
 
 type QuantityState = Record<string, string>
 
-function matrixKey(itemId: number, locationId: number) {
+export type InventoryCountFormItem = {
+  id: number
+  name: string
+  category: {
+    id: number
+    name: string
+  }
+}
+
+export type InventoryCountFormLocation = {
+  id: number
+  name: string
+}
+
+function inventoryCountMatrixKey(itemId: number, locationId: number) {
   return `${itemId}:${locationId}`
 }
 
@@ -12,23 +25,25 @@ function sanitizeQuantity(value: string) {
 }
 
 function quantityValue(quantities: QuantityState, itemId: number, locationId: number) {
-  const value = Number.parseInt(quantities[matrixKey(itemId, locationId)] || '0', 10)
+  const value = Number.parseInt(quantities[inventoryCountMatrixKey(itemId, locationId)] || '0', 10)
   return Number.isFinite(value) && value > 0 ? value : 0
 }
 
 type InventoryCountFormProps = {
-  items: InventoryItem[]
-  locations: InventoryLocation[]
+  items: InventoryCountFormItem[]
+  locations: InventoryCountFormLocation[]
+  itemLocationIds?: Record<number, number[]>
   quantities: QuantityState
   onQuantitiesChange: (quantities: QuantityState) => void
 }
 
-function InventoryCountForm({ items, locations, quantities, onQuantitiesChange }: InventoryCountFormProps) {
+function InventoryCountForm({ items, locations, itemLocationIds, quantities, onQuantitiesChange }: InventoryCountFormProps) {
   const [search, setSearch] = useState('')
+  const locationsById = useMemo(() => new Map(locations.map((location) => [location.id, location])), [locations])
 
   const itemsByCategory = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase()
-    const groups = new Map<string, { categoryName: string; items: InventoryItem[] }>()
+    const groups = new Map<string, { categoryName: string; items: InventoryCountFormItem[] }>()
     items.forEach((item) => {
       if (normalizedSearch && !item.name.toLowerCase().includes(normalizedSearch)) return
       const key = `${item.category.id}:${item.category.name}`
@@ -39,15 +54,26 @@ function InventoryCountForm({ items, locations, quantities, onQuantitiesChange }
     return Array.from(groups.values())
   }, [items, search])
 
+  const itemLocations = (itemId: number) => {
+    const locationIds = itemLocationIds?.[itemId]
+    if (!locationIds) return locations
+    return locationIds
+      .map((locationId) => locationsById.get(locationId))
+      .filter((location): location is InventoryCountFormLocation => Boolean(location))
+  }
+
+  const hasLocationForItem = (itemId: number, locationId: number) =>
+    itemLocations(itemId).some((location) => location.id === locationId)
+
   const setQuantity = (itemId: number, locationId: number, value: string) => {
     onQuantitiesChange({
       ...quantities,
-      [matrixKey(itemId, locationId)]: sanitizeQuantity(value),
+      [inventoryCountMatrixKey(itemId, locationId)]: sanitizeQuantity(value),
     })
   }
 
-  const itemTotal = (item: InventoryItem) =>
-    locations.reduce((sum, location) => sum + quantityValue(quantities, item.id, location.id), 0)
+  const itemTotal = (item: InventoryCountFormItem) =>
+    itemLocations(item.id).reduce((sum, location) => sum + quantityValue(quantities, item.id, location.id), 0)
 
   return (
     <div className="inventory-count-form">
@@ -92,16 +118,20 @@ function InventoryCountForm({ items, locations, quantities, onQuantitiesChange }
                       </td>
                       {locations.map((location) => (
                         <td key={location.id}>
-                          <input
-                            className="table-input inventory-count-cell-input"
-                            type="number"
-                            inputMode="numeric"
-                            min="0"
-                            step="1"
-                            value={quantities[matrixKey(item.id, location.id)] ?? '0'}
-                            onChange={(event) => setQuantity(item.id, location.id, event.target.value)}
-                            aria-label={`${item.name} em ${location.name}`}
-                          />
+                          {hasLocationForItem(item.id, location.id) ? (
+                            <input
+                              className="table-input inventory-count-cell-input"
+                              type="number"
+                              inputMode="numeric"
+                              min="0"
+                              step="1"
+                              value={quantities[inventoryCountMatrixKey(item.id, location.id)] ?? '0'}
+                              onChange={(event) => setQuantity(item.id, location.id, event.target.value)}
+                              aria-label={`${item.name} em ${location.name}`}
+                            />
+                          ) : (
+                            <span className="table-muted">-</span>
+                          )}
                         </td>
                       ))}
                       <td>
@@ -131,7 +161,7 @@ function InventoryCountForm({ items, locations, quantities, onQuantitiesChange }
                     <strong>Total: {itemTotal(item)}</strong>
                   </div>
                   <div className="inventory-count-mobile-card__locations">
-                    {locations.map((location) => (
+                    {itemLocations(item.id).map((location) => (
                       <label className="diaconia-counting-entry" key={location.id} htmlFor={`mobile-${item.id}-${location.id}`}>
                         <span>{location.name}</span>
                         <small>Quantidade</small>
@@ -141,7 +171,7 @@ function InventoryCountForm({ items, locations, quantities, onQuantitiesChange }
                           inputMode="numeric"
                           min="0"
                           step="1"
-                          value={quantities[matrixKey(item.id, location.id)] ?? '0'}
+                          value={quantities[inventoryCountMatrixKey(item.id, location.id)] ?? '0'}
                           onChange={(event) => setQuantity(item.id, location.id, event.target.value)}
                         />
                       </label>

@@ -16,8 +16,10 @@ import DiaconiaCountingDetailPage from './pages/DiaconiaCountingDetailPage'
 import DiaconiaCountingEditPage from './pages/DiaconiaCountingEditPage'
 import DiaconiaCountingEnvironmentsPage from './pages/DiaconiaCountingEnvironmentsPage'
 import DiaconiaCountingPage from './pages/DiaconiaCountingPage'
+import DiaconiaInventoryCountComparisonPage from './pages/DiaconiaInventoryCountComparisonPage'
 import DiaconiaInventoryCountCreatePage from './pages/DiaconiaInventoryCountCreatePage'
 import DiaconiaInventoryCountDetailPage from './pages/DiaconiaInventoryCountDetailPage'
+import DiaconiaInventoryCountEditPage from './pages/DiaconiaInventoryCountEditPage'
 import DiaconiaInventoryCountsPage from './pages/DiaconiaInventoryCountsPage'
 import DiaconiaInventoryItemCreatePage from './pages/DiaconiaInventoryItemCreatePage'
 import DiaconiaInventoryItemEditPage from './pages/DiaconiaInventoryItemEditPage'
@@ -163,6 +165,8 @@ function AdminRoutes() {
         <Route path="/diaconia/inventario" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryPage /></AuthorizedRoute>} />
         <Route path="/diaconia/inventario/contagens" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryCountsPage /></AuthorizedRoute>} />
         <Route path="/diaconia/inventario/contagens/nova" element={<AuthorizedRoute capability="DIACONIA_INVENTORY_MANAGE"><DiaconiaInventoryCountCreatePage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/contagens/:id/editar" element={<AuthorizedRoute capability="DIACONIA_INVENTORY_MANAGE"><DiaconiaInventoryCountEditPage /></AuthorizedRoute>} />
+        <Route path="/diaconia/inventario/contagens/:id/comparativo" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryCountComparisonPage /></AuthorizedRoute>} />
         <Route path="/diaconia/inventario/contagens/:id" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryCountDetailPage /></AuthorizedRoute>} />
         <Route path="/diaconia/inventario/itens" element={<AuthorizedRoute capability="DIACONIA_VIEW"><DiaconiaInventoryItemsPage /></AuthorizedRoute>} />
         <Route path="/diaconia/inventario/itens/novo" element={<AuthorizedRoute capability="DIACONIA_INVENTORY_MANAGE"><DiaconiaInventoryItemCreatePage /></AuthorizedRoute>} />

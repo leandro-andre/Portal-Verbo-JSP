@@ -1628,6 +1628,123 @@
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }
 
+.inventory-count-history-cards,
+.inventory-comparison-cards {
+  display: none;
+}
+
+.inventory-comparison-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.inventory-comparison-summary .diaconia-stock-readonly {
+  margin-bottom: 0;
+}
+
+.search-input {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.search-input input {
+  border: 0;
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;
+}
+
+.search-input input:focus {
+  box-shadow: none;
+}
+
+.inventory-comparison-status {
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.inventory-comparison-status--increase,
+.inventory-comparison-status--new {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.inventory-comparison-status--decrease,
+.inventory-comparison-status--not-counted {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.inventory-comparison-status--unchanged {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.inventory-comparison-locations {
+  margin-top: 10px;
+}
+
+.inventory-comparison-locations summary {
+  color: var(--color-accent);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.inventory-comparison-location-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.inventory-comparison-location-list div {
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.inventory-comparison-location-list span,
+.inventory-comparison-card-metrics span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inventory-comparison-location-list strong,
+.inventory-comparison-card-metrics strong {
+  color: var(--color-text);
+}
+
+.inventory-comparison-location-list em {
+  color: var(--color-text-muted);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.inventory-comparison-card-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.inventory-comparison-card-metrics div {
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
 .page-heading {
   align-items: flex-start;
   display: flex;
@@ -3601,14 +3718,22 @@
   }
 
   .diaconia-counting-table,
+  .inventory-count-history-table,
+  .inventory-comparison-table,
   .inventory-count-matrix,
   .diaconia-inventory-items-table {
     display: none;
   }
 
-  .inventory-count-mobile-list {
+  .inventory-count-mobile-list,
+  .inventory-count-history-cards,
+  .inventory-comparison-cards {
     display: grid;
     gap: 18px;
+  }
+
+  .inventory-comparison-card-metrics {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .inventory-count-mobile-card__heading,

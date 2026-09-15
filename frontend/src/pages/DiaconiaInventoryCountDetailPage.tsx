@@ -1,4 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
+import { GitCompareArrows, Pencil } from 'lucide-react'
+import { useCan } from '../hooks/useAuth'
 import { useInventoryCount } from '../hooks/useDiaconiaInventory'
 
 function formatDate(value: string) {
@@ -11,6 +13,7 @@ function DiaconiaInventoryCountDetailPage() {
   const { id } = useParams()
   const countId = Number(id)
   const { data: count, isError, isLoading, refetch } = useInventoryCount(countId)
+  const canManage = useCan('DIACONIA_INVENTORY_MANAGE')
 
   return (
     <section className="people-page">
@@ -41,6 +44,16 @@ function DiaconiaInventoryCountDetailPage() {
               </p>
             </div>
             <div className="diaconia-stock-actions">
+              <Link className="button button--primary" to={`/diaconia/inventario/contagens/${count.id}/comparativo`}>
+                <GitCompareArrows size={17} aria-hidden="true" />
+                Comparar
+              </Link>
+              {canManage ? (
+                <Link className="button button--secondary" to={`/diaconia/inventario/contagens/${count.id}/editar`}>
+                  <Pencil size={17} aria-hidden="true" />
+                  Editar
+                </Link>
+              ) : null}
               <Link className="button button--secondary" to="/diaconia/inventario/contagens">Voltar</Link>
             </div>
           </div>

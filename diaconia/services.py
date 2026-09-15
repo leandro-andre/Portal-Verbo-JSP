@@ -1,5 +1,5 @@
 from django.db import IntegrityError, transaction
-from django.db.models import Case, CharField, F, IntegerField, Sum, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Sum, Value, When
 from django.db.models.functions import Coalesce
 
 from .models import (
@@ -33,6 +33,7 @@ INVENTORY_COUNT_MATRIX_MISMATCH = "INVENTORY_COUNT_MATRIX_MISMATCH"
 INVENTORY_COUNT_WITHOUT_ITEMS = "INVENTORY_COUNT_WITHOUT_ITEMS"
 INVENTORY_COUNT_WITHOUT_LOCATIONS = "INVENTORY_COUNT_WITHOUT_LOCATIONS"
 INVALID_INVENTORY_COUNT_QUANTITY = "INVALID_INVENTORY_COUNT_QUANTITY"
+INVENTORY_COUNT_WITHOUT_PREVIOUS = "INVENTORY_COUNT_WITHOUT_PREVIOUS"
 ATTENDANCE_COUNT_DUPLICATE = "ATTENDANCE_COUNT_DUPLICATE"
 ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH = "ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH"
 ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS = "ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS"
@@ -51,6 +52,14 @@ class StockStatus:
         WITHOUT_MINIMUM: "Sem controle",
         INACTIVE: "Inativo",
     }
+
+
+class InventoryComparisonStatus:
+    INCREASE = "INCREASE"
+    DECREASE = "DECREASE"
+    UNCHANGED = "UNCHANGED"
+    NEW = "NEW"
+    NOT_COUNTED = "NOT_COUNTED"
 
 
 class DiaconiaError(Exception):
@@ -556,6 +565,17 @@ def get_inventory_count_queryset():
     )
 
 
+def get_inventory_count_list_queryset():
+    return (
+        InventoryCount.objects.select_related("created_by")
+        .annotate(
+            items_count=Count("entries__item", distinct=True),
+            locations_count=Count("entries__location", distinct=True),
+        )
+        .order_by("-date", "-created_at", "-id")
+    )
+
+
 def validate_inventory_count_matrix(entries):
     active_item_ids = list(
         InventoryItem.objects.filter(is_active=True)
@@ -642,6 +662,228 @@ def create_inventory_count(*, date, notes="", entries, created_by):
             ) from exc
 
     return get_inventory_count_queryset().get(pk=inventory_count.pk)
+
+
+def validate_inventory_count_historical_entries(inventory_count, entries):
+    current_pairs = set(
+        inventory_count.entries.order_by("item_id", "location_id").values_list("item_id", "location_id")
+    )
+    sent_pairs = []
+    for entry in entries:
+        if entry["quantity"] < 0:
+            raise DiaconiaError(
+                INVALID_INVENTORY_COUNT_QUANTITY,
+                "A quantidade nao pode ser negativa.",
+            )
+        sent_pairs.append((entry["item"].id, entry["location"].id))
+
+    if len(sent_pairs) != len(set(sent_pairs)):
+        raise DiaconiaError(
+            INVENTORY_COUNT_MATRIX_MISMATCH,
+            "Cada combinacao de item e local deve aparecer apenas uma vez.",
+        )
+
+    if set(sent_pairs) != current_pairs:
+        raise DiaconiaError(
+            INVENTORY_COUNT_MATRIX_MISMATCH,
+            "A correcao deve manter exatamente os itens e locais originais da contagem.",
+        )
+
+
+def update_inventory_count(inventory_count, *, date, notes="", entries):
+    if InventoryCount.objects.filter(date=date).exclude(pk=inventory_count.pk).exists():
+        raise DiaconiaError(
+            INVENTORY_COUNT_DUPLICATE,
+            "Ja existe uma contagem de inventario registrada para esta data.",
+        )
+
+    with transaction.atomic():
+        locked_count = InventoryCount.objects.select_for_update().get(pk=inventory_count.pk)
+        validate_inventory_count_historical_entries(locked_count, entries)
+        locked_count.date = date
+        locked_count.notes = notes
+        try:
+            locked_count.save(update_fields=["date", "notes", "updated_at"])
+            quantities_by_pair = {
+                (entry["item"].id, entry["location"].id): entry["quantity"]
+                for entry in entries
+            }
+            count_entries = list(locked_count.entries.select_for_update())
+            for count_entry in count_entries:
+                count_entry.quantity = quantities_by_pair[(count_entry.item_id, count_entry.location_id)]
+            InventoryCountEntry.objects.bulk_update(count_entries, ["quantity"])
+        except IntegrityError as exc:
+            raise DiaconiaError(
+                INVENTORY_COUNT_DUPLICATE,
+                "Ja existe uma contagem de inventario registrada para esta data.",
+            ) from exc
+
+    return get_inventory_count_queryset().get(pk=inventory_count.pk)
+
+
+def get_previous_inventory_count(inventory_count):
+    return (
+        get_inventory_count_queryset()
+        .filter(date__lt=inventory_count.date)
+        .order_by("-date", "-created_at", "-id")
+        .first()
+    )
+
+
+def _prefetched_entries(inventory_count):
+    return list(
+        getattr(inventory_count, "_prefetched_objects_cache", {}).get("entries")
+        or inventory_count.entries.select_related("item__category", "location")
+    )
+
+
+def _inventory_count_maps(inventory_count):
+    items = {}
+    totals = {}
+    location_quantities = {}
+    locations_by_item = {}
+    for entry in _prefetched_entries(inventory_count):
+        item = entry.item
+        location = entry.location
+        items[item.id] = item
+        totals[item.id] = totals.get(item.id, 0) + entry.quantity
+        location_quantities[(item.id, location.id)] = entry.quantity
+        locations_by_item.setdefault(item.id, {})[location.id] = location
+    return {
+        "items": items,
+        "totals": totals,
+        "location_quantities": location_quantities,
+        "locations_by_item": locations_by_item,
+    }
+
+
+def _status_from_values(previous_value, current_value):
+    if current_value > previous_value:
+        return InventoryComparisonStatus.INCREASE
+    if current_value < previous_value:
+        return InventoryComparisonStatus.DECREASE
+    return InventoryComparisonStatus.UNCHANGED
+
+
+def _variation_percent(previous_value, variation):
+    if previous_value == 0:
+        return None
+    return round((variation / previous_value) * 100, 2)
+
+
+def build_inventory_count_comparison(inventory_count):
+    current_count = get_inventory_count_queryset().get(pk=inventory_count.pk)
+    previous_count = get_previous_inventory_count(current_count)
+    if previous_count is None:
+        return {
+            "current": current_count,
+            "previous": None,
+            "items": [],
+            "summary": {
+                "increase": 0,
+                "decrease": 0,
+                "unchanged": 0,
+                "new": 0,
+                "not_counted": 0,
+            },
+        }
+
+    current_maps = _inventory_count_maps(current_count)
+    previous_maps = _inventory_count_maps(previous_count)
+    item_ids = sorted(
+        set(current_maps["items"]).union(previous_maps["items"]),
+        key=lambda item_id: (
+            (current_maps["items"].get(item_id) or previous_maps["items"][item_id]).category.name,
+            (current_maps["items"].get(item_id) or previous_maps["items"][item_id]).name,
+            item_id,
+        ),
+    )
+
+    summary = {"increase": 0, "decrease": 0, "unchanged": 0, "new": 0, "not_counted": 0}
+    compared_items = []
+    for item_id in item_ids:
+        item = current_maps["items"].get(item_id) or previous_maps["items"][item_id]
+        has_previous = item_id in previous_maps["totals"]
+        has_current = item_id in current_maps["totals"]
+        previous_total = previous_maps["totals"].get(item_id)
+        current_total = current_maps["totals"].get(item_id)
+
+        if has_previous and has_current:
+            variation = current_total - previous_total
+            status = _status_from_values(previous_total, current_total)
+            variation_percent = _variation_percent(previous_total, variation)
+            location_ids = sorted(
+                set(previous_maps["locations_by_item"].get(item_id, {})).union(
+                    current_maps["locations_by_item"].get(item_id, {})
+                ),
+                key=lambda location_id: (
+                    (
+                        current_maps["locations_by_item"].get(item_id, {}).get(location_id)
+                        or previous_maps["locations_by_item"].get(item_id, {})[location_id]
+                    ).name,
+                    location_id,
+                ),
+            )
+            locations = []
+            for location_id in location_ids:
+                location = (
+                    current_maps["locations_by_item"].get(item_id, {}).get(location_id)
+                    or previous_maps["locations_by_item"].get(item_id, {})[location_id]
+                )
+                previous_location_quantity = previous_maps["location_quantities"].get((item_id, location_id))
+                current_location_quantity = current_maps["location_quantities"].get((item_id, location_id))
+                if previous_location_quantity is None:
+                    location_status = InventoryComparisonStatus.NEW
+                    location_variation = None
+                elif current_location_quantity is None:
+                    location_status = InventoryComparisonStatus.NOT_COUNTED
+                    location_variation = None
+                else:
+                    location_variation = current_location_quantity - previous_location_quantity
+                    location_status = _status_from_values(previous_location_quantity, current_location_quantity)
+                locations.append(
+                    {
+                        "location_id": location_id,
+                        "location_name": location.name,
+                        "previous_quantity": previous_location_quantity,
+                        "current_quantity": current_location_quantity,
+                        "variation": location_variation,
+                        "status": location_status,
+                    }
+                )
+        elif has_current:
+            variation = None
+            variation_percent = None
+            status = InventoryComparisonStatus.NEW
+            locations = []
+        else:
+            variation = None
+            variation_percent = None
+            status = InventoryComparisonStatus.NOT_COUNTED
+            locations = []
+
+        summary[status.lower()] += 1
+        compared_items.append(
+            {
+                "item_id": item_id,
+                "item_name": item.name,
+                "category_id": item.category_id,
+                "category_name": item.category.name,
+                "previous_total": previous_total,
+                "current_total": current_total,
+                "variation": variation,
+                "variation_percent": variation_percent,
+                "status": status,
+                "locations": locations,
+            }
+        )
+
+    return {
+        "current": current_count,
+        "previous": previous_count,
+        "items": compared_items,
+        "summary": summary,
+    }
 
 
 def ensure_inventory_category_active(category):

@@ -17,7 +17,11 @@ from .serializers import (
     InventoryCategorySerializer,
     InventoryCategoryUpdateSerializer,
     InventoryCountCreateSerializer,
+    InventoryCountComparisonSerializer,
+    InventoryCountFilterSerializer,
+    InventoryCountListSerializer,
     InventoryCountSerializer,
+    InventoryCountUpdateSerializer,
     InventoryItemSerializer,
     InventoryItemUpdateSerializer,
     InventoryLocationSerializer,
@@ -48,6 +52,7 @@ from .services import (
     deactivate_stock_item,
     get_attendance_count_list_queryset,
     get_attendance_count_queryset,
+    get_inventory_count_list_queryset,
     get_inventory_count_queryset,
     get_inventory_items_queryset,
     get_stock_items_with_status,
@@ -62,9 +67,11 @@ from .services import (
     update_stock_item,
     update_counting_environment,
     update_inventory_category,
+    update_inventory_count,
     update_inventory_item,
     update_inventory_location,
     update_attendance_count,
+    build_inventory_count_comparison,
 )
 
 
@@ -658,7 +665,22 @@ class InventoryItemReactivateView(APIView):
 
 class InventoryCountListCreateView(APIView):
     permission_classes = [HasDiaconiaPermission]
-    method_permission_required = {"POST": DIACONIA_INVENTORY_MANAGE}
+    method_permission_required = {"GET": DIACONIA_VIEW, "POST": DIACONIA_INVENTORY_MANAGE}
+
+    def get(self, request):
+        filter_serializer = InventoryCountFilterSerializer(data=request.query_params)
+        filter_serializer.is_valid(raise_exception=True)
+        queryset = get_inventory_count_list_queryset()
+        date_from = filter_serializer.validated_data.get("date_from")
+        date_to = filter_serializer.validated_data.get("date_to")
+        created_by = filter_serializer.validated_data.get("created_by")
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        if created_by:
+            queryset = queryset.filter(created_by_id=created_by)
+        return Response(InventoryCountListSerializer(queryset, many=True).data)
 
     def post(self, request):
         ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
@@ -678,8 +700,34 @@ class InventoryCountListCreateView(APIView):
 
 class InventoryCountDetailView(APIView):
     permission_classes = [HasDiaconiaPermission]
-    permission_required = DIACONIA_VIEW
+    method_permission_required = {"GET": DIACONIA_VIEW, "PATCH": DIACONIA_INVENTORY_MANAGE}
 
     def get(self, request, pk):
         inventory_count = get_object_or_404(get_inventory_count_queryset(), pk=pk)
         return Response(InventoryCountSerializer(inventory_count).data)
+
+    def patch(self, request, pk):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        inventory_count = get_object_or_404(get_inventory_count_queryset(), pk=pk)
+        serializer = InventoryCountUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            inventory_count = update_inventory_count(
+                inventory_count,
+                date=serializer.validated_data["date"],
+                notes=serializer.validated_data.get("notes", ""),
+                entries=serializer.validated_data["entries"],
+            )
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryCountSerializer(inventory_count).data)
+
+
+class InventoryCountComparisonView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_VIEW
+
+    def get(self, request, pk):
+        inventory_count = get_object_or_404(get_inventory_count_queryset(), pk=pk)
+        comparison = build_inventory_count_comparison(inventory_count)
+        return Response(InventoryCountComparisonSerializer(comparison).data)

@@ -11,11 +11,15 @@ import type {
   CreateInventoryLocationInput,
   InventoryCategory,
   InventoryCount,
+  InventoryCountComparison,
+  InventoryCountFilters,
+  InventoryCountListItem,
   InventoryFilters,
   InventoryItem,
   InventoryItemFilters,
   InventoryLocation,
   UpdateInventoryCategoryInput,
+  UpdateInventoryCountInput,
   UpdateInventoryItemInput,
   UpdateInventoryLocationInput,
 } from '../types/diaconiaInventory'
@@ -69,6 +73,15 @@ function inventoryItemQuery(filters?: InventoryItemFilters) {
   if (filters?.search?.trim()) params.set('search', filters.search.trim())
   if (filters?.category) params.set('category', filters.category)
   if (filters?.status && filters.status !== 'ALL') params.set('status', filters.status)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+function inventoryCountQuery(filters?: InventoryCountFilters) {
+  const params = new URLSearchParams()
+  if (filters?.date_from) params.set('date_from', filters.date_from)
+  if (filters?.date_to) params.set('date_to', filters.date_to)
+  if (filters?.created_by) params.set('created_by', filters.created_by)
   const query = params.toString()
   return query ? `?${query}` : ''
 }
@@ -149,11 +162,39 @@ export async function createInventoryCount(payload: CreateInventoryCountInput): 
   return data as InventoryCount
 }
 
+export async function getInventoryCounts(filters?: InventoryCountFilters): Promise<InventoryCountListItem[]> {
+  const response = await fetch(`/api/diaconia/inventory/counts/${inventoryCountQuery(filters)}`, { credentials: 'same-origin' })
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar contagens de inventario.')
+  return response.json() as Promise<InventoryCountListItem[]>
+}
+
 export async function getInventoryCount(id: number): Promise<InventoryCount> {
   const response = await fetch(`/api/diaconia/inventory/counts/${id}/`, { credentials: 'same-origin' })
   if (response.status === 404) throw new DiaconiaHttpError(404, 'Contagem nao encontrada.')
   if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar contagem de inventario.')
   return response.json() as Promise<InventoryCount>
+}
+
+export async function updateInventoryCount(id: number, payload: UpdateInventoryCountInput): Promise<InventoryCount> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch(`/api/diaconia/inventory/counts/${id}/`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (response.status === 400) throw new DiaconiaApiValidationError(parseValidationErrors(data))
+  if (response.status === 404) throw new DiaconiaHttpError(404, 'Contagem nao encontrada.')
+  if (!response.ok) throwBusinessError(data)
+  return data as InventoryCount
+}
+
+export async function getInventoryCountComparison(id: number): Promise<InventoryCountComparison> {
+  const response = await fetch(`/api/diaconia/inventory/counts/${id}/comparison/`, { credentials: 'same-origin' })
+  if (response.status === 404) throw new DiaconiaHttpError(404, 'Contagem nao encontrada.')
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar comparativo de inventario.')
+  return response.json() as Promise<InventoryCountComparison>
 }
 
 export async function getInventoryCategories(filters?: InventoryFilters): Promise<InventoryCategory[]> {

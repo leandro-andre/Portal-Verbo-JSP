@@ -9,6 +9,8 @@ import {
   deactivateInventoryLocation,
   getInventoryCategories,
   getInventoryCount,
+  getInventoryCountComparison,
+  getInventoryCounts,
   getInventoryItem,
   getInventoryItems,
   getInventoryLocations,
@@ -16,6 +18,7 @@ import {
   reactivateInventoryItem,
   reactivateInventoryLocation,
   updateInventoryCategory,
+  updateInventoryCount,
   updateInventoryItem,
   updateInventoryLocation,
 } from '../api/diaconiaInventory'
@@ -26,9 +29,11 @@ import type {
   CreateInventoryLocationInput,
   InventoryFilters,
   InventoryCount,
+  InventoryCountFilters,
   InventoryItem,
   InventoryItemFilters,
   UpdateInventoryCategoryInput,
+  UpdateInventoryCountInput,
   UpdateInventoryItemInput,
   UpdateInventoryLocationInput,
 } from '../types/diaconiaInventory'
@@ -83,6 +88,21 @@ export function useInventoryCount(id: number) {
   })
 }
 
+export function useInventoryCounts(filters?: InventoryCountFilters) {
+  return useQuery({
+    queryKey: filters ? [...inventoryCountsQueryKey, filters] : inventoryCountsQueryKey,
+    queryFn: () => getInventoryCounts(filters),
+  })
+}
+
+export function useInventoryCountComparison(id: number) {
+  return useQuery({
+    queryKey: [...inventoryCountQueryKey(id), 'comparison'],
+    queryFn: () => getInventoryCountComparison(id),
+    enabled: Number.isFinite(id),
+  })
+}
+
 export function useCreateInventoryCount() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -90,6 +110,18 @@ export function useCreateInventoryCount() {
     onSuccess: async (inventoryCount: InventoryCount) => {
       queryClient.setQueryData(inventoryCountQueryKey(inventoryCount.id), inventoryCount)
       await queryClient.invalidateQueries({ queryKey: inventoryCountsQueryKey })
+    },
+  })
+}
+
+export function useUpdateInventoryCount(id: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpdateInventoryCountInput) => updateInventoryCount(id, payload),
+    onSuccess: async (inventoryCount: InventoryCount) => {
+      queryClient.setQueryData(inventoryCountQueryKey(id), inventoryCount)
+      await queryClient.invalidateQueries({ queryKey: inventoryCountsQueryKey })
+      await queryClient.invalidateQueries({ queryKey: inventoryCountQueryKey(id) })
     },
   })
 }
