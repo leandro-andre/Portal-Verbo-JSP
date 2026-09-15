@@ -5,6 +5,7 @@ from .models import (
     AttendanceCountEntry,
     CountingEnvironment,
     InventoryCategory,
+    InventoryCount,
     InventoryItem,
     InventoryLocation,
     StockCategory,
@@ -369,6 +370,89 @@ class InventoryItemUpdateSerializer(InventoryItemSerializer):
     class Meta(InventoryItemSerializer.Meta):
         fields = ["name", "description", "category_id"]
         read_only_fields = []
+
+
+class InventoryCountEntryCreateSerializer(serializers.Serializer):
+    item_id = serializers.PrimaryKeyRelatedField(
+        queryset=InventoryItem.objects.select_related("category"),
+        source="item",
+    )
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=InventoryLocation.objects.all(),
+        source="location",
+    )
+    quantity = serializers.IntegerField(min_value=0)
+
+    def to_internal_value(self, data):
+        reject_extra_fields(data, {"item_id", "location_id", "quantity"})
+        return super().to_internal_value(data)
+
+
+class InventoryCountCreateSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+    entries = InventoryCountEntryCreateSerializer(many=True, allow_empty=False)
+
+    def validate(self, attrs):
+        reject_extra_fields(self.initial_data, {"date", "notes", "entries"})
+        return attrs
+
+
+class InventoryCountSerializer(serializers.ModelSerializer):
+    created_by = serializers.SerializerMethodField()
+    items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InventoryCount
+        fields = [
+            "id",
+            "date",
+            "notes",
+            "created_by",
+            "items",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_created_by(self, obj):
+        return serialize_user(obj.created_by)
+
+    def get_items(self, obj):
+        grouped_items = {}
+        entries = getattr(obj, "_prefetched_objects_cache", {}).get("entries")
+        if entries is None:
+            entries = obj.entries.select_related("item__category", "location").order_by(
+                "item__category__name",
+                "item__name",
+                "location__name",
+                "id",
+            )
+
+        for entry in entries:
+            item = entry.item
+            category = item.category
+            grouped_item = grouped_items.setdefault(
+                item.id,
+                {
+                    "item_id": item.id,
+                    "item_name": item.name,
+                    "category_id": category.id,
+                    "category_name": category.name,
+                    "total": 0,
+                    "locations": [],
+                },
+            )
+            grouped_item["total"] += entry.quantity
+            grouped_item["locations"].append(
+                {
+                    "location_id": entry.location_id,
+                    "location_name": entry.location.name,
+                    "quantity": entry.quantity,
+                }
+            )
+
+        return list(grouped_items.values())
 
 
 class AttendanceCountEnvironmentSerializer(serializers.ModelSerializer):

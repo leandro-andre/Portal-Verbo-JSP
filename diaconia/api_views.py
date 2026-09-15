@@ -16,6 +16,8 @@ from .serializers import (
     CountingEnvironmentUpdateSerializer,
     InventoryCategorySerializer,
     InventoryCategoryUpdateSerializer,
+    InventoryCountCreateSerializer,
+    InventoryCountSerializer,
     InventoryItemSerializer,
     InventoryItemUpdateSerializer,
     InventoryLocationSerializer,
@@ -35,6 +37,7 @@ from .services import (
     create_stock_movement,
     create_counting_environment,
     create_inventory_category,
+    create_inventory_count,
     create_inventory_item,
     create_inventory_location,
     deactivate_counting_environment,
@@ -45,6 +48,7 @@ from .services import (
     deactivate_stock_item,
     get_attendance_count_list_queryset,
     get_attendance_count_queryset,
+    get_inventory_count_queryset,
     get_inventory_items_queryset,
     get_stock_items_with_status,
     get_stock_summary,
@@ -650,3 +654,32 @@ class InventoryItemReactivateView(APIView):
         except DiaconiaError as exc:
             return business_error_response(exc)
         return Response(InventoryItemSerializer(item).data)
+
+
+class InventoryCountListCreateView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    method_permission_required = {"POST": DIACONIA_INVENTORY_MANAGE}
+
+    def post(self, request):
+        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        serializer = InventoryCountCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            inventory_count = create_inventory_count(
+                date=serializer.validated_data["date"],
+                notes=serializer.validated_data.get("notes", ""),
+                entries=serializer.validated_data["entries"],
+                created_by=request.user,
+            )
+        except DiaconiaError as exc:
+            return business_error_response(exc)
+        return Response(InventoryCountSerializer(inventory_count).data, status=status.HTTP_201_CREATED)
+
+
+class InventoryCountDetailView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_VIEW
+
+    def get(self, request, pk):
+        inventory_count = get_object_or_404(get_inventory_count_queryset(), pk=pk)
+        return Response(InventoryCountSerializer(inventory_count).data)

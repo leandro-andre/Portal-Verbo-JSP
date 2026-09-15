@@ -2,6 +2,7 @@ from datetime import datetime
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -11,6 +12,8 @@ from .models import (
     AttendanceCountEntry,
     CountingEnvironment,
     InventoryCategory,
+    InventoryCount,
+    InventoryCountEntry,
     InventoryItem,
     InventoryLocation,
     StockCategory,
@@ -84,6 +87,27 @@ class DiaconiaStockApiTests(TestCase):
         for environment, quantity in entries:
             AttendanceCountEntry.objects.create(attendance_count=count, environment=environment, quantity=quantity)
         return count
+
+    def create_inventory_item_record(self, *, name=None, category=None, is_active=True):
+        category = category or InventoryCategory.objects.create(name=f"Categoria Inventario {InventoryCategory.objects.count() + 1}")
+        return InventoryItem.objects.create(
+            name=name or f"Item Inventario {InventoryItem.objects.count() + 1}",
+            category=category,
+            is_active=is_active,
+        )
+
+    def create_inventory_count_payload(self, *, items=None, locations=None, date="2026-09-15", notes="Contagem geral"):
+        if items is None:
+            items = [self.create_inventory_item_record(name="Cadeira plastica")]
+        if locations is None:
+            locations = [InventoryLocation.objects.create(name="Templo")]
+        quantity = 1
+        entries = []
+        for item in items:
+            for location in locations:
+                entries.append({"item_id": item.id, "location_id": location.id, "quantity": quantity})
+                quantity += 1
+        return {"date": date, "notes": notes, "entries": entries}
 
     def test_cria_categoria(self):
         self.login_manager()
@@ -1478,3 +1502,236 @@ class DiaconiaStockApiTests(TestCase):
 
         self.client.force_login(self.inventory_manager)
         self.assertEqual(self.client.post(reverse("diaconia-inventory-item-list"), payload, content_type="application/json").status_code, 201)
+
+    def test_model_inventory_count_constraints(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        count = InventoryCount.objects.create(date="2026-09-15", created_by=self.inventory_manager)
+
+        InventoryCountEntry.objects.create(inventory_count=count, item=item, location=location, quantity=0)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryCount.objects.create(date="2026-09-15", created_by=self.inventory_manager)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryCount.objects.create(date="2026-09-16")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryCountEntry.objects.create(inventory_count=count, item=item, location=location, quantity=1)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                InventoryCountEntry.objects.create(
+                    inventory_count=InventoryCount.objects.create(date="2026-09-17", created_by=self.inventory_manager),
+                    item=item,
+                    location=location,
+                    quantity=-1,
+                )
+
+    def test_cria_contagem_de_inventario_valida_com_matriz_completa(self):
+        self.client.force_login(self.inventory_manager)
+        category = InventoryCategory.objects.create(name="Mobiliario")
+        cadeira = self.create_inventory_item_record(name="Cadeira plastica", category=category)
+        mesa = self.create_inventory_item_record(name="Mesa dobravel", category=category)
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        payload = {
+            "date": "2026-09-15",
+            "notes": "Contagem geral realizada pela Diaconia.",
+            "entries": [
+                {"item_id": cadeira.id, "location_id": templo.id, "quantity": 180},
+                {"item_id": cadeira.id, "location_id": deposito.id, "quantity": 15},
+                {"item_id": mesa.id, "location_id": templo.id, "quantity": 12},
+                {"item_id": mesa.id, "location_id": deposito.id, "quantity": 8},
+            ],
+        }
+
+        response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        count = InventoryCount.objects.get()
+        self.assertEqual(count.created_by, self.inventory_manager)
+        self.assertEqual(count.notes, "Contagem geral realizada pela Diaconia.")
+        self.assertEqual(InventoryCountEntry.objects.count(), 4)
+        items = response.json()["items"]
+        self.assertEqual(items[0]["item_name"], "Cadeira plastica")
+        self.assertEqual(items[0]["total"], 195)
+        self.assertEqual(items[1]["total"], 20)
+
+    def test_cria_contagem_de_inventario_com_observacao_opcional(self):
+        self.client.force_login(self.inventory_manager)
+        payload = self.create_inventory_count_payload(notes="")
+        payload.pop("notes")
+
+        response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(InventoryCount.objects.get().notes, "")
+
+    def test_contagem_de_inventario_rejeita_data_duplicada_e_preserva_transacao(self):
+        self.client.force_login(self.inventory_manager)
+        payload = self.create_inventory_count_payload()
+        InventoryCount.objects.create(date="2026-09-15", created_by=self.inventory_manager)
+
+        response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "INVENTORY_COUNT_DUPLICATE")
+        self.assertEqual(InventoryCount.objects.count(), 1)
+        self.assertEqual(InventoryCountEntry.objects.count(), 0)
+
+    def test_contagem_de_inventario_rejeita_matriz_incompleta_extra_e_duplicada(self):
+        self.client.force_login(self.inventory_manager)
+        item = self.create_inventory_item_record(name="Cadeira")
+        extra_item = self.create_inventory_item_record(name="Mesa", is_active=False)
+        templo = InventoryLocation.objects.create(name="Templo")
+        deposito = InventoryLocation.objects.create(name="Deposito")
+        base_payload = self.create_inventory_count_payload(items=[item], locations=[templo, deposito])
+
+        missing = {**base_payload, "entries": base_payload["entries"][:1]}
+        duplicate = {**base_payload, "entries": [*base_payload["entries"], base_payload["entries"][0]]}
+        extra = {
+            **base_payload,
+            "entries": [*base_payload["entries"], {"item_id": extra_item.id, "location_id": templo.id, "quantity": 0}],
+        }
+
+        for payload in (missing, duplicate, extra):
+            response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json()["code"], "INVENTORY_COUNT_MATRIX_MISMATCH")
+
+        self.assertEqual(InventoryCount.objects.count(), 0)
+        self.assertEqual(InventoryCountEntry.objects.count(), 0)
+
+    def test_contagem_de_inventario_rejeita_item_e_local_invalidos_ou_inativos(self):
+        self.client.force_login(self.inventory_manager)
+        item = self.create_inventory_item_record(name="Cadeira")
+        inactive_item = self.create_inventory_item_record(name="Mesa", is_active=False)
+        templo = InventoryLocation.objects.create(name="Templo")
+        inactive_location = InventoryLocation.objects.create(name="Deposito", is_active=False)
+        valid_payload = self.create_inventory_count_payload(items=[item], locations=[templo])
+
+        item_inativo = {
+            **valid_payload,
+            "entries": [{"item_id": inactive_item.id, "location_id": templo.id, "quantity": 0}],
+        }
+        local_inativo = {
+            **valid_payload,
+            "entries": [{"item_id": item.id, "location_id": inactive_location.id, "quantity": 0}],
+        }
+        item_inexistente = {
+            **valid_payload,
+            "entries": [{"item_id": 99999, "location_id": templo.id, "quantity": 0}],
+        }
+        local_inexistente = {
+            **valid_payload,
+            "entries": [{"item_id": item.id, "location_id": 99999, "quantity": 0}],
+        }
+        quantidade_negativa = {
+            **valid_payload,
+            "entries": [{"item_id": item.id, "location_id": templo.id, "quantity": -1}],
+        }
+
+        for payload in (item_inativo, local_inativo):
+            response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+            self.assertEqual(response.status_code, 409)
+            self.assertEqual(response.json()["code"], "INVENTORY_COUNT_MATRIX_MISMATCH")
+
+        for payload in (item_inexistente, local_inexistente, quantidade_negativa):
+            response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+            self.assertEqual(response.status_code, 400)
+
+        self.assertEqual(InventoryCount.objects.count(), 0)
+
+    def test_contagem_de_inventario_rejeita_sem_itens_ou_sem_locais_ativos(self):
+        self.client.force_login(self.inventory_manager)
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+
+        item.is_active = False
+        item.save(update_fields=["is_active", "updated_at"])
+        response_without_items = self.client.post(
+            reverse("diaconia-inventory-count-list"),
+            {"date": "2026-09-15", "entries": [{"item_id": item.id, "location_id": location.id, "quantity": 0}]},
+            content_type="application/json",
+        )
+
+        item.is_active = True
+        item.save(update_fields=["is_active", "updated_at"])
+        location.is_active = False
+        location.save(update_fields=["is_active", "updated_at"])
+        response_without_locations = self.client.post(
+            reverse("diaconia-inventory-count-list"),
+            {"date": "2026-09-15", "entries": [{"item_id": item.id, "location_id": location.id, "quantity": 0}]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response_without_items.status_code, 409)
+        self.assertEqual(response_without_items.json()["code"], "INVENTORY_COUNT_WITHOUT_ITEMS")
+        self.assertEqual(response_without_locations.status_code, 409)
+        self.assertEqual(response_without_locations.json()["code"], "INVENTORY_COUNT_WITHOUT_LOCATIONS")
+
+    def test_detalhe_de_contagem_de_inventario_preserva_composicao_historica(self):
+        self.client.force_login(self.inventory_manager)
+        item = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        payload = self.create_inventory_count_payload(items=[item], locations=[templo])
+        create_response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+        count_id = create_response.json()["id"]
+
+        InventoryLocation.objects.create(name="Sala Jovens")
+        detail_response = self.client.get(reverse("diaconia-inventory-count-detail", args=[count_id]))
+
+        self.assertEqual(detail_response.status_code, 200)
+        locations = detail_response.json()["items"][0]["locations"]
+        self.assertEqual([location["location_name"] for location in locations], ["Templo"])
+
+    def test_detalhe_de_contagem_de_inventario_exibe_item_e_local_inativados_depois(self):
+        self.client.force_login(self.inventory_manager)
+        item = self.create_inventory_item_record(name="Cadeira")
+        templo = InventoryLocation.objects.create(name="Templo")
+        payload = self.create_inventory_count_payload(items=[item], locations=[templo])
+        create_response = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+        count_id = create_response.json()["id"]
+        item.is_active = False
+        item.save(update_fields=["is_active", "updated_at"])
+        templo.is_active = False
+        templo.save(update_fields=["is_active", "updated_at"])
+
+        detail_response = self.client.get(reverse("diaconia-inventory-count-detail", args=[count_id]))
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["items"][0]["item_name"], "Cadeira")
+        self.assertEqual(detail_response.json()["items"][0]["locations"][0]["location_name"], "Templo")
+
+    def test_permissoes_de_contagem_de_inventario(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        payload = self.create_inventory_count_payload(items=[item], locations=[location])
+
+        self.client.force_login(self.viewer)
+        create_as_viewer = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+
+        self.client.force_login(self.inventory_manager)
+        create_as_manager = self.client.post(reverse("diaconia-inventory-count-list"), payload, content_type="application/json")
+        detail_url = reverse("diaconia-inventory-count-detail", args=[create_as_manager.json()["id"]])
+
+        self.client.force_login(self.viewer)
+        detail_as_viewer = self.client.get(detail_url)
+
+        self.client.force_login(self.no_access)
+        detail_without_access = self.client.get(detail_url)
+        create_without_access = self.client.post(
+            reverse("diaconia-inventory-count-list"),
+            {**payload, "date": "2026-09-16"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(create_as_viewer.status_code, 403)
+        self.assertEqual(create_as_manager.status_code, 201)
+        self.assertEqual(detail_as_viewer.status_code, 200)
+        self.assertEqual(detail_without_access.status_code, 403)
+        self.assertEqual(create_without_access.status_code, 403)

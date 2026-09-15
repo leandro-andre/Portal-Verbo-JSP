@@ -5,6 +5,16 @@ from . import api_views
 
 urlpatterns = [
     path(
+        "inventory/counts/",
+        api_views.InventoryCountListCreateView.as_view(),
+        name="diaconia-inventory-count-list",
+    ),
+    path(
+        "inventory/counts/<int:pk>/",
+        api_views.InventoryCountDetailView.as_view(),
+        name="diaconia-inventory-count-detail",
+    ),
+    path(
         "inventory/items/",
         api_views.InventoryItemListCreateView.as_view(),
         name="diaconia-inventory-item-list",

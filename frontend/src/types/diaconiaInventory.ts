@@ -26,6 +26,34 @@ export type InventoryItem = {
   updated_at: string
 }
 
+export type InventoryCountLocation = {
+  location_id: number
+  location_name: string
+  quantity: number
+}
+
+export type InventoryCountItem = {
+  item_id: number
+  item_name: string
+  category_id: number
+  category_name: string
+  total: number
+  locations: InventoryCountLocation[]
+}
+
+export type InventoryCount = {
+  id: number
+  date: string
+  notes: string
+  created_by: {
+    id: number
+    display_name: string
+  }
+  items: InventoryCountItem[]
+  created_at: string
+  updated_at: string
+}
+
 export type InventoryFilters = {
   search?: string
   status?: 'ACTIVE' | 'INACTIVE' | 'ALL'
@@ -56,3 +84,15 @@ export type CreateInventoryItemInput = {
 }
 
 export type UpdateInventoryItemInput = CreateInventoryItemInput
+
+export type CreateInventoryCountEntryInput = {
+  item_id: number
+  location_id: number
+  quantity: number
+}
+
+export type CreateInventoryCountInput = {
+  date: string
+  notes: string
+  entries: CreateInventoryCountEntryInput[]
+}

@@ -6,9 +6,11 @@ import {
 import { csrfJsonHeaders } from './http'
 import type {
   CreateInventoryCategoryInput,
+  CreateInventoryCountInput,
   CreateInventoryItemInput,
   CreateInventoryLocationInput,
   InventoryCategory,
+  InventoryCount,
   InventoryFilters,
   InventoryItem,
   InventoryItemFilters,
@@ -131,6 +133,27 @@ export function deactivateInventoryItem(id: number) {
 
 export function reactivateInventoryItem(id: number) {
   return runInventoryItemLifecycle(id, 'reactivate')
+}
+
+export async function createInventoryCount(payload: CreateInventoryCountInput): Promise<InventoryCount> {
+  const headers = await csrfJsonHeaders()
+  const response = await fetch('/api/diaconia/inventory/counts/', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers,
+    body: JSON.stringify(payload),
+  })
+  const data = await parseResponse(response)
+  if (response.status === 400) throw new DiaconiaApiValidationError(parseValidationErrors(data))
+  if (!response.ok) throwBusinessError(data)
+  return data as InventoryCount
+}
+
+export async function getInventoryCount(id: number): Promise<InventoryCount> {
+  const response = await fetch(`/api/diaconia/inventory/counts/${id}/`, { credentials: 'same-origin' })
+  if (response.status === 404) throw new DiaconiaHttpError(404, 'Contagem nao encontrada.')
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar contagem de inventario.')
+  return response.json() as Promise<InventoryCount>
 }
 
 export async function getInventoryCategories(filters?: InventoryFilters): Promise<InventoryCategory[]> {

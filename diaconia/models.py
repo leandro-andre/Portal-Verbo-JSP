@@ -321,3 +321,74 @@ class InventoryItem(models.Model):
     def save(self, *args, **kwargs):
         self.name = (self.name or "").strip()
         return super().save(*args, **kwargs)
+
+
+class InventoryCount(models.Model):
+    date = models.DateField("Data")
+    notes = models.TextField("Observacao", blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="Criado por",
+        on_delete=models.PROTECT,
+        related_name="diaconia_inventory_counts",
+    )
+    created_at = models.DateTimeField("Criado em", auto_now_add=True)
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at", "-id"]
+        verbose_name = "Contagem de inventario"
+        verbose_name_plural = "Contagens de inventario"
+        constraints = [
+            models.UniqueConstraint(fields=["date"], name="uniq_diaconia_inventory_count_date"),
+        ]
+        indexes = [
+            models.Index(fields=["date"], name="diaconia_inv_count_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"Inventario - {self.date}"
+
+
+class InventoryCountEntry(models.Model):
+    inventory_count = models.ForeignKey(
+        InventoryCount,
+        verbose_name="Contagem",
+        on_delete=models.CASCADE,
+        related_name="entries",
+    )
+    item = models.ForeignKey(
+        InventoryItem,
+        verbose_name="Item",
+        on_delete=models.PROTECT,
+        related_name="inventory_count_entries",
+    )
+    location = models.ForeignKey(
+        InventoryLocation,
+        verbose_name="Local",
+        on_delete=models.PROTECT,
+        related_name="inventory_count_entries",
+    )
+    quantity = models.IntegerField("Quantidade")
+
+    class Meta:
+        ordering = ["item__category__name", "item__name", "location__name", "id"]
+        verbose_name = "Item da contagem de inventario"
+        verbose_name_plural = "Itens da contagem de inventario"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["inventory_count", "item", "location"],
+                name="uniq_diaconia_inventory_count_item_location",
+            ),
+            models.CheckConstraint(
+                condition=Q(quantity__gte=0),
+                name="chk_diaconia_inventory_entry_quantity_gte_0",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["inventory_count", "item"], name="diac_inv_ent_count_item_idx"),
+            models.Index(fields=["inventory_count", "location"], name="diac_inv_ent_count_loc_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.inventory_count} - {self.item} em {self.location}: {self.quantity}"

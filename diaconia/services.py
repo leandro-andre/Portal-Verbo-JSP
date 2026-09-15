@@ -7,6 +7,8 @@ from .models import (
     AttendanceCountEntry,
     CountingEnvironment,
     InventoryCategory,
+    InventoryCount,
+    InventoryCountEntry,
     InventoryItem,
     InventoryLocation,
     StockCategory,
@@ -26,6 +28,11 @@ INVALID_INVENTORY_CATEGORY_TRANSITION = "INVALID_INVENTORY_CATEGORY_TRANSITION"
 INVENTORY_CATEGORY_INACTIVE = "INVENTORY_CATEGORY_INACTIVE"
 INVALID_INVENTORY_ITEM_TRANSITION = "INVALID_INVENTORY_ITEM_TRANSITION"
 INVALID_INVENTORY_LOCATION_TRANSITION = "INVALID_INVENTORY_LOCATION_TRANSITION"
+INVENTORY_COUNT_DUPLICATE = "INVENTORY_COUNT_DUPLICATE"
+INVENTORY_COUNT_MATRIX_MISMATCH = "INVENTORY_COUNT_MATRIX_MISMATCH"
+INVENTORY_COUNT_WITHOUT_ITEMS = "INVENTORY_COUNT_WITHOUT_ITEMS"
+INVENTORY_COUNT_WITHOUT_LOCATIONS = "INVENTORY_COUNT_WITHOUT_LOCATIONS"
+INVALID_INVENTORY_COUNT_QUANTITY = "INVALID_INVENTORY_COUNT_QUANTITY"
 ATTENDANCE_COUNT_DUPLICATE = "ATTENDANCE_COUNT_DUPLICATE"
 ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH = "ATTENDANCE_COUNT_ENVIRONMENT_MISMATCH"
 ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS = "ATTENDANCE_COUNT_WITHOUT_ENVIRONMENTS"
@@ -540,6 +547,101 @@ def reactivate_inventory_location(location):
 
 def get_inventory_items_queryset():
     return InventoryItem.objects.select_related("category")
+
+
+def get_inventory_count_queryset():
+    return InventoryCount.objects.select_related("created_by").prefetch_related(
+        "entries__item__category",
+        "entries__location",
+    )
+
+
+def validate_inventory_count_matrix(entries):
+    active_item_ids = list(
+        InventoryItem.objects.filter(is_active=True)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    active_location_ids = list(
+        InventoryLocation.objects.filter(is_active=True)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+
+    if not active_item_ids:
+        raise DiaconiaError(
+            INVENTORY_COUNT_WITHOUT_ITEMS,
+            "Nenhum item ativo disponivel para contagem.",
+        )
+    if not active_location_ids:
+        raise DiaconiaError(
+            INVENTORY_COUNT_WITHOUT_LOCATIONS,
+            "Nenhum local ativo disponivel para contagem.",
+        )
+
+    expected_pairs = {(item_id, location_id) for item_id in active_item_ids for location_id in active_location_ids}
+    sent_pairs = []
+    for entry in entries:
+        item = entry["item"]
+        location = entry["location"]
+        if not item.is_active or not location.is_active:
+            raise DiaconiaError(
+                INVENTORY_COUNT_MATRIX_MISMATCH,
+                "Os itens ou locais ativos mudaram. Atualize a tela e tente novamente.",
+            )
+        if entry["quantity"] < 0:
+            raise DiaconiaError(
+                INVALID_INVENTORY_COUNT_QUANTITY,
+                "A quantidade nao pode ser negativa.",
+            )
+        sent_pairs.append((item.id, location.id))
+
+    if len(sent_pairs) != len(set(sent_pairs)):
+        raise DiaconiaError(
+            INVENTORY_COUNT_MATRIX_MISMATCH,
+            "Cada combinacao de item e local deve aparecer apenas uma vez.",
+        )
+
+    if set(sent_pairs) != expected_pairs:
+        raise DiaconiaError(
+            INVENTORY_COUNT_MATRIX_MISMATCH,
+            "Os itens ou locais ativos mudaram. Atualize a tela e tente novamente.",
+        )
+
+
+def create_inventory_count(*, date, notes="", entries, created_by):
+    if InventoryCount.objects.filter(date=date).exists():
+        raise DiaconiaError(
+            INVENTORY_COUNT_DUPLICATE,
+            "Ja existe uma contagem de inventario registrada para esta data.",
+        )
+
+    with transaction.atomic():
+        validate_inventory_count_matrix(entries)
+        try:
+            inventory_count = InventoryCount.objects.create(
+                date=date,
+                notes=notes,
+                created_by=created_by,
+            )
+            InventoryCountEntry.objects.bulk_create(
+                [
+                    InventoryCountEntry(
+                        inventory_count=inventory_count,
+                        item=entry["item"],
+                        location=entry["location"],
+                        quantity=entry["quantity"],
+                    )
+                    for entry in entries
+                ]
+            )
+        except IntegrityError as exc:
+            raise DiaconiaError(
+                INVENTORY_COUNT_DUPLICATE,
+                "Ja existe uma contagem de inventario registrada para esta data.",
+            ) from exc
+
+    return get_inventory_count_queryset().get(pk=inventory_count.pk)
 
 
 def ensure_inventory_category_active(category):

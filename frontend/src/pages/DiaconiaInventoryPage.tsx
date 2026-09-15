@@ -1,7 +1,14 @@
-import { Boxes, FolderTree, MapPinned, PackageSearch } from 'lucide-react'
+import { Boxes, ClipboardList, FolderTree, MapPinned, PackageSearch } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const inventoryAreas = [
+  {
+    title: 'Contagens',
+    description: 'Registre a fotografia fisica dos bens encontrados por local.',
+    action: 'Realizar contagem',
+    to: '/diaconia/inventario/contagens',
+    icon: ClipboardList,
+  },
   {
     title: 'Itens',
     description: 'Cadastre os tipos de bens controlados no inventario.',
@@ -47,7 +54,7 @@ function DiaconiaInventoryPage() {
         </div>
         <div>
           <h2>Inventario de bens</h2>
-          <p>Esta area inicia a estrutura do inventario. Itens, quantidades e movimentacoes ficam para as proximas etapas.</p>
+          <p>Registre periodicamente a quantidade fisica encontrada de cada bem nos locais da igreja.</p>
         </div>
       </div>
 

@@ -1527,6 +1527,107 @@
   margin-bottom: 0;
 }
 
+.inventory-count-form {
+  display: grid;
+  gap: 18px;
+}
+
+.inventory-count-search {
+  max-width: 420px;
+}
+
+.inventory-count-category {
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-count-category h2 {
+  color: var(--color-text);
+  font-size: 18px;
+  margin: 0;
+}
+
+.inventory-count-matrix,
+.inventory-count-detail-list {
+  display: grid;
+  gap: 18px;
+}
+
+.inventory-count-table-shell {
+  overflow-x: auto;
+}
+
+.inventory-count-table {
+  min-width: 720px;
+}
+
+.inventory-count-table th,
+.inventory-count-table td {
+  min-width: 130px;
+  vertical-align: middle;
+}
+
+.inventory-count-table th:first-child,
+.inventory-count-table td:first-child {
+  min-width: 220px;
+}
+
+.inventory-count-cell-input {
+  font-weight: 800;
+  min-height: 40px;
+  min-width: 86px;
+  text-align: center;
+}
+
+.inventory-count-mobile-list {
+  display: none;
+}
+
+.inventory-count-mobile-card,
+.inventory-count-detail-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.inventory-count-mobile-card__heading,
+.inventory-count-detail-card__heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.inventory-count-mobile-card__heading h3,
+.inventory-count-detail-card__heading h2 {
+  color: var(--color-text);
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.inventory-count-mobile-card__heading p,
+.inventory-count-detail-card__heading p {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.inventory-count-mobile-card__heading strong,
+.inventory-count-detail-card__heading strong {
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.inventory-count-mobile-card__locations,
+.inventory-count-detail-card__locations {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
 .page-heading {
   align-items: flex-start;
   display: flex;
@@ -3500,8 +3601,24 @@
   }
 
   .diaconia-counting-table,
+  .inventory-count-matrix,
   .diaconia-inventory-items-table {
     display: none;
+  }
+
+  .inventory-count-mobile-list {
+    display: grid;
+    gap: 18px;
+  }
+
+  .inventory-count-mobile-card__heading,
+  .inventory-count-detail-card__heading {
+    flex-direction: column;
+  }
+
+  .inventory-count-mobile-card__heading strong,
+  .inventory-count-detail-card__heading strong {
+    white-space: normal;
   }
 
   .diaconia-counting-card-list {
