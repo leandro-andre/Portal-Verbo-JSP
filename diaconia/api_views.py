@@ -14,6 +14,7 @@ from .serializers import (
     AttendanceCountUpdateSerializer,
     CountingEnvironmentSerializer,
     CountingEnvironmentUpdateSerializer,
+    DashboardSerializer,
     InventoryCategorySerializer,
     InventoryCategoryUpdateSerializer,
     InventoryCountCreateSerializer,
@@ -72,6 +73,7 @@ from .services import (
     update_inventory_location,
     update_attendance_count,
     build_inventory_count_comparison,
+    build_diaconia_dashboard,
 )
 
 
@@ -118,6 +120,14 @@ class StockUnitListView(APIView):
 
     def get(self, request):
         return Response([{"value": value, "label": label} for value, label in StockItem.Unit.choices])
+
+
+class DiaconiaDashboardView(APIView):
+    permission_classes = [HasDiaconiaPermission]
+    permission_required = DIACONIA_VIEW
+
+    def get(self, request):
+        return Response(DashboardSerializer(build_diaconia_dashboard()).data)
 
 
 class StockCategoryListCreateView(APIView):

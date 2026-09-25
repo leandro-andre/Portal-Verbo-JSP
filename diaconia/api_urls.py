@@ -4,6 +4,7 @@ from . import api_views
 
 
 urlpatterns = [
+    path("dashboard/", api_views.DiaconiaDashboardView.as_view(), name="diaconia-dashboard"),
     path(
         "inventory/counts/",
         api_views.InventoryCountListCreateView.as_view(),

@@ -7,6 +7,7 @@ import type {
   CreateStockItemInput,
   CreateStockMovementInput,
   DiaconiaValidationErrors,
+  DiaconiaDashboard,
   CountingEnvironment,
   CountingEnvironmentFilters,
   StockCategory,
@@ -92,6 +93,12 @@ export async function getStockUnits(): Promise<StockUnit[]> {
   const response = await fetch('/api/diaconia/stock/units/', { credentials: 'same-origin' })
   if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar unidades.')
   return response.json() as Promise<StockUnit[]>
+}
+
+export async function getDiaconiaDashboard(): Promise<DiaconiaDashboard> {
+  const response = await fetch('/api/diaconia/dashboard/', { credentials: 'same-origin' })
+  if (!response.ok) throw new DiaconiaHttpError(response.status, 'Nao foi possivel carregar a Central da Diaconia.')
+  return response.json() as Promise<DiaconiaDashboard>
 }
 
 export async function getStockCategories(): Promise<StockCategory[]> {

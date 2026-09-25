@@ -154,3 +154,92 @@ export type AttendanceCountFilters = {
   shift?: '' | AttendanceShift
   createdBy?: string
 }
+
+export type DiaconiaDashboard = {
+  stock: {
+    active_items: number
+    low_stock_items: number
+    without_minimum_control: number
+    replenishment_items: Array<{
+      id: number
+      name: string
+      category: {
+        id: number
+        name: string
+      }
+      unit: string
+      unit_label: string
+      current_stock: number
+      minimum_stock: number
+      missing_to_minimum: number
+    }>
+  }
+  attendance: {
+    has_data: boolean
+    latest: null | {
+      id: number
+      date: string
+      shift: AttendanceShift
+      shift_label: string
+      total_people: number
+      created_by: {
+        id: number
+        display_name: string
+      }
+      created_at: string
+    }
+    previous: null | {
+      id: number
+      date: string
+      shift: AttendanceShift
+      shift_label: string
+      total_people: number
+    }
+    comparison: null | {
+      previous_total: number
+      current_total: number
+      variation: number
+      variation_percent: number | null
+      status: 'INCREASE' | 'DECREASE' | 'UNCHANGED'
+    }
+    distribution: Array<{
+      environment_id: number
+      environment_name: string
+      quantity: number
+    }>
+  }
+  inventory: {
+    has_data: boolean
+    latest: null | {
+      id: number
+      date: string
+      created_by: {
+        id: number
+        display_name: string
+      }
+      created_at: string
+    }
+    previous: null | {
+      id: number
+      date: string
+      created_at: string
+    }
+    summary: null | {
+      increase: number
+      decrease: number
+      unchanged: number
+      new: number
+      not_counted: number
+    }
+    reductions: Array<{
+      item_id: number
+      item_name: string
+      category_id: number
+      category_name: string
+      previous_total: number
+      current_total: number
+      variation: number
+      variation_percent: number | null
+    }>
+  }
+}

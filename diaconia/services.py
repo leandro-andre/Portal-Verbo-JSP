@@ -771,6 +771,17 @@ def _variation_percent(previous_value, variation):
     return round((variation / previous_value) * 100, 2)
 
 
+def _variation_summary(previous_value, current_value):
+    variation = current_value - previous_value
+    return {
+        "previous_total": previous_value,
+        "current_total": current_value,
+        "variation": variation,
+        "variation_percent": _variation_percent(previous_value, variation),
+        "status": _status_from_values(previous_value, current_value),
+    }
+
+
 def build_inventory_count_comparison(inventory_count):
     current_count = get_inventory_count_queryset().get(pk=inventory_count.pk)
     previous_count = get_previous_inventory_count(current_count)
@@ -883,6 +894,154 @@ def build_inventory_count_comparison(inventory_count):
         "previous": previous_count,
         "items": compared_items,
         "summary": summary,
+    }
+
+
+def build_dashboard_stock():
+    summary = get_stock_summary(replenishment_limit=5)
+    replenishment_items = []
+    for item in summary["replenishment_items"]:
+        current_stock = getattr(item, "current_stock", 0) or 0
+        replenishment_items.append(
+            {
+                "id": item.id,
+                "name": item.name,
+                "category": {
+                    "id": item.category_id,
+                    "name": item.category.name,
+                },
+                "unit": item.unit,
+                "unit_label": item.get_unit_display(),
+                "current_stock": current_stock,
+                "minimum_stock": item.minimum_stock,
+                "missing_to_minimum": max(item.minimum_stock - current_stock, 0),
+            }
+        )
+
+    return {
+        "active_items": summary["active_items"],
+        "low_stock_items": summary["low_stock_items"],
+        "without_minimum_control": summary["without_minimum_control"],
+        "replenishment_items": replenishment_items,
+    }
+
+
+def build_dashboard_attendance():
+    latest_counts = list(get_attendance_count_list_queryset()[:2])
+    if not latest_counts:
+        return {
+            "has_data": False,
+            "latest": None,
+            "previous": None,
+            "comparison": None,
+            "distribution": [],
+        }
+
+    latest = get_attendance_count_queryset().get(pk=latest_counts[0].pk)
+    latest_total = get_attendance_count_total(latest)
+    previous = latest_counts[1] if len(latest_counts) > 1 else None
+    previous_data = None
+    comparison = None
+    if previous is not None:
+        previous_total = get_attendance_count_total(previous)
+        previous_data = {
+            "id": previous.id,
+            "date": previous.date,
+            "shift": previous.shift,
+            "shift_label": previous.get_shift_display(),
+            "total_people": previous_total,
+        }
+        comparison = _variation_summary(previous_total, latest_total)
+
+    entries = list(getattr(latest, "_prefetched_objects_cache", {}).get("entries") or latest.entries.select_related("environment"))
+    distribution = [
+        {
+            "environment_id": entry.environment_id,
+            "environment_name": entry.environment.name,
+            "quantity": entry.quantity,
+        }
+        for entry in sorted(entries, key=lambda entry: (entry.environment.name, entry.environment_id))
+    ]
+
+    return {
+        "has_data": True,
+        "latest": {
+            "id": latest.id,
+            "date": latest.date,
+            "shift": latest.shift,
+            "shift_label": latest.get_shift_display(),
+            "total_people": latest_total,
+            "created_by": {
+                "id": latest.created_by_id,
+                "display_name": getattr(latest.created_by, "display_name", None) or latest.created_by.get_full_name() or latest.created_by.username,
+            },
+            "created_at": latest.created_at,
+        },
+        "previous": previous_data,
+        "comparison": comparison,
+        "distribution": distribution,
+    }
+
+
+def build_dashboard_inventory():
+    latest_count = get_inventory_count_list_queryset().first()
+    if latest_count is None:
+        return {
+            "has_data": False,
+            "latest": None,
+            "previous": None,
+            "summary": None,
+            "reductions": [],
+        }
+
+    comparison = build_inventory_count_comparison(latest_count)
+    current = comparison["current"]
+    previous = comparison["previous"]
+    reductions = sorted(
+        [item for item in comparison["items"] if item["status"] == InventoryComparisonStatus.DECREASE],
+        key=lambda item: (item["variation"], item["item_name"]),
+    )[:5]
+
+    return {
+        "has_data": True,
+        "latest": {
+            "id": current.id,
+            "date": current.date,
+            "created_by": {
+                "id": current.created_by_id,
+                "display_name": getattr(current.created_by, "display_name", None) or current.created_by.get_full_name() or current.created_by.username,
+            },
+            "created_at": current.created_at,
+        },
+        "previous": None
+        if previous is None
+        else {
+            "id": previous.id,
+            "date": previous.date,
+            "created_at": previous.created_at,
+        },
+        "summary": comparison["summary"],
+        "reductions": [
+            {
+                "item_id": item["item_id"],
+                "item_name": item["item_name"],
+                "category_id": item["category_id"],
+                "category_name": item["category_name"],
+                "previous_total": item["previous_total"],
+                "current_total": item["current_total"],
+                "variation": item["variation"],
+                "variation_percent": item["variation_percent"],
+            }
+            for item in reductions
+        ],
+    }
+
+
+def build_diaconia_dashboard():
+    return {
+        "stock": build_dashboard_stock(),
+        "attendance": build_dashboard_attendance(),
+        "inventory": build_dashboard_inventory(),
     }
 
 

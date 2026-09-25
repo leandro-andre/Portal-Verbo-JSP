@@ -1998,3 +1998,142 @@ class DiaconiaStockApiTests(TestCase):
         locations = {location["location_name"]: location for location in item["locations"]}
         self.assertEqual(locations["Templo"]["variation"], -10)
         self.assertEqual(locations["Juniores"]["variation"], 10)
+
+    def test_dashboard_vazio_e_permissoes(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["stock"]["active_items"], 0)
+        self.assertFalse(data["attendance"]["has_data"])
+        self.assertFalse(data["inventory"]["has_data"])
+
+        self.client.force_login(self.no_access)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 403)
+
+    def test_dashboard_estoque_reutiliza_resumo_e_ordena_reposicao(self):
+        self.client.force_login(self.viewer)
+        category = StockCategory.objects.create(name="Limpeza")
+        critical = StockItem.objects.create(name="Agua sanitaria", category=category, unit=StockItem.Unit.UN, minimum_stock=10)
+        moderate = StockItem.objects.create(name="Desinfetante", category=category, unit=StockItem.Unit.UN, minimum_stock=8)
+        no_minimum = StockItem.objects.create(name="Pano", category=category, unit=StockItem.Unit.UN, minimum_stock=0)
+        inactive = StockItem.objects.create(name="Sabao antigo", category=category, unit=StockItem.Unit.UN, minimum_stock=20, is_active=False)
+        ok_item = StockItem.objects.create(name="Detergente", category=category, unit=StockItem.Unit.UN, minimum_stock=2)
+        StockMovement.objects.create(item=critical, movement_type=StockMovement.Type.ENTRADA, quantity=1, created_by=self.manager)
+        StockMovement.objects.create(item=moderate, movement_type=StockMovement.Type.ENTRADA, quantity=3, created_by=self.manager)
+        StockMovement.objects.create(item=ok_item, movement_type=StockMovement.Type.ENTRADA, quantity=10, created_by=self.manager)
+
+        response = self.client.get(reverse("diaconia-dashboard"))
+
+        stock = response.json()["stock"]
+        self.assertEqual(stock["active_items"], 4)
+        self.assertEqual(stock["low_stock_items"], 2)
+        self.assertEqual(stock["without_minimum_control"], 1)
+        self.assertEqual([item["name"] for item in stock["replenishment_items"]], ["Agua sanitaria", "Desinfetante"])
+        self.assertEqual(stock["replenishment_items"][0]["missing_to_minimum"], 9)
+        self.assertNotIn(no_minimum.name, [item["name"] for item in stock["replenishment_items"]])
+        self.assertNotIn(inactive.name, [item["name"] for item in stock["replenishment_items"]])
+
+    def test_dashboard_publico_ultima_anterior_variacoes_e_distribuicao(self):
+        self.client.force_login(self.viewer)
+        templo = CountingEnvironment.objects.create(name="Templo")
+        infantil = CountingEnvironment.objects.create(name="Infantil")
+        self.create_attendance_count_record(
+            date="2026-09-01",
+            shift=AttendanceCount.Shift.MORNING,
+            entries=[(templo, 0), (infantil, 0)],
+        )
+        self.create_attendance_count_record(
+            date="2026-09-01",
+            shift=AttendanceCount.Shift.EVENING,
+            entries=[(templo, 100), (infantil, 20)],
+        )
+        latest = self.create_attendance_count_record(
+            date="2026-09-08",
+            shift=AttendanceCount.Shift.MORNING,
+            entries=[(templo, 132), (infantil, 22)],
+        )
+
+        response = self.client.get(reverse("diaconia-dashboard"))
+
+        attendance = response.json()["attendance"]
+        self.assertTrue(attendance["has_data"])
+        self.assertEqual(attendance["latest"]["id"], latest.id)
+        self.assertEqual(attendance["latest"]["total_people"], 154)
+        self.assertEqual(attendance["previous"]["date"], "2026-09-01")
+        self.assertEqual(attendance["previous"]["shift"], AttendanceCount.Shift.EVENING)
+        self.assertEqual(attendance["comparison"]["variation"], 34)
+        self.assertEqual(attendance["comparison"]["variation_percent"], 28.33)
+        self.assertEqual(
+            {entry["environment_name"]: entry["quantity"] for entry in attendance["distribution"]},
+            {"Infantil": 22, "Templo": 132},
+        )
+
+    def test_dashboard_publico_primeira_contagem_e_base_zero(self):
+        templo = CountingEnvironment.objects.create(name="Templo")
+
+        first = self.create_attendance_count_record(date="2026-09-01", entries=[(templo, 0)])
+        self.client.force_login(self.viewer)
+        first_response = self.client.get(reverse("diaconia-dashboard"))
+        self.assertEqual(first_response.json()["attendance"]["latest"]["id"], first.id)
+        self.assertIsNone(first_response.json()["attendance"]["comparison"])
+
+        self.create_attendance_count_record(date="2026-09-08", entries=[(templo, 5)])
+        second_response = self.client.get(reverse("diaconia-dashboard"))
+        self.assertEqual(second_response.json()["attendance"]["comparison"]["variation"], 5)
+        self.assertIsNone(second_response.json()["attendance"]["comparison"]["variation_percent"])
+
+    def test_dashboard_inventario_resumo_reducoes_e_casos_especiais(self):
+        self.client.force_login(self.viewer)
+        cadeira = self.create_inventory_item_record(name="Cadeira")
+        mesa = self.create_inventory_item_record(name="Mesa")
+        projetor = self.create_inventory_item_record(name="Projetor")
+        ventilador = self.create_inventory_item_record(name="Ventilador")
+        templo = InventoryLocation.objects.create(name="Templo")
+        juniores = InventoryLocation.objects.create(name="Juniores")
+        self.create_inventory_count_record(
+            date="2026-09-01",
+            entries=[
+                (cadeira, templo, 180),
+                (cadeira, juniores, 20),
+                (mesa, templo, 30),
+                (ventilador, templo, 5),
+            ],
+        )
+        latest = self.create_inventory_count_record(
+            date="2026-09-15",
+            entries=[
+                (cadeira, templo, 170),
+                (cadeira, juniores, 30),
+                (mesa, templo, 26),
+                (projetor, templo, 1),
+            ],
+        )
+
+        response = self.client.get(reverse("diaconia-dashboard"))
+
+        inventory = response.json()["inventory"]
+        self.assertTrue(inventory["has_data"])
+        self.assertEqual(inventory["latest"]["id"], latest.id)
+        self.assertEqual(inventory["previous"]["date"], "2026-09-01")
+        self.assertEqual(inventory["summary"]["unchanged"], 1)
+        self.assertEqual(inventory["summary"]["decrease"], 1)
+        self.assertEqual(inventory["summary"]["new"], 1)
+        self.assertEqual(inventory["summary"]["not_counted"], 1)
+        self.assertEqual([item["item_name"] for item in inventory["reductions"]], ["Mesa"])
+        self.assertEqual(inventory["reductions"][0]["variation"], -4)
+
+    def test_dashboard_inventario_primeira_contagem_nao_classifica_como_novo(self):
+        item = self.create_inventory_item_record(name="Cadeira")
+        location = InventoryLocation.objects.create(name="Templo")
+        count = self.create_inventory_count_record(date="2026-09-15", entries=[(item, location, 10)])
+
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse("diaconia-dashboard"))
+
+        inventory = response.json()["inventory"]
+        self.assertEqual(inventory["latest"]["id"], count.id)
+        self.assertIsNone(inventory["previous"])
+        self.assertEqual(inventory["summary"]["new"], 0)
+        self.assertEqual(inventory["reductions"], [])

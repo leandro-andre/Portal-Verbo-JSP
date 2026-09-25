@@ -10,6 +10,7 @@ import {
   deactivateStockItem,
   getAttendanceCount,
   getAttendanceCounts,
+  getDiaconiaDashboard,
   getStockCategories,
   getCountingEnvironments,
   getStockItem,
@@ -51,6 +52,7 @@ export const stockMovementsQueryKey = ['diaconia', 'stock', 'movements'] as cons
 export const stockSummaryQueryKey = ['diaconia', 'stock', 'summary'] as const
 export const countingEnvironmentsQueryKey = ['diaconia', 'counting', 'environments'] as const
 export const attendanceCountsQueryKey = ['diaconia', 'counting', 'counts'] as const
+export const diaconiaDashboardQueryKey = ['diaconia', 'dashboard'] as const
 
 export function stockItemQueryKey(id: number) {
   return ['diaconia', 'stock', 'items', id] as const
@@ -82,6 +84,10 @@ export function useStockUnits() {
 
 export function useStockSummary() {
   return useQuery({ queryKey: stockSummaryQueryKey, queryFn: getStockSummary })
+}
+
+export function useDiaconiaDashboard() {
+  return useQuery({ queryKey: diaconiaDashboardQueryKey, queryFn: getDiaconiaDashboard })
 }
 
 export function useCountingEnvironments(filters?: CountingEnvironmentFilters) {

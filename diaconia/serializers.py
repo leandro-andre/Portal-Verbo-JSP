@@ -635,3 +635,9 @@ class AttendanceCountFilterSerializer(serializers.Serializer):
         if date_from and date_to and date_from > date_to:
             raise serializers.ValidationError({"date_to": "A data final deve ser maior ou igual a data inicial."})
         return attrs
+
+
+class DashboardSerializer(serializers.Serializer):
+    stock = serializers.DictField(read_only=True)
+    attendance = serializers.DictField(read_only=True)
+    inventory = serializers.DictField(read_only=True)

@@ -1527,6 +1527,202 @@
   margin-bottom: 0;
 }
 
+.diaconia-dashboard-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.diaconia-dashboard-card,
+.diaconia-dashboard-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.diaconia-dashboard-card__heading,
+.diaconia-dashboard-panel__heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+}
+
+.diaconia-dashboard-card__icon {
+  align-items: center;
+  background: #ecfdf3;
+  border-radius: var(--radius-sm);
+  color: #166534;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.diaconia-dashboard-card h2,
+.diaconia-dashboard-section h2,
+.diaconia-dashboard-panel h3 {
+  color: var(--color-text);
+  margin: 0;
+}
+
+.diaconia-dashboard-card h2 {
+  font-size: 19px;
+}
+
+.diaconia-dashboard-card p,
+.diaconia-dashboard-section__heading p,
+.diaconia-dashboard-empty,
+.diaconia-dashboard-card__note {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.diaconia-dashboard-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
+.diaconia-dashboard-metrics div,
+.diaconia-dashboard-card .diaconia-dashboard-highlight {
+  background: #f8fafc;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.diaconia-dashboard-metrics span,
+.diaconia-dashboard-highlight span,
+.diaconia-dashboard-list__item span,
+.diaconia-dashboard-public-heading span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.diaconia-dashboard-metrics strong,
+.diaconia-dashboard-highlight strong {
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.diaconia-dashboard-actions,
+.diaconia-dashboard-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.diaconia-dashboard-section {
+  display: grid;
+  gap: 14px;
+}
+
+.diaconia-dashboard-section__heading {
+  display: grid;
+  gap: 4px;
+}
+
+.diaconia-dashboard-attention-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diaconia-dashboard-list {
+  display: grid;
+  gap: 10px;
+}
+
+.diaconia-dashboard-list__item {
+  align-items: center;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.diaconia-dashboard-list__item div {
+  display: grid;
+  gap: 3px;
+}
+
+.diaconia-dashboard-list__item strong,
+.diaconia-dashboard-public-heading strong {
+  color: var(--color-text);
+}
+
+.diaconia-dashboard-list__item p,
+.diaconia-dashboard-public-heading p {
+  color: var(--color-text);
+  font-weight: 850;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.diaconia-dashboard-public-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.diaconia-dashboard-public-heading div {
+  display: grid;
+  gap: 4px;
+}
+
+.diaconia-dashboard-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.diaconia-dashboard-bar {
+  display: grid;
+  gap: 7px;
+}
+
+.diaconia-dashboard-bar > div:first-child {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.diaconia-dashboard-bar span {
+  color: var(--color-text-muted);
+  font-weight: 800;
+}
+
+.diaconia-dashboard-bar strong {
+  color: var(--color-text);
+}
+
+.diaconia-dashboard-bar__track {
+  background: #eef2f7;
+  border-radius: 999px;
+  height: 9px;
+  overflow: hidden;
+}
+
+.diaconia-dashboard-bar__track span {
+  background: #166534;
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 4px;
+}
+
 .inventory-count-form {
   display: grid;
   gap: 18px;
@@ -3692,6 +3888,8 @@
 
   .diaconia-stock-actions,
   .table-actions,
+  .diaconia-dashboard-actions,
+  .diaconia-dashboard-shortcuts,
   .diaconia-replenishment__header {
     align-items: stretch;
     flex-direction: column;
@@ -3702,9 +3900,27 @@
   }
 
   .diaconia-stock-actions .button,
+  .diaconia-dashboard-actions .button,
+  .diaconia-dashboard-shortcuts .button,
   .table-actions .button,
   .diaconia-category-form .button {
     width: 100%;
+  }
+
+  .diaconia-dashboard-grid,
+  .diaconia-dashboard-attention-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .diaconia-dashboard-list__item,
+  .diaconia-dashboard-public-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .diaconia-dashboard-list__item p,
+  .diaconia-dashboard-public-heading p {
+    white-space: normal;
   }
 
   .diaconia-counting-hero,
