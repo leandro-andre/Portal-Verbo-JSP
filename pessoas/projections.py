@@ -6,11 +6,11 @@ from django.utils import timezone
 
 from church_journey.models import ChurchJourney, DiscipleshipEnrollment, Membership, MembershipStatusHistory
 from church_journey.selectors import (
-    can_create_membership,
     get_church_status,
     get_completed_discipleship,
     get_discipleship_completed_at,
     get_membership,
+    get_membership_eligibility,
     is_eligible_for_membership,
 )
 from departamentos.models import DepartmentMembership
@@ -121,6 +121,7 @@ def _church_payload(person):
 
 
 def _discipleship_payload(person):
+    membership_eligibility = get_membership_eligibility(person)
     completed = get_completed_discipleship(person)
     if completed is not None:
         enrollment = completed
@@ -159,7 +160,8 @@ def _discipleship_payload(person):
             else None
         ),
         "membership_eligible": is_eligible_for_membership(person),
-        "membership_can_create": can_create_membership(person),
+        "membership_can_create": membership_eligibility["eligible"],
+        "membership_eligibility": membership_eligibility,
     }
 
 
@@ -571,6 +573,12 @@ def build_person_360(person, viewer=None, request=None):
         and viewer.has_perm("church_journey.add_churchjourney")
         and not church["has_church_journey"]
     )
+    can_approve_membership = bool(
+        viewer
+        and getattr(viewer, "is_authenticated", False)
+        and viewer.is_active
+        and viewer.has_perm("church_journey.approve_membership")
+    )
 
     return {
         "person": _person_payload(person, request),
@@ -599,5 +607,11 @@ def build_person_360(person, viewer=None, request=None):
             "manage_access_url": f"/usuarios/{access['id']}" if access["has_user"] else None,
             "can_start_journey": can_start_journey,
             "start_church_journey_url": f"/api/people/{person.id}/church-journey/" if can_start_journey else None,
+            "can_approve_membership": can_approve_membership,
+            "approve_membership_url": (
+                f"/api/people/{person.id}/membership/approve/"
+                if can_approve_membership and discipleship["membership_eligibility"]["eligible"]
+                else None
+            ),
         },
     }

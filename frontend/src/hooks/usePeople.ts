@@ -156,6 +156,7 @@ async function invalidateMembershipQueries(
   personId: number,
 ) {
   await queryClient.invalidateQueries({ queryKey: personQueryKey(personId) })
+  await queryClient.invalidateQueries({ queryKey: person360QueryKey(personId) })
   await queryClient.invalidateQueries({ queryKey: churchJourneyQueryKey(personId) })
   await queryClient.invalidateQueries({ queryKey: membershipQueryKey(personId) })
   await queryClient.invalidateQueries({ queryKey: membershipHistoryQueryKey(personId) })

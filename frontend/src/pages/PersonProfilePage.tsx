@@ -6,7 +6,7 @@ import PersonAvatar from '../components/people/PersonAvatar'
 import PersonStatusBadge from '../components/people/PersonStatusBadge'
 import AccessStatusBadge from '../components/users/AccessStatusBadge'
 import { useCan } from '../hooks/useAuth'
-import { usePerson360, useStartChurchJourney } from '../hooks/usePeople'
+import { useApproveMembership, usePerson360, useStartChurchJourney } from '../hooks/usePeople'
 import type {
   Person360,
   Person360DepartmentMembership,
@@ -241,14 +241,23 @@ function SummaryTab({
 }
 
 function JourneyTab({
+  approvalError,
+  isApprovingMembership,
   isStartingJourney,
+  onApproveMembership,
   onStartJourney,
   profile,
 }: {
+  approvalError: Error | null
+  isApprovingMembership: boolean
   isStartingJourney: boolean
+  onApproveMembership: () => void
   onStartJourney: () => void
   profile: Person360
 }) {
+  const membershipEligibility = profile.discipleship.membership_eligibility
+  const canShowApproveButton = membershipEligibility.eligible && profile.actions.can_approve_membership
+
   return (
     <div className="person360-grid">
       <Section title="Situacao atual">
@@ -286,9 +295,31 @@ function JourneyTab({
           <DetailItem label="Aprovado por" value={profile.membership.approved_by?.display_name || '-'} />
           <DetailItem
             label="Elegibilidade"
-            value={profile.discipleship.membership_can_create ? 'Elegivel para membresia' : 'Nao elegivel para nova membresia'}
+            value={
+              membershipEligibility.eligible
+                ? 'Elegivel para membresia'
+                : membershipEligibility.reason || 'Nao elegivel para nova membresia'
+            }
           />
         </dl>
+        {canShowApproveButton ? (
+          <button
+            className="button button--primary person360-inline-action"
+            disabled={isApprovingMembership}
+            type="button"
+            onClick={onApproveMembership}
+          >
+            {isApprovingMembership ? 'Salvando...' : 'Tornar membro'}
+          </button>
+        ) : null}
+        {membershipEligibility.eligible && !profile.actions.can_approve_membership ? (
+          <p className="page-heading__description">Pessoa elegivel. Seu usuario nao possui permissao para aprovar membresia.</p>
+        ) : null}
+        {approvalError ? (
+          <div className="form-alert form-alert--error person360-inline-action" role="alert">
+            {approvalError.message || 'Nao foi possivel aprovar a membresia.'}
+          </div>
+        ) : null}
       </Section>
     </div>
   )
@@ -568,6 +599,7 @@ function PersonProfilePage() {
   const isValidId = Number.isInteger(personId) && personId > 0
   const { data: profile, error, isError, isLoading, refetch } = usePerson360(personId)
   const startJourneyMutation = useStartChurchJourney(personId)
+  const approveMembershipMutation = useApproveMembership(personId)
   const canChangePeople = useCan('PEOPLE_CHANGE')
   const canViewUsers = useCan('USER_VIEW')
   const [activeTab, setActiveTab] = useState<Person360Tab>('summary')
@@ -578,6 +610,10 @@ function PersonProfilePage() {
     startJourneyMutation.mutate({})
   }
 
+  const handleApproveMembership = () => {
+    approveMembershipMutation.mutate()
+  }
+
   const renderTab = () => {
     if (!profile) {
       return null
@@ -585,7 +621,10 @@ function PersonProfilePage() {
     if (activeTab === 'journey') {
       return (
         <JourneyTab
+          approvalError={approveMembershipMutation.error instanceof Error ? approveMembershipMutation.error : null}
+          isApprovingMembership={approveMembershipMutation.isPending}
           isStartingJourney={startJourneyMutation.isPending}
+          onApproveMembership={handleApproveMembership}
           onStartJourney={handleStartJourney}
           profile={profile}
         />
@@ -658,6 +697,12 @@ function PersonProfilePage() {
               {startJourneyMutation.error instanceof Error
                 ? startJourneyMutation.error.message
                 : 'Nao foi possivel iniciar a jornada.'}
+            </div>
+          ) : null}
+
+          {approveMembershipMutation.isSuccess ? (
+            <div className="form-alert form-alert--success" role="status">
+              Membresia aprovada com sucesso.
             </div>
           ) : null}
 

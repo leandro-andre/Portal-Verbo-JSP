@@ -36,6 +36,7 @@ from .selectors import (
     get_discipleship_completion_eligibility,
     get_member_since,
     get_membership,
+    get_membership_eligibility,
     get_membership_status,
     has_completed_discipleship,
     has_membership,
@@ -2625,11 +2626,35 @@ class MembershipFoundationTests(APITestCase):
 
         self.assertTrue(is_eligible_for_membership(self.person))
         self.assertTrue(can_create_membership(self.person))
+        self.assertEqual(get_membership_eligibility(self.person)["code"], "MEMBERSHIP_ELIGIBLE")
 
         Membership.objects.create(person=self.person, member_since=date(2026, 8, 18))
 
         self.assertTrue(is_eligible_for_membership(self.person))
         self.assertFalse(can_create_membership(self.person))
+        self.assertEqual(get_membership_eligibility(self.person)["code"], MEMBERSHIP_ALREADY_EXISTS)
+
+    def test_membership_eligibility_explica_discipulado_nao_concluido(self):
+        ChurchJourney.objects.create(person=self.person)
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado Em Andamento",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=1,
+            status=DiscipleshipClass.Status.IN_PROGRESS,
+        )
+        DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.ENROLLED,
+        )
+
+        eligibility = get_membership_eligibility(self.person)
+
+        self.assertFalse(eligibility["eligible"])
+        self.assertEqual(eligibility["code"], DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP)
+        self.assertEqual(eligibility["reason"], "Discipulado ainda nao concluido.")
 
     def test_pastor_nao_vira_membro_sem_membership(self):
         self.user_model.objects.create_user(
@@ -2801,6 +2826,31 @@ class MembershipFoundationTests(APITestCase):
         self.assertEqual(response.json()["status"], Membership.Status.ACTIVE)
         self.assertEqual(response.json()["member_since"], "2026-08-18")
         self.assertEqual(response.json()["approved_by"]["id"], self.secretary.pk)
+        self.assertEqual(Membership.objects.filter(person=self.person).count(), 1)
+
+    def test_api_approve_membership_com_discipulado_em_andamento_bloqueia(self):
+        ChurchJourney.objects.create(person=self.person)
+        discipleship_class = DiscipleshipClass.objects.create(
+            name="Discipulado API Em Andamento",
+            teacher=self.teacher,
+            start_date=date(2026, 8, 1),
+            expected_end_date=date(2026, 8, 18),
+            planned_sessions=1,
+            status=DiscipleshipClass.Status.IN_PROGRESS,
+        )
+        DiscipleshipEnrollment.objects.create(
+            person=self.person,
+            discipleship_class=discipleship_class,
+            status=DiscipleshipEnrollment.Status.ENROLLED,
+        )
+        self.client.force_authenticate(self.secretary)
+
+        response = self.client.post(reverse("person-membership-approve", args=[self.person.pk]), {}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.json()["code"], DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP)
+        self.assertEqual(response.json()["message"], "Discipulado ainda nao concluido.")
+        self.assertFalse(Membership.objects.filter(person=self.person).exists())
 
     def test_api_approve_membership_sem_permissao(self):
         self.prepare_membership_person()

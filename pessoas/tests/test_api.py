@@ -202,16 +202,46 @@ class Person360ApiTests(APITestCase):
         in_progress = self.get_360().json()
         self.assertEqual(in_progress["discipleship"]["status"], "IN_PROGRESS")
         self.assertEqual(in_progress["discipleship"]["class"]["name"], "Nova Vida")
+        self.assertFalse(in_progress["discipleship"]["membership_eligibility"]["eligible"])
+        self.assertEqual(
+            in_progress["discipleship"]["membership_eligibility"]["code"],
+            "PERSON_NOT_IN_CHURCH_JOURNEY",
+        )
+        self.assertTrue(in_progress["actions"]["can_approve_membership"])
+        self.assertIsNone(in_progress["actions"]["approve_membership_url"])
+
+        ChurchJourney.objects.create(person=self.person, started_at=date(2026, 4, 1))
+        in_progress_with_journey = self.get_360().json()
+        self.assertEqual(
+            in_progress_with_journey["discipleship"]["membership_eligibility"]["code"],
+            "DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP",
+        )
+        self.assertEqual(
+            in_progress_with_journey["discipleship"]["membership_eligibility"]["reason"],
+            "Discipulado ainda nao concluido.",
+        )
 
         enrollment.status = DiscipleshipEnrollment.Status.COMPLETED
         enrollment.completed_at = date(2026, 6, 2)
         enrollment.save(update_fields=["status", "completed_at", "updated_at"])
         completed = self.get_360().json()
         self.assertEqual(completed["discipleship"]["status"], "COMPLETED")
+        self.assertTrue(completed["discipleship"]["membership_eligibility"]["eligible"])
+        self.assertTrue(completed["actions"]["can_approve_membership"])
+        self.assertEqual(
+            completed["actions"]["approve_membership_url"],
+            f"/api/people/{self.person.id}/membership/approve/",
+        )
         self.assertIn(
             "MEMBERSHIP_ELIGIBLE_PENDING_APPROVAL",
             [item["code"] for item in completed["pending_items"]],
         )
+
+        self.authenticate(self.pastor)
+        completed_without_permission = self.get_360().json()
+        self.assertTrue(completed_without_permission["discipleship"]["membership_eligibility"]["eligible"])
+        self.assertFalse(completed_without_permission["actions"]["can_approve_membership"])
+        self.assertIsNone(completed_without_permission["actions"]["approve_membership_url"])
 
     def test_departamentos_ativos_inativos_e_inelegibilidade_reutilizam_departmentmembership(self):
         self.authenticate(self.admin)

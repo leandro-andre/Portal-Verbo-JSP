@@ -29,6 +29,7 @@ export type Person = {
     } | null
     membership_eligible: boolean
     membership_can_create: boolean
+    membership_eligibility: MembershipEligibility
   }
   created_at: string
   updated_at: string
@@ -37,6 +38,16 @@ export type Person = {
 export type ChurchJourneyStatus = 'UNKNOWN' | 'VISITOR' | 'MEMBER' | 'INACTIVE_MEMBER'
 
 export type MembershipStatus = 'ACTIVE' | 'INACTIVE'
+
+export type MembershipEligibility = {
+  eligible: boolean
+  code:
+    | 'MEMBERSHIP_ELIGIBLE'
+    | 'MEMBERSHIP_ALREADY_EXISTS'
+    | 'PERSON_NOT_IN_CHURCH_JOURNEY'
+    | 'DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP'
+  reason: string | null
+}
 
 export type Membership = {
   id: number
@@ -309,6 +320,7 @@ export type Person360 = {
     } | null
     membership_eligible: boolean
     membership_can_create: boolean
+    membership_eligibility: MembershipEligibility
   }
   membership: {
     has_membership: boolean
@@ -363,5 +375,7 @@ export type Person360 = {
     manage_access_url: string | null
     can_start_journey: boolean
     start_church_journey_url: string | null
+    can_approve_membership: boolean
+    approve_membership_url: string | null
   }
 }

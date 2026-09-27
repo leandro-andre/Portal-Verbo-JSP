@@ -10,6 +10,10 @@ MINIMUM_DISCIPLESHIP_ATTENDANCE_PERCENTAGE = 75
 
 LEGACY_VISITOR_STATUS = "visitante"
 LEGACY_MEMBER_STATUS = "membro"
+MEMBERSHIP_ELIGIBLE = "MEMBERSHIP_ELIGIBLE"
+MEMBERSHIP_ALREADY_EXISTS = "MEMBERSHIP_ALREADY_EXISTS"
+PERSON_NOT_IN_CHURCH_JOURNEY = "PERSON_NOT_IN_CHURCH_JOURNEY"
+DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP = "DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP"
 
 
 def get_legacy_user_account(person):
@@ -143,12 +147,39 @@ def get_first_completed_discipleship(person):
     )
 
 
+def get_membership_eligibility(person):
+    if not has_church_journey(person):
+        return {
+            "eligible": False,
+            "code": PERSON_NOT_IN_CHURCH_JOURNEY,
+            "reason": "Esta pessoa ainda nao esta na jornada da igreja.",
+        }
+    if has_membership(person):
+        return {
+            "eligible": False,
+            "code": MEMBERSHIP_ALREADY_EXISTS,
+            "reason": "Esta pessoa ja possui membresia.",
+        }
+    if get_completed_discipleship(person) is None:
+        return {
+            "eligible": False,
+            "code": DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP,
+            "reason": "Discipulado ainda nao concluido.",
+        }
+
+    return {
+        "eligible": True,
+        "code": MEMBERSHIP_ELIGIBLE,
+        "reason": None,
+    }
+
+
 def is_eligible_for_membership(person):
     return get_completed_discipleship(person) is not None
 
 
 def can_create_membership(person):
-    return is_eligible_for_membership(person) and not has_membership(person)
+    return get_membership_eligibility(person)["eligible"]
 
 
 def get_membership_eligible_people():

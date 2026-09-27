@@ -5,9 +5,9 @@ from usuarios.services import get_access_status
 from church_journey.selectors import (
     get_completed_discipleship,
     get_discipleship_completed_at,
+    get_membership_eligibility,
     has_completed_discipleship,
     is_eligible_for_membership,
-    can_create_membership,
 )
 
 from .models import Person, PersonUnavailability
@@ -75,6 +75,7 @@ class PersonSerializer(serializers.ModelSerializer):
 
     def get_discipleship(self, obj):
         completed_enrollment = get_completed_discipleship(obj)
+        membership_eligibility = get_membership_eligibility(obj)
         return {
             "completed": has_completed_discipleship(obj),
             "completed_at": get_discipleship_completed_at(obj),
@@ -87,7 +88,8 @@ class PersonSerializer(serializers.ModelSerializer):
                 else None
             ),
             "membership_eligible": is_eligible_for_membership(obj),
-            "membership_can_create": can_create_membership(obj),
+            "membership_can_create": membership_eligibility["eligible"],
+            "membership_eligibility": membership_eligibility,
         }
 
     def validate(self, attrs):

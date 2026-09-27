@@ -12,7 +12,7 @@ from .models import (
     Membership,
     MembershipStatusHistory,
 )
-from .selectors import get_discipleship_completion_eligibility, get_first_completed_discipleship
+from .selectors import get_discipleship_completion_eligibility, get_first_completed_discipleship, get_membership_eligibility
 
 
 CHURCH_JOURNEY_ALREADY_EXISTS = "CHURCH_JOURNEY_ALREADY_EXISTS"
@@ -452,23 +452,15 @@ def approve_membership(person, *, approved_by):
     with transaction.atomic():
         person = type(person).objects.select_for_update().get(pk=person.pk)
 
-        if not hasattr(person, "church_journey"):
-            raise ChurchJourneyError(
-                PERSON_NOT_IN_CHURCH_JOURNEY,
-                "Esta pessoa ainda nao esta na jornada da igreja.",
-            )
-
-        if hasattr(person, "membership"):
-            raise ChurchJourneyError(
-                MEMBERSHIP_ALREADY_EXISTS,
-                "Esta pessoa ja possui membresia.",
-            )
+        eligibility = get_membership_eligibility(person)
+        if not eligibility["eligible"]:
+            raise ChurchJourneyError(eligibility["code"], eligibility["reason"])
 
         completed_enrollment = get_first_completed_discipleship(person)
         if completed_enrollment is None:
             raise ChurchJourneyError(
                 DISCIPLESHIP_NOT_COMPLETED_FOR_MEMBERSHIP,
-                "Esta pessoa ainda nao concluiu o discipulado.",
+                "Discipulado ainda nao concluido.",
             )
 
         try:
