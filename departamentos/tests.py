@@ -1616,6 +1616,7 @@ class DepartmentRoleMembershipTests(APITestCase):
                 "name": "Lider",
                 "can_manage_department": False,
                 "can_manage_members": True,
+                "can_manage_schedules": True,
             },
             format="json",
         )
@@ -1628,9 +1629,116 @@ class DepartmentRoleMembershipTests(APITestCase):
 
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(create_response.json()["code"], "lider")
+        self.assertTrue(create_response.json()["can_manage_schedules"])
         self.assertEqual(update_response.status_code, status.HTTP_200_OK)
         self.assertEqual(update_response.json()["name"], "Coordenador")
         self.assertEqual(update_response.json()["code"], "lider")
+
+    def test_api_edita_role_existente_permissoes_e_preserva_vinculos(self):
+        role = create_department_role(
+            department=self.department,
+            name="Lider",
+            can_manage_department=False,
+            can_manage_members=False,
+            can_manage_schedules=False,
+        )
+        person = self.make_active_member_person("Pessoa Cargo Editado")
+        membership = create_department_membership(
+            person=person,
+            department=self.department,
+            role=role,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.patch(
+            reverse("department-role-detail", args=[self.department.pk, role.pk]),
+            {
+                "name": "Lider Principal",
+                "can_manage_department": True,
+                "can_manage_members": True,
+                "can_manage_schedules": True,
+            },
+            format="json",
+        )
+
+        role.refresh_from_db()
+        membership.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["id"], role.pk)
+        self.assertEqual(response.json()["name"], "Lider Principal")
+        self.assertEqual(response.json()["code"], "lider")
+        self.assertTrue(response.json()["can_manage_department"])
+        self.assertTrue(response.json()["can_manage_members"])
+        self.assertTrue(response.json()["can_manage_schedules"])
+        self.assertEqual(DepartmentRole.objects.filter(department=self.department).count(), 1)
+        self.assertEqual(membership.role_id, role.pk)
+
+    def test_api_edita_role_desmarcando_permissoes(self):
+        role = create_department_role(
+            department=self.department,
+            name="Coordenador",
+            can_manage_department=True,
+            can_manage_members=True,
+            can_manage_schedules=True,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.patch(
+            reverse("department-role-detail", args=[self.department.pk, role.pk]),
+            {
+                "name": "Coordenador",
+                "can_manage_department": False,
+                "can_manage_members": False,
+                "can_manage_schedules": False,
+            },
+            format="json",
+        )
+
+        role.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(role.can_manage_department)
+        self.assertFalse(role.can_manage_members)
+        self.assertFalse(role.can_manage_schedules)
+        self.assertFalse(response.json()["can_manage_department"])
+        self.assertFalse(response.json()["can_manage_members"])
+        self.assertFalse(response.json()["can_manage_schedules"])
+
+    def test_api_edita_role_requer_permissao_de_gerenciar_cargos_e_pessoas(self):
+        role = create_department_role(department=self.department, name="Equipe")
+
+        self.client.force_authenticate(self.common)
+        common_response = self.client.patch(
+            reverse("department-role-detail", args=[self.department.pk, role.pk]),
+            {"name": "Equipe Atualizada"},
+            format="json",
+        )
+
+        manager_person = self.make_active_member_person("Gestor Cargos")
+        manager_user = self.user_model.objects.create_user(
+            username="department.role.local.manager",
+            password="senha-forte-123",
+            person=manager_person,
+        )
+        manager_role = create_department_role(
+            department=self.department,
+            name="Gestor de Pessoas",
+            can_manage_members=True,
+        )
+        create_department_membership(
+            person=manager_person,
+            department=self.department,
+            role=manager_role,
+        )
+        self.client.force_authenticate(manager_user)
+        manager_response = self.client.patch(
+            reverse("department-role-detail", args=[self.department.pk, role.pk]),
+            {"name": "Equipe Atualizada"},
+            format="json",
+        )
+
+        self.assertEqual(common_response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(manager_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(manager_response.json()["name"], "Equipe Atualizada")
 
     def test_membership_exige_membresia_ativa_e_aceita_person_sem_usuario(self):
         person = self.make_active_member_person("Maria Sem Usuario")

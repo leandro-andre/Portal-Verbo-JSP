@@ -12,11 +12,13 @@ class Departamento(models.Model):
         SECRETARIA = "secretaria"
         MIDIA = "midia"
         INFANTIL = "infantil"
+        DIACONIA = "diaconia"
 
         RESERVADOS = {
             SECRETARIA,
             MIDIA,
             INFANTIL,
+            DIACONIA,
         }
 
     CODIGO_PADRAO_MAP = {
@@ -26,6 +28,8 @@ class Departamento(models.Model):
         "departamento-de-midia": CodigoSistema.MIDIA,
         "infantil": CodigoSistema.INFANTIL,
         "departamento-infantil": CodigoSistema.INFANTIL,
+        "diaconia": CodigoSistema.DIACONIA,
+        "departamento-de-diaconia": CodigoSistema.DIACONIA,
     }
 
     nome = models.CharField("Nome", max_length=120, unique=True)
@@ -231,7 +235,8 @@ class DepartmentRole(models.Model):
 
     def save(self, *args, **kwargs):
         self.name = (self.name or "").strip()
-        self.code = Departamento.normalizar_codigo(self.code or self.name)
+        if self._state.adding or not self.code:
+            self.code = Departamento.normalizar_codigo(self.code or self.name)
         return super().save(*args, **kwargs)
 
 

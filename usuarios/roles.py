@@ -1,4 +1,5 @@
 from django.contrib.auth.models import Group, Permission
+from django.apps import apps
 
 
 PORTAL_ADMIN_GROUP = "Administrador do Portal"
@@ -81,6 +82,12 @@ DIACONIA_VIEW = "diaconia.view_diaconia_module"
 DIACONIA_STOCK_MANAGE = "diaconia.manage_diaconia_stock"
 DIACONIA_COUNTING_MANAGE = "diaconia.manage_diaconia_counting"
 DIACONIA_INVENTORY_MANAGE = "diaconia.manage_diaconia_inventory"
+DIACONIA_CAPABILITIES = (
+    "DIACONIA_VIEW",
+    "DIACONIA_STOCK_MANAGE",
+    "DIACONIA_COUNTING_MANAGE",
+    "DIACONIA_INVENTORY_MANAGE",
+)
 
 DISCIPLESHIP_CLASS_VIEW = "church_journey.view_discipleshipclass"
 DISCIPLESHIP_CLASS_CREATE = "church_journey.add_discipleshipclass"
@@ -305,10 +312,6 @@ ROLE_PERMISSIONS = {
         DEPARTMENT_MEMBERSHIP_CHANGE,
         DEPARTMENT_MEMBERSHIP_DEACTIVATE,
         DEPARTMENT_MEMBERSHIP_REACTIVATE,
-        DIACONIA_VIEW,
-        DIACONIA_STOCK_MANAGE,
-        DIACONIA_COUNTING_MANAGE,
-        DIACONIA_INVENTORY_MANAGE,
         DISCIPLESHIP_CLASS_VIEW,
         DISCIPLESHIP_CLASS_CREATE,
         DISCIPLESHIP_CLASS_CHANGE,
@@ -384,12 +387,55 @@ def get_role_codes(usuario):
     ]
 
 
+def user_is_active_diaconia_member(usuario):
+    if not getattr(usuario, "is_authenticated", False):
+        return False
+
+    person_id = getattr(usuario, "person_id", None)
+    if not person_id:
+        return False
+
+    Departamento = apps.get_model("departamentos", "Departamento")
+    DepartmentMembership = apps.get_model("departamentos", "DepartmentMembership")
+    return DepartmentMembership.objects.filter(
+        person_id=person_id,
+        status=DepartmentMembership.Status.ACTIVE,
+        department__codigo=Departamento.CodigoSistema.DIACONIA,
+        department__ativo=True,
+    ).exists()
+
+
 def get_capabilities(usuario):
     if not getattr(usuario, "is_authenticated", False):
         return []
 
-    return [
+    capabilities = [
         capability
         for capability, permission_path in CAPABILITY_PERMISSIONS.items()
         if usuario.has_perm(permission_path)
     ]
+
+    if user_is_active_diaconia_member(usuario):
+        for capability in DIACONIA_CAPABILITIES:
+            if capability not in capabilities:
+                capabilities.append(capability)
+
+    return capabilities
+
+
+def user_has_capability(usuario, capability):
+    return capability in get_capabilities(usuario)
+
+
+def user_has_permission_or_dynamic_capability(usuario, permission_path):
+    capability = next(
+        (
+            capability
+            for capability, capability_permission_path in CAPABILITY_PERMISSIONS.items()
+            if capability_permission_path == permission_path
+        ),
+        None,
+    )
+    if capability is None:
+        return bool(getattr(usuario, "is_authenticated", False) and usuario.has_perm(permission_path))
+    return user_has_capability(usuario, capability)

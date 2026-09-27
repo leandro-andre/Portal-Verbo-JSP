@@ -89,7 +89,7 @@ class DepartmentRoleSerializer(serializers.ModelSerializer):
 class DepartmentRoleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DepartmentRole
-        fields = ["name", "can_manage_department", "can_manage_members"]
+        fields = ["name", "can_manage_department", "can_manage_members", "can_manage_schedules"]
 
     def validate(self, attrs):
         extra_fields = set(self.initial_data).difference(

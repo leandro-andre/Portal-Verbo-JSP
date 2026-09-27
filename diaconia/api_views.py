@@ -4,6 +4,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from usuarios.roles import user_has_permission_or_dynamic_capability
 
 from .models import CountingEnvironment, InventoryCategory, InventoryItem, InventoryLocation, StockCategory, StockItem, StockMovement
 from .serializers import (
@@ -101,13 +102,17 @@ class HasDiaconiaPermission(BasePermission):
             request.user.is_authenticated
             and request.user.is_active
             and permission
-            and request.user.has_perm(permission)
+            and user_has_permission_or_dynamic_capability(request.user, permission)
         )
 
 
 def ensure_or_403(condition):
     if not condition:
         raise PermissionDenied("Sua sessao atual nao possui permissao para acessar esta area.")
+
+
+def user_can(request, permission):
+    return user_has_permission_or_dynamic_capability(request.user, permission)
 
 
 def business_error_response(exc):
@@ -156,11 +161,11 @@ class StockCategoryDetailView(APIView):
         return get_object_or_404(StockCategory, pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(StockCategorySerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_STOCK_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_STOCK_MANAGE))
         serializer = StockCategoryUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         category = update_stock_category(serializer.instance, **serializer.validated_data)
@@ -229,11 +234,11 @@ class StockItemDetailView(APIView):
         return get_object_or_404(get_stock_items_with_status(), pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(StockItemSerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_STOCK_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_STOCK_MANAGE))
         serializer = StockItemUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         try:
@@ -303,7 +308,7 @@ class StockMovementListCreateView(APIView):
         return Response(StockMovementSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_STOCK_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_STOCK_MANAGE))
         serializer = StockMovementCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -348,7 +353,7 @@ class CountingEnvironmentListCreateView(APIView):
         return Response(CountingEnvironmentSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_COUNTING_MANAGE))
         serializer = CountingEnvironmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         environment = create_counting_environment(**serializer.validated_data)
@@ -363,11 +368,11 @@ class CountingEnvironmentDetailView(APIView):
         return get_object_or_404(CountingEnvironment, pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(CountingEnvironmentSerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_COUNTING_MANAGE))
         serializer = CountingEnvironmentUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         environment = update_counting_environment(serializer.instance, **serializer.validated_data)
@@ -421,7 +426,7 @@ class AttendanceCountListCreateView(APIView):
         return Response(AttendanceCountListSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_COUNTING_MANAGE))
         serializer = AttendanceCountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -446,7 +451,7 @@ class AttendanceCountDetailView(APIView):
         return Response(AttendanceCountSerializer(attendance_count).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_COUNTING_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_COUNTING_MANAGE))
         attendance_count = get_object_or_404(get_attendance_count_queryset(), pk=pk)
         serializer = AttendanceCountUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -480,7 +485,7 @@ class InventoryCategoryListCreateView(APIView):
         return Response(InventoryCategorySerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryCategorySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         category = create_inventory_category(**serializer.validated_data)
@@ -495,11 +500,11 @@ class InventoryCategoryDetailView(APIView):
         return get_object_or_404(InventoryCategory, pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(InventoryCategorySerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryCategoryUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         category = update_inventory_category(serializer.instance, **serializer.validated_data)
@@ -547,7 +552,7 @@ class InventoryLocationListCreateView(APIView):
         return Response(InventoryLocationSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryLocationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         location = create_inventory_location(**serializer.validated_data)
@@ -562,11 +567,11 @@ class InventoryLocationDetailView(APIView):
         return get_object_or_404(InventoryLocation, pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(InventoryLocationSerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryLocationUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         location = update_inventory_location(serializer.instance, **serializer.validated_data)
@@ -617,7 +622,7 @@ class InventoryItemListCreateView(APIView):
         return Response(InventoryItemSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -635,11 +640,11 @@ class InventoryItemDetailView(APIView):
         return get_object_or_404(get_inventory_items_queryset(), pk=pk)
 
     def get(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_VIEW))
+        ensure_or_403(user_can(request, DIACONIA_VIEW))
         return Response(InventoryItemSerializer(self.get_object(pk)).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryItemUpdateSerializer(self.get_object(pk), data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         try:
@@ -693,7 +698,7 @@ class InventoryCountListCreateView(APIView):
         return Response(InventoryCountListSerializer(queryset, many=True).data)
 
     def post(self, request):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         serializer = InventoryCountCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -717,7 +722,7 @@ class InventoryCountDetailView(APIView):
         return Response(InventoryCountSerializer(inventory_count).data)
 
     def patch(self, request, pk):
-        ensure_or_403(request.user.has_perm(DIACONIA_INVENTORY_MANAGE))
+        ensure_or_403(user_can(request, DIACONIA_INVENTORY_MANAGE))
         inventory_count = get_object_or_404(get_inventory_count_queryset(), pk=pk)
         serializer = InventoryCountUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

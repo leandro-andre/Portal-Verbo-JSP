@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.sessions.models import Session
 from django.core.management import call_command
@@ -36,9 +36,11 @@ from scheduling.models import Schedule, ScheduleAssignment
 from worship.models import WorshipService
 from usuarios.context_processors import internal_permissions
 from usuarios.roles import (
+    DIACONIA_CAPABILITIES,
     PASTOR_GROUP,
     PORTAL_ADMIN_GROUP,
     SECRETARY_GROUP,
+    get_capabilities,
     setup_portal_roles,
 )
 
@@ -3331,11 +3333,21 @@ class GlobalRolesSetupTests(TestCase):
         self.assertTrue(group.permissions.filter(codename="cancel_discipleshiplesson").exists())
         self.assertTrue(group.permissions.filter(codename="add_discipleshipattendance").exists())
         self.assertTrue(group.permissions.filter(codename="change_discipleshipattendance").exists())
-        self.assertTrue(group.permissions.filter(codename="view_diaconia_module").exists())
-        self.assertTrue(group.permissions.filter(codename="manage_diaconia_stock").exists())
-        self.assertTrue(group.permissions.filter(codename="manage_diaconia_counting").exists())
-        self.assertTrue(group.permissions.filter(codename="manage_diaconia_inventory").exists())
+        self.assertFalse(group.permissions.filter(codename="view_diaconia_module").exists())
+        self.assertFalse(group.permissions.filter(codename="manage_diaconia_stock").exists())
+        self.assertFalse(group.permissions.filter(codename="manage_diaconia_counting").exists())
+        self.assertFalse(group.permissions.filter(codename="manage_diaconia_inventory").exists())
         self.assertFalse(group.permissions.filter(codename="disable_usuario").exists())
+
+    def test_setup_portal_roles_remove_permissoes_antigas_da_secretaria(self):
+        setup_portal_roles()
+        group = Group.objects.get(name=SECRETARY_GROUP)
+        stale_permissions = Permission.objects.filter(content_type__app_label="diaconia")
+        group.permissions.add(*stale_permissions)
+
+        setup_portal_roles()
+
+        self.assertFalse(group.permissions.filter(content_type__app_label="diaconia").exists())
 
     def test_pastor_recebe_permissions_esperadas(self):
         setup_portal_roles()
@@ -3536,12 +3548,171 @@ class GlobalRolesAuthorizationMatrixTests(TestCase):
         self.assertIn("DISCIPLESHIP_ATTENDANCE_MANAGE", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_COMPLETION_VIEW", current_user["capabilities"])
         self.assertIn("DISCIPLESHIP_COMPLETION_MANAGE", current_user["capabilities"])
-        self.assertIn("DIACONIA_VIEW", current_user["capabilities"])
-        self.assertIn("DIACONIA_STOCK_MANAGE", current_user["capabilities"])
-        self.assertIn("DIACONIA_COUNTING_MANAGE", current_user["capabilities"])
-        self.assertIn("DIACONIA_INVENTORY_MANAGE", current_user["capabilities"])
+        self.assertNotIn("DIACONIA_VIEW", current_user["capabilities"])
+        self.assertNotIn("DIACONIA_STOCK_MANAGE", current_user["capabilities"])
+        self.assertNotIn("DIACONIA_COUNTING_MANAGE", current_user["capabilities"])
+        self.assertNotIn("DIACONIA_INVENTORY_MANAGE", current_user["capabilities"])
         self.assertIn("ACCESS_REQUEST_APPROVE", current_user["capabilities"])
         self.assertNotIn("USER_DISABLE", current_user["capabilities"])
+
+
+class DiaconiaDepartmentCapabilitiesTests(TestCase):
+    def setUp(self):
+        self.user_model = get_user_model()
+        setup_portal_roles()
+        self.department = Departamento.objects.create(
+            nome="Diaconia",
+            codigo=Departamento.CodigoSistema.DIACONIA,
+        )
+        self.role = DepartmentRole.objects.create(
+            department=self.department,
+            name="Voluntario",
+            code="voluntario",
+        )
+
+    def create_person_user(self, username, *, group_name=None, superuser=False):
+        person = Person.objects.create(
+            full_name=f"Pessoa {username}",
+            birth_date=date(1990, 1, 1),
+        )
+        if superuser:
+            user = self.user_model.objects.create_superuser(
+                username=username,
+                email=f"{username}@example.com",
+                password="senha-forte-123",
+                person=person,
+            )
+        else:
+            user = self.user_model.objects.create_user(
+                username=username,
+                password="senha-forte-123",
+                person=person,
+            )
+        if group_name:
+            user.groups.add(Group.objects.get(name=group_name))
+        return user
+
+    def add_diaconia_membership(self, user, *, status=DepartmentMembership.Status.ACTIVE):
+        return DepartmentMembership.objects.create(
+            person=user.person,
+            department=self.department,
+            role=self.role,
+            status=status,
+        )
+
+    def assert_diaconia_capabilities(self, user):
+        capabilities = get_capabilities(user)
+        for capability in DIACONIA_CAPABILITIES:
+            self.assertIn(capability, capabilities)
+
+    def assert_no_diaconia_capabilities(self, user):
+        capabilities = get_capabilities(user)
+        for capability in DIACONIA_CAPABILITIES:
+            self.assertNotIn(capability, capabilities)
+
+    def post_stock_category(self, user):
+        self.client.force_login(user)
+        return self.client.post(
+            reverse("diaconia-stock-category-list"),
+            {"name": f"Categoria {user.username}", "description": "Teste"},
+            content_type="application/json",
+        )
+
+    def test_membro_ativo_diaconia_recebe_capabilities_e_acessa_api(self):
+        user = self.create_person_user("diaconia.active")
+        self.add_diaconia_membership(user)
+
+        self.assert_diaconia_capabilities(user)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 200)
+        self.assertEqual(self.post_stock_category(user).status_code, 201)
+
+    def test_secretaria_fora_da_diaconia_nao_recebe_acesso(self):
+        user = self.create_person_user("secretaria.outside", group_name=SECRETARY_GROUP)
+
+        self.assert_no_diaconia_capabilities(user)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 403)
+        self.assertEqual(self.post_stock_category(user).status_code, 403)
+
+    def test_usuario_comum_fora_da_diaconia_nao_recebe_acesso(self):
+        user = self.create_person_user("common.outside")
+
+        self.assert_no_diaconia_capabilities(user)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 403)
+        self.assertEqual(self.post_stock_category(user).status_code, 403)
+
+    def test_secretaria_dentro_da_diaconia_recebe_acesso_pelo_departamento(self):
+        user = self.create_person_user("secretaria.inside", group_name=SECRETARY_GROUP)
+        membership = self.add_diaconia_membership(user)
+
+        self.assert_diaconia_capabilities(user)
+        self.assertEqual(self.post_stock_category(user).status_code, 201)
+
+        membership.status = DepartmentMembership.Status.INACTIVE
+        membership.save(update_fields=["status", "updated_at"])
+
+        self.assert_no_diaconia_capabilities(user)
+        self.assertEqual(self.post_stock_category(user).status_code, 403)
+
+    def test_participacao_inativa_nao_concede_diaconia(self):
+        user = self.create_person_user("diaconia.inactive")
+        self.add_diaconia_membership(user, status=DepartmentMembership.Status.INACTIVE)
+
+        self.assert_no_diaconia_capabilities(user)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 403)
+        self.assertEqual(self.post_stock_category(user).status_code, 403)
+
+    def test_entrada_e_saida_do_departamento_refletem_sem_setup(self):
+        user = self.create_person_user("diaconia.dynamic")
+        self.assert_no_diaconia_capabilities(user)
+
+        membership = self.add_diaconia_membership(user)
+        self.assert_diaconia_capabilities(user)
+
+        membership.status = DepartmentMembership.Status.INACTIVE
+        membership.save(update_fields=["status", "updated_at"])
+        self.assert_no_diaconia_capabilities(user)
+
+    def test_usuario_sem_person_nao_recebe_capabilities_departamentais(self):
+        user = self.user_model.objects.create_user(
+            username="diaconia.no.person",
+            password="senha-forte-123",
+        )
+
+        self.assert_no_diaconia_capabilities(user)
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 403)
+
+    def test_outro_departamento_nao_concede_diaconia(self):
+        user = self.create_person_user("other.department")
+        other_department = Departamento.objects.create(nome="Louvor", codigo="louvor")
+        other_role = DepartmentRole.objects.create(
+            department=other_department,
+            name="Voluntario",
+            code="voluntario",
+        )
+        DepartmentMembership.objects.create(
+            person=user.person,
+            department=other_department,
+            role=other_role,
+            status=DepartmentMembership.Status.ACTIVE,
+        )
+
+        self.assert_no_diaconia_capabilities(user)
+
+    def test_administrador_e_superuser_preservam_acesso_global(self):
+        admin = self.create_person_user("portal.admin.diaconia", group_name=PORTAL_ADMIN_GROUP)
+        superuser = self.create_person_user("superuser.diaconia", superuser=True)
+
+        for user in (admin, superuser):
+            self.assert_diaconia_capabilities(user)
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(reverse("diaconia-dashboard")).status_code, 200)
+            self.assertEqual(self.post_stock_category(user).status_code, 201)
+            self.client.logout()
 
 
 class PermissoesPorPerfilTests(TestCase):

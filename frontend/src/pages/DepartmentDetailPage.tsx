@@ -132,16 +132,27 @@ function businessErrorMessage(error: unknown) {
 }
 
 function RoleForm({
+  initialValues,
   isPending,
+  mode = 'create',
+  onCancel,
   onSubmit,
 }: {
+  initialValues?: {
+    name: string
+    can_manage_department: boolean
+    can_manage_members: boolean
+    can_manage_schedules: boolean
+  }
   isPending: boolean
+  mode?: 'create' | 'edit'
+  onCancel?: () => void
   onSubmit: (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean; can_manage_schedules: boolean }) => void
 }) {
-  const [name, setName] = useState('')
-  const [canManageDepartment, setCanManageDepartment] = useState(false)
-  const [canManageMembers, setCanManageMembers] = useState(false)
-  const [canManageSchedules, setCanManageSchedules] = useState(false)
+  const [name, setName] = useState(initialValues?.name ?? '')
+  const [canManageDepartment, setCanManageDepartment] = useState(initialValues?.can_manage_department ?? false)
+  const [canManageMembers, setCanManageMembers] = useState(initialValues?.can_manage_members ?? false)
+  const [canManageSchedules, setCanManageSchedules] = useState(initialValues?.can_manage_schedules ?? false)
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -151,10 +162,12 @@ function RoleForm({
       can_manage_members: canManageMembers,
       can_manage_schedules: canManageSchedules,
     })
-    setName('')
-    setCanManageDepartment(false)
-    setCanManageMembers(false)
-    setCanManageSchedules(false)
+    if (mode === 'create') {
+      setName('')
+      setCanManageDepartment(false)
+      setCanManageMembers(false)
+      setCanManageSchedules(false)
+    }
   }
 
   return (
@@ -187,11 +200,51 @@ function RoleForm({
         />
         <span>Gerencia escalas</span>
       </label>
-      <button className="button button--primary" type="submit" disabled={isPending}>
-        <Plus size={17} aria-hidden="true" />
-        {isPending ? 'Criando...' : 'Criar cargo'}
-      </button>
+      <div className="form-actions">
+        {onCancel ? (
+          <button className="button button--secondary" type="button" disabled={isPending} onClick={onCancel}>
+            Cancelar
+          </button>
+        ) : null}
+        <button className="button button--primary" type="submit" disabled={isPending}>
+          {mode === 'edit' ? <Save size={17} aria-hidden="true" /> : <Plus size={17} aria-hidden="true" />}
+          {isPending ? mode === 'edit' ? 'Salvando...' : 'Criando...' : mode === 'edit' ? 'Salvar cargo' : 'Criar cargo'}
+        </button>
+      </div>
     </form>
+  )
+}
+
+function RoleEditDialog({
+  isPending,
+  onClose,
+  onSubmit,
+  role,
+}: {
+  isPending: boolean
+  onClose: () => void
+  onSubmit: (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean; can_manage_schedules: boolean }) => void
+  role: DepartmentRole
+}) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="department-role-edit-title">
+        <h2 id="department-role-edit-title">Editar {role.name}</h2>
+        <RoleForm
+          key={role.id}
+          initialValues={{
+            name: role.name,
+            can_manage_department: role.can_manage_department,
+            can_manage_members: role.can_manage_members,
+            can_manage_schedules: role.can_manage_schedules,
+          }}
+          isPending={isPending}
+          mode="edit"
+          onCancel={onClose}
+          onSubmit={onSubmit}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -330,6 +383,7 @@ function DepartmentDetailPage() {
     role: DepartmentRole
     requirement: DepartmentScheduleRequirement | null
   } | null>(null)
+  const [roleEditDialog, setRoleEditDialog] = useState<DepartmentRole | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState(() => {
     const state = location.state as { successMessage?: string } | null
@@ -391,6 +445,17 @@ function DepartmentDetailPage() {
       'Configuracao de escala salva.',
     )
     setRequirementDialog(null)
+  }
+
+  const handleRoleEditSubmit = async (payload: { name: string; can_manage_department: boolean; can_manage_members: boolean; can_manage_schedules: boolean }) => {
+    if (!roleEditDialog) {
+      return
+    }
+    await runAction(
+      () => roleMutations.update.mutateAsync({ roleId: roleEditDialog.id, payload }),
+      'Cargo atualizado com sucesso.',
+    )
+    setRoleEditDialog(null)
   }
 
   return (
@@ -506,6 +571,14 @@ function DepartmentDetailPage() {
                         {canManageRoles ? (
                           <td>
                             <div className="table-actions">
+                              <button
+                                className="button button--secondary"
+                                type="button"
+                                onClick={() => setRoleEditDialog(role)}
+                              >
+                                <Edit3 size={16} aria-hidden="true" />
+                                Editar
+                              </button>
                               <button
                                 className="button button--secondary"
                                 type="button"
@@ -782,6 +855,14 @@ function DepartmentDetailPage() {
               onSubmit={(payload) => void handleRequirementSubmit(payload)}
               requirement={requirementDialog.requirement}
               role={requirementDialog.role}
+            />
+          ) : null}
+          {roleEditDialog ? (
+            <RoleEditDialog
+              isPending={roleMutations.update.isPending}
+              onClose={() => setRoleEditDialog(null)}
+              onSubmit={(payload) => void handleRoleEditSubmit(payload)}
+              role={roleEditDialog}
             />
           ) : null}
         </>
